@@ -206,6 +206,11 @@
 .pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 40cqh; overflow: auto; box-sizing: border-box;
   background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
 .pk-honest { margin: 0; font-size: max(11px, 0.9em); color: var(--pk-sky); text-align: center; }
+.pk-oddsline { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; font-size: max(11px, 0.85em); color: var(--pk-muted); }
+.pk-oddsline b { color: var(--pk-paper); }
+.pk-oddsline span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pk-nextgoal { display: block; margin: 0 auto 8px; max-width: min(560px, 92cqw); min-height: 36px; padding: 6px 12px; font-size: max(11px, 0.9em); text-align: left; color: var(--pk-paper); background: #151a33; border: 2px solid var(--pk-volt, #c8ff00); box-shadow: 2px 2px 0 #000; cursor: pointer; }
+.pk-nextgoal b { color: var(--pk-volt, #c8ff00); margin-right: 6px; letter-spacing: 0.06em; }
 .pk-cards { display: flex; flex-wrap: wrap; gap: 0.8cqw; justify-content: center; }
 .pk-card { width: clamp(44px, 8.4cqw, 76px); min-height: 44px; aspect-ratio: 3 / 4; display: grid; place-items: center; align-content: center; gap: 2px; padding: 2px;
   background: linear-gradient(135deg, #2a3160, #151a33); border: 2px solid var(--pk-paper); color: var(--pk-paper); box-shadow: 2px 2px 0 #000; font-size: max(11px, 0.8em); }

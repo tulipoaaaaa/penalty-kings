@@ -125,6 +125,12 @@ await testGame("./games/penalty-kings", {
     assert.match(first, /Burn: spent \$GBOOT is gone forever\./);
     assert.doesNotMatch(first, /coins?/i);
     await game.getByTestId("pack-2").click();
+    // D21: the odds are printed on every pack (shop and opening), and they are the definition's exact chances.
+    const oddsText = await game.getByTestId("odds-line").first().textContent();
+    const shown = [...oddsText.matchAll(/([\d.]+)%/g)].map(match => Number(match[1]));
+    assert.equal(shown.length, 7, `seven rarities on the odds line: ${oddsText}`);
+    assert.equal(Math.round(shown.reduce((sum, value) => sum + value, 0) * 100), 10_000, "odds line sums to 100%");
+    assert.match(oddsText, /Golden Boot 1%/);
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByText("2 balls bought.").waitFor();
@@ -132,6 +138,7 @@ await testGame("./games/penalty-kings", {
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByTestId("pack").waitFor({ timeout: 10_000 });
     assert.match(await game.getByTestId("pack").textContent(), /Rarity decided by/);
+    assert.match(await game.getByTestId("pack").getByTestId("odds-line").textContent(), /Odds per ball:.*Golden Boot 1%/, "odds printed on the pack being opened");
     await game.getByTestId("reveal-all").click();
     const summary = await game.getByTestId("pack-summary").textContent();
     assert.match(summary, /Spent 20 RF/, "the summary shows the true amount spent");

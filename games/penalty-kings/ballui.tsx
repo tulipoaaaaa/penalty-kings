@@ -16,6 +16,12 @@ const PACKS = [1n, 2n, 5n, 10n] as const;
 /** Scuffed explained (round 6 C10): shown before the first purchase and in any pack summary with a Scuffed ball. */
 export const SCUFFED_LINE = "0 RF, but still drops $GBOOT and counts for your collection";
 
+/** The odds printed on every pack (D21): each rarity and its exact chance, straight from the game definition. */
+export function OddsLine({ definition }: { definition: ChanceGameDefinition }) {
+  return <p className="pk-oddsline" data-testid="odds-line"><b>Odds per ball:</b> {definition.outcomes.map((item, index) =>
+    <span key={item.name}><RarityChip rarity={index} />{RARITY_NAMES[index].replace(" Ball", "")} {item.chanceBps / 100}%</span>)}</p>;
+}
+
 /** a) SHOP: stadium tier + pack size; total cost, max prize and odds before confirming. */
 export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false }: {
   definition: ChanceGameDefinition; tier: Tier; simulated: boolean; balance: bigint; busy: boolean; full: boolean;
@@ -49,6 +55,7 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
       <Tile value={<>{rf(maxPrize)}<small>{tag}</small></>} label="each ball can pull up to" tone="gold" />
       <button type="button" className="pk-link" onClick={onOdds}>See odds</button>
     </div>
+    <OddsLine definition={definition} />
     <p className="pk-note">Average return 90% of the ball price in RF, over many balls. Most packs return less than they cost; a few return much more.</p>
     {full ? <p className="pk-warn" role="status">Stadium full: every seat's top prize is reserved right now. Try again after some balls settle.</p>
       : <div className="pk-buyrow">
@@ -70,6 +77,7 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
   const scuffed = rarities.filter(rarity => rarity === 0).length;
   const tag = simulated ? " (sim)" : "";
   return <div className="pk-pack" role="dialog" aria-label="Pack opening" data-testid="pack">
+    <OddsLine definition={definition} />
     <p className="pk-honest">Rarity decided by {simulated ? "the preview's simulated draw (on-chain randomness when live)" : "on-chain randomness (Dice)"} when the pack was opened. Tapping order and speed change nothing.</p>
     <div className="pk-cards">{rarities.map((rarity, index) => <button key={index} type="button" className="pk-card" data-revealed={revealed[index]} data-rarity={revealed[index] ? rarity : undefined} disabled={revealed[index]} onClick={() => onFlip(index)} aria-label={revealed[index] ? RARITY_NAMES[rarity] : `Ball ${index + 1}: tap to reveal`}
       style={revealed[index] ? { backgroundImage: ballGlow(rarity) } : { backgroundImage: "repeating-linear-gradient(45deg, #ffffff0d 0 4px, transparent 4px 8px), linear-gradient(135deg, #2a3160, #151a33)" }}>

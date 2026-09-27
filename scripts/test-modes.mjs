@@ -52,6 +52,10 @@ await testGame("./games/penalty-kings", {
     await button("Modes").click();
 
     // Free Kicks: engine physics, wall, wind, trajectory preview.
+    // D20: the modes screen always names the next goal (free progression only).
+    const goal = await game.getByTestId("next-goal").textContent();
+    assert.match(goal, /^NEXT GOAL /); assert.doesNotMatch(goal, /\bRF\b|pack|buy/i);
+    console.log(`next goal: ${goal}`);
     await game.getByTestId("mode-freekicks").click();
     await page.waitForTimeout(600);
     await frame.screenshot({ path: `${out}/freekick-aim-${width}.png` });
