@@ -31,6 +31,8 @@ jobs:
         run: npm run check:selectors
       - name: Odds (sum 10000 bps, EV 90.00% for every tier)
         run: npm run verify:odds
+      - name: Game logic tests (tour, daily, target, progress, ethics, prize data)
+        run: npm run test:game-logic
       - name: Engine unit tests
         run: npm run test:engine
       - name: Dynamic difficulty keeps every bot profile at 55–65 % goals

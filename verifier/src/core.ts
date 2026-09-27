@@ -57,7 +57,7 @@ export function sanitize(input: KickInput): KickInput {
 export function scoreKick(input: ShotInput, seed: number, goalsBefore: number, kickIndex: number, previous: readonly ShotInput[]) {
   const outcome = resolveShot(input, SKILL_KEEPER, seed, { kickIndex, history: previous.map(shot => shotTarget(shot).x) });
   const streak = outcome.result === "goal" ? goalsBefore + 1 : 0;
-  return { result: outcome.result, points: outcome.result === "goal" ? goalPoints(SKILL_KEEPER, 1, streak, false) : 0, plan: outcome.plan };
+  return { result: outcome.result, points: outcome.result === "goal" ? goalPoints(SKILL_KEEPER, 1, streak, false, outcome.zone, outcome.postIn) : 0, plan: outcome.plan };
 }
 
 export class RefereeError extends Error {

@@ -15,9 +15,10 @@ import { createFriendWalletSession, createFriendPublicClient } from "@rarefriend
 import { readOwnedFriends, type OwnedFriend } from "@rarefriends/friendsdk/owned";
 import { readGenerationEligibility } from "@rarefriends/friendsdk/identity";
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
-import { keeperById, shotTarget, clamp, type ShotResult } from "@penalty-kings/engine";
+import { keeperById, shotTarget, shotZone, swipeToShot, type ShotResult, type SwipePoint } from "@penalty-kings/engine";
 import { COSMETICS } from "../games/penalty-kings/economy.js";
-import { renderScene, ballFlightScreen, keeperPose, toScreen, SPOT, W, H, type SceneState } from "../games/penalty-kings/scene.js";
+import { Stage } from "../games/penalty-kings/gfx/stage.js";
+import { W, H } from "../games/penalty-kings/gfx/core.js";
 import "./style.css";
 
 declare const __PK_LIVE__: { gboot?: Address; kitShop?: Address; skillCup?: Address; wildcards?: Address; refereeUrl?: string; explorer: string; rpcUrl?: string };
@@ -252,69 +253,56 @@ function SkillCupPanel({ friend, client, send, approve, guard }: PanelProps) {
   </section>;
 }
 
-/** Canvas pitch for Skill Cup kicks: same renderer and input mapping as the game; results come from the referee. */
+/** Canvas pitch for Skill Cup kicks: the game's Stage and its forgiving swipe; results come from the referee. */
 function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; kicks: Kick[]; disabled: boolean; onShoot: (input: { aimX: number; loft: number; power: number; curl: number; releaseMs: number }) => Promise<Kick> }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<GenerationSprites | null>(null);
-  const shot = useRef<{ target: { x: number; y: number; time: number }; curl: number; kick: Kick | null; start: number } | null>(null);
-  const aim = useRef({ aimX: 0.5, power: 0, curl: 0, start: performance.now() });
-  const drag = useRef<{ x: number; y: number }[] | null>(null);
+  const stage = useRef<Stage | null>(null);
+  const aimStart = useRef(performance.now());
+  const drag = useRef<SwipePoint[] | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   useEffect(() => { createFriendReader().read(friendId).then(value => { sprites.current = value; }).catch(() => undefined); }, [friendId]);
   useEffect(() => {
     const context = canvas.current?.getContext("2d");
     if (!context) return;
-    let frame = 0;
-    const state: SceneState = { time: 0, keeper: "finalwall", keeperPose: { x: 0, y: 0.2, rotate: 0, lift: 0 }, ball: { x: SPOT.x, y: SPOT.y, r: 4.5, color: "#fff", accent: "#6a7a90", visible: true, spin: 0 }, trail: [], friend: { rows: null, x: 232, y: 262, scale: 3, halo: "#fff", boots: "#111" }, netColor: "#e8e8e8", ripple: null, shake: 0, roar: 0, reticle: null, flash: null };
+    const scene = new Stage({ stadium: "champions", keeper: "finalwall" });
+    scene.rows = (facing, walking, frame) => (sprites.current ? spriteFrame(sprites.current, facing, walking, frame, "right").frame.rows : null);
+    scene.friendName = `Friend #${friendId}`; scene.ballVisible = true;
+    stage.current = scene;
+    let frame = 0, last = performance.now();
     const draw = (now: number) => {
-      state.time = now / 1000;
-      state.friend = { ...state.friend, rows: sprites.current ? spriteFrame(sprites.current, "up", false, 0, "right").frame.rows : null };
-      const current = shot.current, boss = keeperById("finalwall");
-      if (current?.kick) {
-        const duration = current.target.time * 1.6, p = clamp((now - current.start) / 1000 / duration, 0, 1);
-        const position = ballFlightScreen(current.target, current.curl, p);
-        state.ball = { ...state.ball, ...position, visible: true };
-        state.keeperPose = keeperPose({ ...current.kick.dive, reaction: boss.reaction, diveTime: boss.diveTime, reach: boss.reach, body: boss.body, maxY: boss.maxY, lean: 0 }, p * current.target.time, state.time);
-        const end = toScreen(current.target.x, current.target.y);
-        state.ripple = p >= 1 && current.kick.result === "goal" ? { x: end.x, y: end.y, t: (now - current.start) / 1000 - duration } : null;
-        state.reticle = null;
-      } else {
-        state.ball = { ...state.ball, x: SPOT.x, y: SPOT.y, r: 4.5 };
-        state.keeperPose = keeperPose(null, 0, state.time);
-        const target = shotTarget({ aimX: aim.current.aimX, loft: 0, power: drag.current ? aim.current.power : 0.78, curl: aim.current.curl });
-        state.reticle = disabled ? null : { x: target.x - aim.current.curl * 0.3, y: target.y, power: aim.current.power, curl: aim.current.curl, aimX: aim.current.aimX, active: Boolean(drag.current) };
-      }
-      renderScene(context, state);
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (!disabled && !drag.current && !scene.busy) { scene.ballVisible = true; }
+      if (drag.current && drag.current.length > 2) { const shot = swipeToShot(drag.current, { width: W, height: H }); if (shot) { const t = shotTarget(shot); scene.reticle = { x: t.x - shot.curl * 0.3, y: t.y, power: shot.power, curl: shot.curl, active: true }; } }
+      else if (!scene.busy) scene.reticle = disabled ? null : { x: 0.5, y: 0.5, power: 0.7, curl: 0, active: false };
+      scene.update(dt); scene.render(context);
       frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
-  }, [disabled]);
-  const point = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    return () => { cancelAnimationFrame(frame); stage.current = null; };
+  }, [disabled, friendId]);
+  const point = (event: ReactPointerEvent<HTMLCanvasElement>): SwipePoint => {
     const rect = event.currentTarget.getBoundingClientRect();
-    return { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H };
-  };
-  const update = (points: { x: number; y: number }[]) => {
-    const start = points[0], end = points[points.length - 1], dx = end.x - start.x, dy = end.y - start.y, length = Math.hypot(dx, dy);
-    aim.current.power = clamp(length / 140, 0, 1);
-    aim.current.aimX = clamp(dx / Math.max(12, -dy) / 0.96, -1.4, 1.4);
-    let deviation = 0;
-    if (length > 8) for (const p of points) { const cross = ((p.x - start.x) * dy - (p.y - start.y) * dx) / length; if (Math.abs(cross) > Math.abs(deviation)) deviation = cross; }
-    aim.current.curl = clamp((-deviation / Math.max(40, length)) * 4, -1, 1);
-    return length;
+    return { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H, t: event.timeStamp };
   };
   return <div className="pitch">
-    <canvas ref={canvas} width={W} height={H} aria-label="Skill Cup pitch: drag up from the ball to shoot"
-      onPointerDown={event => { if (disabled || busy) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = [point(event)]; aim.current.start = performance.now(); shot.current = null; }}
-      onPointerMove={event => { if (drag.current) { drag.current.push(point(event)); update(drag.current); } }}
+    <canvas ref={canvas} width={W} height={H} aria-label="Skill Cup pitch: swipe up from the ball to shoot"
+      onPointerDown={event => { if (disabled || busy || stage.current?.busy) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = [point(event)]; }}
+      onPointerMove={event => { if (drag.current) drag.current.push(point(event)); }}
       onPointerUp={event => {
         const points = drag.current; drag.current = null;
         if (!points || disabled || busy) return;
         points.push(point(event));
-        if (update(points) < 14 || points[points.length - 1].y >= points[0].y) return;
-        const input = { aimX: aim.current.aimX, loft: 0, power: aim.current.power, curl: aim.current.curl, releaseMs: Math.round(performance.now() - aim.current.start) };
+        const shot = swipeToShot(points, { width: W, height: H });
+        if (!shot) return;
+        const input = { ...shot, releaseMs: Math.round(performance.now() - aimStart.current) };
         setBusy(true); setError("");
-        onShoot(input).then(kick => { shot.current = { target: shotTarget(input), curl: input.curl, kick, start: performance.now() }; })
+        onShoot(input).then(kick => {
+          const boss = keeperById("finalwall"), target = shotTarget(input);
+          stage.current?.play({ result: kick.result, target, zone: shotZone(target), postIn: false,
+            plan: { ...kick.dive, reaction: boss.reaction, diveTime: boss.diveTime, reach: boss.reach, body: boss.body, maxY: boss.maxY, lean: 0 } }, input.curl);
+          aimStart.current = performance.now();
+        })
           .catch(cause => setError(cause instanceof Error ? cause.message : "Kick failed."))
           .finally(() => setBusy(false));
       }} />

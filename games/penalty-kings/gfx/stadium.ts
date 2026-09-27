@@ -52,7 +52,16 @@ function paintBackdrop(stadium: StadiumId, weather: Weather) {
 }
 
 /** Draws sky + stands + animated stadium props. `pan` shifts the parallax. */
-export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, time: number, pan: number, events: { goalFlash: number }) {
+/** Scrolling LED text inside a screen rectangle (the jumbotron). */
+function marquee(c: CanvasRenderingContext2D, text: string, x: number, y: number, w: number, time: number, color: string) {
+  c.save(); c.beginPath(); c.rect(x, y - 8, w, 12); c.clip();
+  c.fillStyle = color; c.font = "8px PixelifySans, monospace";
+  const width = text.length * 5 + 40, offset = (time * 30) % width;
+  c.fillText(text, x + w - offset, y); c.fillText(text, x + w - offset + width, y);
+  c.restore();
+}
+
+export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, time: number, pan: number, events: { goalFlash: number; jumbotron?: string }) {
   c.drawImage(paintBackdrop(stadium, weather), -40 - pan * 0.3, 0);
   if (stadium === "park") {
     // Clouds, kites and the sun.
@@ -78,12 +87,17 @@ export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, we
       c.fillStyle = cone; c.beginPath(); c.moveTo(x - 6, 4); c.lineTo(x + (fx < 200 ? 200 : -200), 220); c.lineTo(x + (fx < 200 ? 60 : -60), 220); c.fill();
       c.fillStyle = "#fff6c8"; for (let m = 0; m < 5; m++) c.fillRect(Math.round(x + Math.sin(time * 3 + m * 2) * 9), Math.round(8 + Math.cos(time * 4 + m) * 5), 1, 1);
     }
+    // Jumbotron (pot, top prize, rank, last big pull — fed by game/prizes.ts).
+    const jx = 64 - pan * 0.3;
+    c.fillStyle = "#222844"; c.fillRect(jx, 20, 104, 26); c.fillStyle = events.goalFlash > 0 ? "#ccff00" : "#0b0d1a"; c.fillRect(jx + 2, 22, 100, 22);
+    if (events.jumbotron) marquee(c, events.jumbotron, jx + 3, 36, 98, time, events.goalFlash > 0 ? "#0b0d1a" : "#ccff00");
   } else {
     // Giant screen with a live "replay" frame and a trophy on a plinth.
     const sx = 330 - pan * 0.3;
     c.fillStyle = "#222"; c.fillRect(sx, 22, 96, 44); c.fillStyle = "#0b0d1a"; c.fillRect(sx + 3, 25, 90, 38);
     c.fillStyle = events.goalFlash > 0 ? "#ffd23f" : "#1c2a5c"; c.fillRect(sx + 4, 26, 88, 36);
-    c.fillStyle = "#ffffff"; c.font = "8px PixelifySans, monospace"; c.fillText(events.goalFlash > 0 ? "GOAL! GOAL!" : "PENALTY KINGS", sx + 12, 48);
+    if (events.goalFlash > 0 || !events.jumbotron) { c.fillStyle = "#ffffff"; c.font = "8px PixelifySans, monospace"; c.fillText(events.goalFlash > 0 ? "GOAL! GOAL!" : "PENALTY KINGS", sx + 12, 48); }
+    else marquee(c, events.jumbotron, sx + 5, 48, 86, time, "#ffd23f");
     const tx = 60 - pan * 0.3;
     c.fillStyle = "#6d4c1a"; c.fillRect(tx, 70, 20, 20); c.fillStyle = "#ffd23f"; c.fillRect(tx + 6, 52, 8, 14); c.fillRect(tx + 3, 52, 14, 3); c.fillRect(tx + 8, 66, 4, 4);
     c.fillStyle = "#fff2b3"; c.fillRect(tx + 7, 54, 2, 6);

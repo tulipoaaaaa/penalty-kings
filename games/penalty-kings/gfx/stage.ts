@@ -3,7 +3,7 @@
  * Layers: sky → stands → crowd → boards → pitch → net → keeper → goal frame → ball → striker → FX → canvas UI.
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
-import { keeperById, keeperAt, flightAt, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome } from "@penalty-kings/engine";
+import { keeperById, keeperAt, flightAt, WALL_DISTANCE, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
 import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
@@ -12,10 +12,12 @@ import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose 
 import { drawBall, emitTrail, RARITY_FX } from "./ball.js";
 import { drawFriend, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
+import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawWind, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock } from "./setpieces.js";
+import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
-export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done";
+export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal";
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
@@ -40,17 +42,32 @@ export class Stage {
   ballVisible = false;
   /** Readable pre-kick tell (lean, scan, wall) for the current keeper and ball. */
   tell: KeeperPlan | null = null;
+  /** What is being played: penalties, a free kick, or target practice (no keeper). */
+  kind: "penalty" | "freekick" | "target" = "penalty";
+  /** Free-kick scene: setup + wall geometry (from the engine). */
+  freeKick: { setup: FreeKickSetup; wall: { x: number; halfWidth: number; side: number } } | null = null;
+  /** Trajectory preview for free kicks (engine path) and its opacity (assist level). */
+  preview: { path: readonly FlightSample[]; alpha: number } | null = null;
+  /** Zone hints overlay opacity (tutorial). */
+  hints = 0;
+  /** Target practice rings (goal units). */
+  targets: ReadonlyArray<{ x: number; y: number; r: number; value: number; hit?: boolean }> = [];
+  /** Shot clock (seconds left / total), drawn around the ball while aiming. */
+  clock: { left: number; total: number } | null = null;
+  /** Jumbotron text (Pro / Champions), from game/prizes.ts jumbotronSlides. */
+  jumbotron = "";
 
   private mode: "idle" | "shot" | "celebrate" | "react" | "walkout" = "idle";
   private modeTime = 0;
   private timeline = new Timeline();
   private shot: { outcome: ShotOutcome; curl: number; flight: number; strikeAt: number } | null = null;
+  private fk: FreeKickOutcome | null = null;
   private ball = { x: SPOT.x, y: SPOT.y, r: 4.5, spin: 0, squash: 0 };
   private flash = 0; private ring: { x: number; y: number; t: number } | null = null;
   private postWobble = 0; private goalFlash = 0;
   private bubble: { text: string; t: number } | null = null;
   private said: { text: string; t: number } | null = null;
-  private reveal: { rarity: number; t: number } | null = null;
+  private reveal: { rarity: number; t: number; plan: RevealPlan } | null = null;
   private scoreFlip = { from: 0, t: 1 };
   private reaction: "miss" | "save" | "post" = "miss";
   private fanCatch: { x: number; t: number } | null = null;
@@ -72,9 +89,10 @@ export class Stage {
   say(context: CommentaryContext) { this.said = { text: commentary(context, { friend: this.friendName, keeper: keeperById(this.keeper).name }), t: 0 }; }
 
   /** Play the whole choreographed shot for an already-resolved outcome. */
-  play(outcome: ShotOutcome, curl: number) {
-    this.timeline.reset(); this.mode = "shot"; this.modeTime = 0; this.ballVisible = true; this.reticle = null;
-    const flight = Math.max(0.45, outcome.target.time * 1.6);
+  play(outcome: ShotOutcome, curl: number, flightOverride?: number) {
+    this.timeline.reset(); this.mode = "shot"; this.modeTime = 0; this.ballVisible = true; this.reticle = null; this.clock = null; this.preview = null;
+    if (flightOverride === undefined) this.fk = null;
+    const flight = flightOverride ?? Math.max(0.45, outcome.target.time * 1.6);
     this.shot = { outcome, curl, flight, strikeAt: 1.2 };
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
@@ -84,24 +102,49 @@ export class Stage {
       .at(0.6, () => this.sfx("whistle"))
       .at(0.85, () => this.dust(STRIKER.x + 8, STRIKER.y - 10)).at(1.0, () => this.dust(STRIKER.x + 14, STRIKER.y - 20)).at(1.15, () => this.dust(STRIKER.x + 20, STRIKER.y - 28))
       .at(1.2, () => {
-        this.camera.hitStop = 0.07; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: SPOT.x, y: SPOT.y, t: 0 };
+        const ball = this.ballHome();
+        this.camera.hitStop = 2 / 60; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: ball.x, y: ball.y, t: 0 };
         this.ball.squash = 0.35; this.camera.addTrauma(0.25); this.camera.targetZoom = this.reduced ? 1 : 1.12;
-        this.particles.emit("grass", SPOT.x, SPOT.y + 3, 10, { color: ["#2e7d32", "#8bc34a"], speed: 50, spread: 1.4, life: 0.5 });
+        this.particles.emit("grass", ball.x, ball.y + 3, 10, { color: ["#2e7d32", "#8bc34a"], speed: 50, spread: 1.4, life: 0.5 });
         this.sfx("kick"); this.sfx("whoosh"); this.onEvent("strike");
         const k = KEEPER_DESIGNS[this.keeper].sfx; if (k === "stomp") { this.camera.addTrauma(0.3); this.sfx("stomp"); }
       })
       .at(1.2 + flight, () => this.resolve())
       .at(1.2 + flight + (outcome.result === "goal" ? 1.0 : 2.2), () => {
+        if (this.kind === "target") { this.finish(); return; }
         if (outcome.result === "goal") this.startCelebration(this.celebration); else this.finish();
       });
   }
 
+  /** Free kick: the engine's flight path is the animation; "wall" plays as a block. */
+  playFreeKick(outcome: FreeKickOutcome) {
+    const result: ShotResult = outcome.result === "wall" ? "save" : outcome.result;
+    this.play({ result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false }, 0, Math.max(0.3, outcome.path[outcome.path.length - 1].t));
+    this.fk = outcome;
+  }
+
+  /** Where the ball rests before the kick (penalty spot, or the free-kick spot through the FK camera). */
+  ballHome() { return this.kind === "freekick" && this.freeKick ? fkBall(this.freeKick.setup) : { x: SPOT.x, y: SPOT.y, scale: 1 }; }
+
   private resolve() {
     const shot = this.shot!, result = shot.outcome.result, end = toScreen(shot.outcome.target.x, shot.outcome.target.y);
+    if (this.fk?.result === "wall") {
+      const hit = fkProject(this.freeKick!.setup, this.fk.path[this.fk.path.length - 1]);
+      this.crowd.react("ooh"); this.say("wall"); this.onEvent("resolved", "wall"); this.streak = 0; this.reaction = "save";
+      this.camera.addTrauma(0.3); this.camera.hitStop = 2 / 60; this.sfx("glove"); this.sfx("ooh");
+      this.particles.emit("dust", hit.x, hit.y, 12, { color: ["#ffffff", "#c8b99a"], speed: 60, spread: Math.PI * 2, life: 0.4 });
+      this.scoreFlip = { from: this.score, t: 0 };
+      return;
+    }
     this.crowd.react(result === "goal" ? "cheer" : result === "post" || result === "over" ? "ooh" : "groan");
     this.say(result);
     this.onEvent("resolved", result);
     this.camera.targetZoom = 1; this.camera.targetY = H / 2;
+    if (this.kind === "target") {
+      this.crowd.react(result === "goal" ? "cheer" : "ooh"); this.sfx(result === "goal" ? "net" : "ooh");
+      if (result === "goal") this.particles.emit("confetti", end.x, end.y, 24, { color: THEMES[this.stadium].confetti, speed: 90, spread: Math.PI * 2, gravity: 60, life: 1.2 });
+      return;
+    }
     if (result === "goal") {
       this.net.impulse(end.x, end.y, 160); this.camera.addTrauma(0.5); this.goalFlash = 2;
       this.particles.emit("confetti", end.x, end.y - 10, 60, { color: THEMES[this.stadium].confetti, speed: 140, spread: Math.PI * 1.2, gravity: 70, life: 2.4 });
@@ -127,7 +170,13 @@ export class Stage {
   startCelebration(id: CelebrationId) { this.celebration = id; this.mode = "celebrate"; this.modeTime = 0; this.ballVisible = false; this.crowd.react("cheer"); }
   react(kind: "miss" | "save" | "post") { this.reaction = kind; this.mode = "react"; this.modeTime = 0; }
   walkout() { this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say("walkout"); }
-  showReveal(rarity: number) { this.reveal = { rarity, t: 0 }; this.rarity = rarity; this.sfx(rarity >= 6 ? "reveal-top" : "reveal"); if (rarity >= 5) this.say(rarity >= 6 ? "rarity-top" : "rarity-high"); }
+  /** ETHICS: the reveal is driven ONLY by a RevealPlan built from the settled outcome (game/reveal.ts). */
+  showReveal(plan: RevealPlan) {
+    this.reveal = { rarity: plan.rarity, t: 0, plan }; this.rarity = plan.rarity;
+    this.onEvent("reveal", plan); this.sfx(plan.fullScreen ? "reveal-top" : "reveal");
+    if (plan.rarity >= 5) this.say(plan.fullScreen ? "rarity-top" : "rarity-high");
+    if (plan.fullScreen) { this.crowd.react("cheer"); this.sfx("roar"); }
+  }
   wave() { this.crowd.startWave(); this.crowd.react("cheer"); }
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
   private finish() { this.mode = "idle"; this.shot = null; this.ballVisible = false; this.onEvent("done"); }
@@ -137,7 +186,15 @@ export class Stage {
   // ── Update ────────────────────────────────────────────────────────────────
   update(realDt: number) {
     if (this.camera.hitStop > 0) { this.camera.hitStop -= realDt; return; }
-    const slow = this.shot && this.shot.outcome.result === "post" && this.mode === "shot" && !this.reduced && this.modeTime > this.shot.strikeAt + this.shot.flight * 0.7 && this.modeTime < this.shot.strikeAt + this.shot.flight + 0.4 ? 0.35 : 1;
+    // Slow-mo (skill layer only): a beat on the release, and near-misses (post, bar, just wide/over, fingertip saves).
+    let slow = 1;
+    const shot = this.shot;
+    if (shot && this.mode === "shot" && !this.reduced) {
+      const since = this.modeTime - shot.strikeAt, t = shot.outcome.target;
+      const near = shot.outcome.result === "post" || (shot.outcome.result !== "goal" && (Math.abs(Math.abs(t.x) - 1) < 0.12 || Math.abs(t.y - 1) < 0.1));
+      if (since >= 0 && since < 0.12) slow = 0.5;
+      else if (near && since > shot.flight * 0.7 && since < shot.flight + 0.4) slow = 0.35;
+    }
     const dt = realDt * this.camera.timeScale * slow;
     this.time += dt; this.modeTime += dt;
     if (this.mode === "shot") this.timeline.advance(dt);
@@ -150,7 +207,7 @@ export class Stage {
     if (this.scoreFlip.t < 1) this.scoreFlip.t += dt * 2.2;
     if (this.fanCatch) { this.fanCatch.t += dt; if (this.fanCatch.t > 2) this.fanCatch = null; }
     if (this.ballKid) { this.ballKid.t += dt; if (this.ballKid.t > 2.4) this.ballKid = null; }
-    if (this.reveal) { this.reveal.t += dt; const length = this.reveal.rarity >= 6 ? 3.8 : 2.4; if (this.reveal.t > length) { this.reveal = null; this.onEvent("reveal-done"); } }
+    if (this.reveal) { this.reveal.t += dt; if (this.reveal.t > this.reveal.plan.duration) { this.reveal = null; this.onEvent("reveal-done"); } }
     if (this.mode === "celebrate" && this.modeTime > 2.6) this.finish();
     if (this.mode === "react" && this.modeTime > 1.6) { this.mode = "idle"; this.onEvent("done"); }
     if (this.mode === "walkout" && this.modeTime > 3) { this.mode = "idle"; this.onEvent("walkout-done"); }
@@ -164,7 +221,7 @@ export class Stage {
     c.fillStyle = "#0b0d1a"; c.fillRect(0, 0, W, H);
     this.camera.apply(c, this.time);
     const pan = (this.camera.x - W / 2) * 2;
-    drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash });
+    drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash, jumbotron: this.jumbotron });
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
     drawBoards(c, this.stadium, this.time, pan);
@@ -172,16 +229,28 @@ export class Stage {
     drawHeatShimmer(c, this.streak >= 2 && !this.reduced ? Math.min(1, this.streak - 1) : 0, this.time);
     this.drawReferee(c);
     this.net.draw(c);
+    drawZoneHints(c, this.hints);
     const ballBehind = this.ballBehindKeeper();
     if (ballBehind) this.drawBallLayer(c);
-    this.drawKeeperLayer(c);
+    if (this.kind !== "target") this.drawKeeperLayer(c);
     drawGoalFrame(c, this.reduced ? 0 : this.postWobble, this.time);
+    if (this.kind === "target") { drawCrossbarGlow(c, this.time); drawTargets(c, this.targets, this.time, this.reduced); }
+    if (this.kind === "freekick" && this.freeKick) {
+      const { setup, wall } = this.freeKick, since = this.shot && this.mode === "shot" ? this.modeTime - this.shot.strikeAt : null;
+      const beyond = this.fk && since !== null && since >= 0 && pathAt(this.fk.path, since).z > Math.cos(setup.angle) * WALL_DISTANCE;
+      if (beyond && !ballBehind) this.drawBallLayer(c);
+      drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced);
+      if (this.preview && this.mode === "idle") drawPreview(c, setup, this.preview.path, this.preview.alpha);
+      if (!beyond && !ballBehind) this.drawBallLayer(c);
+      drawWind(c, setup.wind, this.time, this.reduced);
+    }
     this.drawReticle(c);
     this.crowd.drawCat(c, 1 / 60);
     const friendFirst = ballBehind;
     if (friendFirst) this.drawFriendLayer(c);
-    if (!ballBehind) this.drawBallLayer(c);
+    if (!ballBehind && this.kind !== "freekick") this.drawBallLayer(c);
     if (!friendFirst) this.drawFriendLayer(c);
+    if (this.clock && this.mode === "idle" && this.ballVisible) { const home = this.ballHome(); drawClock(c, home.x, home.y - 4, this.clock.left, this.clock.total, this.time); }
     this.drawBallKid(c);
     this.particles.draw(c);
     if (this.ring) { c.strokeStyle = `rgba(255,255,255,${1 - this.ring.t / 0.5})`; c.lineWidth = 2; c.beginPath(); c.ellipse(this.ring.x, this.ring.y, 6 + this.ring.t * 70, 3 + this.ring.t * 25, 0, 0, Math.PI * 2); c.stroke(); }
@@ -207,7 +276,8 @@ export class Stage {
     const profile = keeperById(this.keeper), design = KEEPER_DESIGNS[this.keeper];
     const shot = this.shot;
     const scaleMul = profile.boss ? 1 : 1;
-    let gx = Math.sin(this.time * 2.2) * 0.1, gy = 0, rotate = 0, stretch = 1, mood: KeeperPose["mood"] = "idle", alpha = 1;
+    const start = this.kind === "freekick" && this.freeKick ? -this.freeKick.wall.side * 0.3 : 0;
+    let gx = start + Math.sin(this.time * 2.2) * 0.1, gy = 0, rotate = 0, stretch = 1, mood: KeeperPose["mood"] = "idle", alpha = 1;
     const bounce = Math.abs(Math.sin(this.time * 5)) * 3;
     let lift = this.reduced ? 0 : bounce;
     if (this.tell && this.mode !== "shot") { gx += this.tell.lean * 0.15; if (this.keeper === "peacock" || this.keeper === "squirrel") mood = "taunt"; }
@@ -216,7 +286,7 @@ export class Stage {
       if (flightT < 0) { mood = this.modeTime < 0.7 ? "taunt" : "idle"; gx += shot.outcome.plan.lean * 0.12; }
       else {
         const hands = keeperAt(shot.outcome.plan, Math.min(shot.outcome.target.time + 0.3, (flightT / shot.flight) * shot.outcome.target.time));
-        gx = hands.x * 0.85; gy = Math.max(0, hands.y - 0.45) * 0.7 * hands.progress; lift = gy * 60;
+        gx = this.fk ? start + (shot.outcome.plan.x - start) * hands.progress * 0.85 : hands.x * 0.85; gy = Math.max(0, hands.y - 0.45) * 0.7 * hands.progress; lift = gy * 60;
         rotate = Math.atan2(hands.x, 0.9) * hands.progress * 1.3; stretch = 1 + hands.progress * 0.15; mood = hands.progress > 0.05 ? "dive" : "idle";
         if (flightT > shot.flight + 0.2) mood = shot.outcome.result === "goal" ? "sad" : "celebrate";
         if (shot.outcome.plan.teleport && hands.progress > 0) rotate = 0;
@@ -256,15 +326,16 @@ export class Stage {
   }
 
   private drawFriendLayer(c: CanvasRenderingContext2D) {
-    let x = STRIKER.x, y = STRIKER.y, facing: Facing = "up", walking = false, sx = 1, sy = 1, rotate = 0, flip = false, cape = this.layers.cape, trophy = false;
+    const home = this.ballHome(), fkOffset = this.kind === "freekick" ? { x: home.x - SPOT.x, y: Math.min(0, home.y - SPOT.y) } : { x: 0, y: 0 };
+    let x = STRIKER.x + fkOffset.x, y = STRIKER.y + fkOffset.y, facing: Facing = "up", walking = false, sx = 1, sy = 1, rotate = 0, flip = false, cape = this.layers.cape, trophy = false;
     const frame = this.reduced ? 0 : Math.floor(this.time * 9) % 8;
     if (this.mode === "shot" && this.shot) {
       const p = clamp01((this.modeTime - 0.7) / 0.5);
-      x = lerp(STRIKER.x, KICK_SPOT.x, ease.inOutCubic(p)); y = lerp(STRIKER.y, KICK_SPOT.y, ease.inOutCubic(p)); walking = p > 0 && p < 1;
+      x = lerp(STRIKER.x, KICK_SPOT.x, ease.inOutCubic(p)) + fkOffset.x; y = lerp(STRIKER.y, KICK_SPOT.y, ease.inOutCubic(p)) + fkOffset.y; walking = p > 0 && p < 1;
       if (walking) { const step = (this.modeTime * 6) % 1; sy = 1 - Math.abs(Math.sin(step * Math.PI)) * 0.08; sx = 2 - sy; }
       if (Math.abs(this.modeTime - 1.2) < 0.12) { sx = 1.12; sy = 0.9; rotate = -0.12; }
     }
-    if (this.mode !== "idle" && this.mode !== "walkout" && !(this.mode === "shot" && this.shot && this.modeTime < this.shot.strikeAt + this.shot.flight + 0.1)) { x = KICK_SPOT.x; y = KICK_SPOT.y; }
+    if (this.mode !== "idle" && this.mode !== "walkout" && !(this.mode === "shot" && this.shot && this.modeTime < this.shot.strikeAt + this.shot.flight + 0.1)) { x = KICK_SPOT.x + fkOffset.x; y = KICK_SPOT.y + fkOffset.y; }
     const beat = this.friendBeat();
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
     if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, STRIKER.x, p); y = lerp(360, STRIKER.y, p); walking = p < 1; facing = "up"; }
@@ -276,12 +347,33 @@ export class Stage {
   private drawBallLayer(c: CanvasRenderingContext2D) {
     if (!this.ballVisible) return;
     const fx = RARITY_FX[this.rarity], onFire = this.streak >= 3;
-    let { x, y, r } = { x: SPOT.x, y: SPOT.y, r: 4.5 }, spin = 0;
+    const home = this.ballHome();
+    let { x, y, r } = { x: home.x, y: home.y, r: 4.5 * (this.kind === "freekick" ? Math.min(1.6, home.scale * 0.6) : 1) }, spin = 0;
     const shot = this.shot;
+    if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt && this.fk && this.freeKick) {
+      const since = this.modeTime - shot.strikeAt, last = this.fk.path[this.fk.path.length - 1];
+      if (since <= last.t) {
+        const at = fkProject(this.freeKick.setup, pathAt(this.fk.path, since));
+        x = at.x; y = at.y; r = Math.max(1.8, 0.11 * at.scale * 24.6 * 0.9); spin = this.time * 14 * (Math.abs(this.fk.knuckle ? 0 : 1) || 0.1);
+        if (this.fk.knuckle && !this.reduced) spin = Math.sin(this.time * 9) * 0.4;
+        const ground = fkProject(this.freeKick.setup, { ...pathAt(this.fk.path, since), y: 0 });
+        c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(ground.x, ground.y, r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
+        if (!this.reduced) emitTrail(this.particles, fx, x, y, onFire);
+        drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
+        return;
+      }
+      if (this.fk.result === "wall") {
+        const hit = fkProject(this.freeKick.setup, last), q = clamp01((since - last.t) / 1.2);
+        x = hit.x + (hit.x - 240) * 0.3 * q; y = hit.y + 60 * q - 40 * Math.sin(Math.PI * q); r = 3 + 2 * q;
+        if (q >= 1) return;
+        drawBall(c, x, y, r, fx, this.time * 12, 0, onFire);
+        return;
+      }
+    }
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt) {
       const p = clamp01((this.modeTime - shot.strikeAt) / shot.flight), target = shot.outcome.target, end = toScreen(target.x, target.y);
       const f = flightAt(target, shot.curl, p), bow = (f.x - target.x * p) * GOAL.unit;
-      x = SPOT.x + (end.x - SPOT.x) * p + bow; y = SPOT.y + (end.y - SPOT.y) * p - Math.sin(Math.PI * p) * 12; r = 4.5 - 2 * p; spin = this.time * 14 * (shot.curl || 0.4);
+      x = home.x + (end.x - home.x) * p + bow; y = home.y + (end.y - home.y) * p - Math.sin(Math.PI * p) * 12; r = 4.5 - 2 * p; spin = this.time * 14 * (shot.curl || 0.4);
       if (p < 1 && !this.reduced) emitTrail(this.particles, fx, x, y, onFire);
       if (p >= 1) {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
@@ -293,13 +385,13 @@ export class Stage {
         if (q >= 1 && result !== "goal") return;
       }
     }
-    c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, SPOT.y + 5 - (SPOT.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, home.y + 5 - (home.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
     drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
   }
 
   private drawReticle(c: CanvasRenderingContext2D) {
     const reticle = this.reticle;
-    if (!reticle || this.mode !== "idle") return;
+    if (!reticle || this.mode !== "idle" || this.kind === "freekick") return;
     const { x, y } = toScreen(reticle.x, reticle.y), color = reticle.y > 1 || Math.abs(reticle.x) > 1 ? "#ff5a6e" : "#ccff00";
     c.strokeStyle = "#ffffff66"; c.setLineDash([2, 3]); c.beginPath();
     for (let i = 0; i <= 16; i++) { const p = i / 16, f = flightAt({ x: reticle.x, y: reticle.y }, reticle.curl, p), bow = (f.x - reticle.x * p) * GOAL.unit; const px = SPOT.x + (x - SPOT.x) * p + bow, py = SPOT.y + (y - SPOT.y) * p - Math.sin(Math.PI * p) * 12; i ? c.lineTo(px, py) : c.moveTo(px, py); }
@@ -393,7 +485,7 @@ export class Stage {
   }
 
   private drawReveal(c: CanvasRenderingContext2D) {
-    const r = this.reveal!, t = r.t, top = r.rarity >= 6, fx = RARITY_FX[r.rarity];
+    const r = this.reveal!, t = r.t, top = r.plan.fullScreen, fx = RARITY_FX[r.rarity];
     c.fillStyle = `rgba(0,0,0,${Math.min(0.7, t * 2)})`; c.fillRect(0, 0, W, H);
     // Light cone.
     const cone = c.createLinearGradient(0, 0, 0, H); cone.addColorStop(0, fx.trail[0] + "aa"); cone.addColorStop(1, fx.trail[0] + "00");
@@ -413,6 +505,13 @@ export class Stage {
       c.fillStyle = fx.accent; c.fillRect(-120, -16, 240, 32); c.fillStyle = "#0b0d1a"; c.fillRect(-117, -13, 234, 26);
       c.fillStyle = fx.base === "#ffffff" ? fx.accent : fx.base; c.font = "bold 14px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
       c.fillText(RARITY_NAMES[r.rarity].toUpperCase(), 0, 0); c.textAlign = "left"; c.textBaseline = "alphabetic"; c.restore();
+    }
+    // The TRUE rarity's colour floods the frame edges (thicker for rarer balls).
+    const flood = r.plan.beats.find(beat => beat.kind === "flood");
+    if (flood && t >= flood.at) {
+      const k = clamp01((t - flood.at) / 0.4) * (1 - clamp01((t - r.plan.duration + 0.5) / 0.5)), edge = 6 + r.plan.tier * 5;
+      c.fillStyle = fx.base + Math.round(0x99 * k).toString(16).padStart(2, "0");
+      c.fillRect(0, 0, W, edge); c.fillRect(0, H - edge, W, edge); c.fillRect(0, 0, edge, H); c.fillRect(W - edge, 0, edge, H);
     }
     this.particles.draw(c);
   }

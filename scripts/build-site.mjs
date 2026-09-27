@@ -23,6 +23,9 @@ async function buildTier(tier, outdir, deploymentFile) {
   const build = await buildGame(dir, { outdir, deployment });
   await build.close();
   await addStadiumBar(outdir, tier, Boolean(deployment));
+  // The SDK host labels its preview ledger "Local preview"; on Pages it is a public preview.
+  const runtime = `${outdir}/runtime.js`;
+  if (await exists(runtime)) await writeFile(runtime, (await readFile(runtime, "utf8")).replaceAll('"Local preview"', '"Public preview · simulated"'));
   console.log(`built ${tier}${deployment ? " (LIVE)" : " (simulated)"} → ${outdir}`);
 }
 

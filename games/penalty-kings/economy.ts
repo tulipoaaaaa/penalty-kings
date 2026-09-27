@@ -58,13 +58,25 @@ export const COSMETICS: readonly Cosmetic[] = [
   { id: "net-white", kind: "net", name: "White net", price: 0, color: "#e8e8e8" },
   { id: "net-volt", kind: "net", name: "Volt net", price: 40, color: "#ccff00" },
   { id: "net-crimson", kind: "net", name: "Crimson net", price: 40, color: "#ff5a6e" },
-  { id: "cele-jump", kind: "celebration", name: "Jump for joy", price: 0 },
-  { id: "cele-spin", kind: "celebration", name: "Spin", price: 50 },
-  { id: "cele-slide", kind: "celebration", name: "Knee slide", price: 70 },
-  { id: "cele-flip", kind: "celebration", name: "Backflip", price: 120 },
-  { id: "cele-robot", kind: "celebration", name: "The Robot", price: 90 },
-  { id: "cele-plane", kind: "celebration", name: "Aeroplane", price: 100 },
+  { id: "cele-knee-slide", kind: "celebration", name: "Knee slide", price: 0 },
+  { id: "cele-spin-point", kind: "celebration", name: "Spin and point", price: 50 },
+  { id: "cele-badge-kiss", kind: "celebration", name: "Badge kiss", price: 70 },
+  { id: "cele-backflip", kind: "celebration", name: "Backflip", price: 120 },
+  { id: "cele-disco", kind: "celebration", name: "Disco dance", price: 90 },
+  { id: "cele-superhero", kind: "celebration", name: "Superhero pose", price: 100 },
 ];
+
+/** Earned with World Tour stars (free skill layer) — never sold, not in the on-chain KitShop. */
+export const STAR_REWARDS: readonly Cosmetic[] = [
+  { id: "net-lime", kind: "net", name: "Lime net (Top Bins ★★★)", price: 0, color: "#a3e635" },
+  { id: "boots-gold", kind: "boots", name: "Gold boots (Park Final ★★★)", price: 0, color: "#ffd23f" },
+  { id: "kit-neon", kind: "kit", name: "Neon kit (Beat Chroma ★★★)", price: 0, color: "#ff4fd8" },
+  { id: "cele-crowd-surf", kind: "celebration", name: "Crowd surf (Pro Final ★★★)", price: 0 },
+  { id: "cele-trophy-lift", kind: "celebration", name: "Trophy lift (THE FINAL WALL ★★★)", price: 0 },
+];
+export const ALL_COSMETICS: readonly Cosmetic[] = [...COSMETICS, ...STAR_REWARDS];
+/** Stage celebration id for a celebration cosmetic ("cele-knee-slide" → "knee-slide"). */
+export const celebrationOf = (id: string) => id.replace(/^cele-/, "");
 
 /** Simulated preview only: starting $GBOOT so judges can try the shop, Wildcards and the Skill Cup. Labelled in the UI. */
 export const SIM_STARTING_GBOOT = 2500;

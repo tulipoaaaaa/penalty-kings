@@ -11,6 +11,7 @@ import { drawBall, RARITY_FX } from "../../games/penalty-kings/gfx/ball.js";
 import { CROWD_TYPES } from "../../games/penalty-kings/gfx/crowd.js";
 import { COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
 import type { CelebrationId } from "../../games/penalty-kings/gfx/friend.js";
+import { revealPlan } from "../../games/penalty-kings/game/reveal.js";
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 const canvas = $<HTMLCanvasElement>("#stage"), context = canvas.getContext("2d")!;
@@ -58,7 +59,7 @@ function select<T extends string>(id: string, options: readonly { value: T; labe
 for (const result of ["goal", "save", "post", "over", "wide"] as const) button("#outcomes", result.toUpperCase(), () => shoot(result));
 for (const celebration of CELEBRATIONS) button("#celebrations", celebration.name, () => { stage.celebration = celebration.id as CelebrationId; stage.startCelebration(celebration.id as CelebrationId); });
 for (const kind of ["miss", "save", "post"] as const) button("#reactions", `React: ${kind}`, () => stage.react(kind));
-RARITY_NAMES.forEach((name, index) => button("#rarities", name, () => stage.showReveal(index)));
+RARITY_NAMES.slice(0, 7).forEach((name, index) => button("#rarities", name, () => stage.showReveal(revealPlan(index + 1))));
 button("#moments", "Walk-out", () => stage.walkout());
 button("#moments", "Streak fire ×3", () => { stage.streak = 3; stage.rarity = 6; stage.ballVisible = true; log("streak = 3 (heat shimmer + fire ball)"); });
 button("#moments", "Reset streak", () => { stage.streak = 0; stage.rarity = 7; stage.ballVisible = false; });

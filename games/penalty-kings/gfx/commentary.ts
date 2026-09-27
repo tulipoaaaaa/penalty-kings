@@ -1,5 +1,5 @@
 /** The commentator ("Clive Crossbar", an original character): 40+ context-aware one-liners. */
-export type CommentaryContext = "walkout" | "buildup" | "goal" | "save" | "post" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top" | "keeper" | "sudden-death" | "boss";
+export type CommentaryContext = "walkout" | "buildup" | "goal" | "save" | "post" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top" | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle";
 
 const LINES: Readonly<Record<CommentaryContext, string[]>> = {
   walkout: ["And here comes {friend}, cool as a cucumber.", "What an entrance from {friend}!", "The crowd rise for {friend}.", "{friend} steps out of the tunnel. Goosebumps."],
@@ -16,6 +16,10 @@ const LINES: Readonly<Record<CommentaryContext, string[]>> = {
   keeper: ["Facing {keeper} today.", "{keeper} has a reputation.", "Watch {keeper}'s feet."],
   "sudden-death": ["Sudden death. Double or nothing.", "One kick. Everything on the line."],
   boss: ["THE FINAL WALL rises...", "Nobody has ever beaten THE FINAL WALL twice."],
+  wall: ["Straight into the wall!", "The wall stands firm!", "Charged down!", "Somebody's going to feel that one."],
+  freekick: ["Free kick. Plenty of options here.", "Over the wall or round it?", "The wall is set. The ref steps back."],
+  target: ["Pick your targets!", "Clock's ticking!"],
+  knuckle: ["A knuckleball! It's moving all over the place!", "No spin, all chaos!"],
 };
 export const COMMENTARY_COUNT = Object.values(LINES).reduce((n, list) => n + list.length, 0);
 
