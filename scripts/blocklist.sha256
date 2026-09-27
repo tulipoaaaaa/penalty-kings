@@ -1,0 +1,8 @@
+# Blocked personal strings (names, emails, handles) — stored ONLY as salted SHA-256 so this file
+# does not itself reveal them. Hash = sha256("penalty-kings/blocklist/v1:" + lowercase token).
+# Add one:  node scripts/secret-scan.mjs --hash "some-token"
+# A token is a lowercase word [a-z0-9_]+ or an email address. Checked by the pre-commit hook
+# (staged files) and by CI (every tracked file, plus all commit messages and author names).
+6224a8cff6a19c672c95bdd046577be728f2d288709954ba69c6fd0dc7a61ab2
+deab8b6e6a1b2a247cf093bcff7c160346cde77e590e74a05c1b05f89fd5a5b8
+a76b139c025e37eb439512baf30046df6a24ada6d58ccbbcfef952caad9c3977

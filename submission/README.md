@@ -4,7 +4,7 @@ Your hardwired Rare Friend steps up to the spot: buy balls with $RAREFRIENDS, re
 ball's rarity, and flick it past four original keepers, while a $GBOOT game token trades
 against RF.
 
-**Builder:** tulipo · CONTACT_TBD · **Category:** Economy Potential (also fits Character
+**Builder:** tulipo · [PSEUDONYMOUS HANDLE] · **Category:** Economy Potential (also fits Character
 Spotlight and Token Activity) · **SDK:** FriendSDK v0.1.2
 
 [Source code](https://github.com/tulipoaaaaa/penalty-kings) ·

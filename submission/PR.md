@@ -7,7 +7,7 @@
 Adds `submissions/penalty-kings/README.md`.
 
 - **Project:** Penalty Kings
-- **Builder / contact:** tulipo · CONTACT_TBD
+- **Builder / contact:** tulipo · [PSEUDONYMOUS HANDLE]
 - **Category:** Economy Potential (also Character Spotlight, Token Activity)
 - **One sentence:** Your hardwired Rare Friend is the striker in a pixel-art penalty shootout.
   Every ball costs $RAREFRIENDS and carries an on-chain-random rarity, which sets its RF
