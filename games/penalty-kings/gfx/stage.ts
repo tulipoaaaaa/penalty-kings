@@ -5,28 +5,30 @@
  */
 import { keeperById, keeperAt, flightAt, WALL_DISTANCE, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, penaltyY, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
-import { drawFriend, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
+import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
+import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, FRIEND_CELL, type KickView, type KickPose } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
 /** Penalty view: how far the backdrop layer drops so the ad boards (bottom at y 102) end 30 px above the goal line. */
 export const BACKDROP_DROP = Math.round(PENALTY_GOAL.y - 30 - 102);
-/** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. */
-export const STRIKE_AT = 0.4;
+/** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. Defined in gfx/kick.ts. */
+export { STRIKE_AT };
 export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal";
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
-/** Run-up starts at the 18-yard line (y≈306, 16.4 m out); the kick is taken just behind-left of the spot. */
-const STRIKER = { x: 196, y: Math.round(penaltyY(16.4)) }, KICK_SPOT = { x: 206, y: Math.round(penaltyY(11.7)) };
+/** Penalty: the run-up starts 3 m behind and 1.3 m left of the plant (gfx/kick.ts); the Friend plants just left of the ball. */
+const roundPoint = ({ x, y }: { x: number; y: number }) => ({ x: Math.round(x), y: Math.round(y) });
+const STRIKER = roundPoint(runupStart(PENALTY_VIEW)), KICK_SPOT = roundPoint(plantSpot(PENALTY_VIEW));
 
 export class Stage {
   camera = new Camera();
@@ -98,6 +100,8 @@ export class Stage {
   get busy() { return this.mode !== "idle" || Boolean(this.reveal); }
   /** A moment a kick must not cut short: the walkout or a pack reveal sequence. */
   get moment() { return this.mode === "walkout" || Boolean(this.reveal); }
+  /** Seconds since the current kick was released (null when no kick is playing). */
+  get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
   cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; }
 
@@ -125,7 +129,7 @@ export class Stage {
     this.sfx("heartbeat"); if (!this.said || this.said.t > 1.5) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
     this.timeline
       .at(0, () => this.sfx("whistle"))
-      .at(0.12, () => this.dust(STRIKER.x + 8, STRIKER.y - 10)).at(0.22, () => this.dust(STRIKER.x + 14, STRIKER.y - 20)).at(0.32, () => this.dust(STRIKER.x + 20, STRIKER.y - 28))
+      .at(0.1, () => this.stepDust(0.1)).at(0.19, () => this.stepDust(0.19)).at(0.28, () => this.stepDust(0.28))
       .at(STRIKE_AT, () => {
         const ball = this.ballHome();
         this.camera.hitStop = 2 / 60; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: ball.x, y: ball.y, t: 0 };
@@ -212,6 +216,11 @@ export class Stage {
   wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; this.say("wave"); }
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
   private finish() { this.mode = "idle"; this.shot = null; this.ballVisible = false; this.onEvent("done"); }
+  /** The view the taker runs up in (the penalty camera, or this free kick's camera). */
+  kickView(): KickView { return this.kind === "freekick" && this.freeKick ? freeKickView(this.freeKick.setup) : PENALTY_VIEW; }
+  /** The taker's pose `t` s after release (the Showroom's slow replay and the geometry test read this). */
+  kickPose(t: number): KickPose { return kickPose(this.kickView(), t); }
+  private stepDust(t: number) { const pose = this.kickPose(t); this.dust(pose.x, pose.y); }
   private dust(x: number, y: number) { this.particles.emit("dust", x, y, 5, { color: ["#c8b99a", "#a89878"], speed: 25, spread: 1.6, life: 0.5, gravity: -10 }); }
   private sfx(name: Sfx) { this.stats.sfx++; this.onEvent("sfx", name); }
 
@@ -361,7 +370,7 @@ export class Stage {
 
   private friendBeat() {
     if (this.mode === "celebrate") {
-      const at = { x: KICK_SPOT.x, y: KICK_SPOT.y };
+      const at = plantSpot(this.kickView());
       return celebrationBeat(this.celebration, this.modeTime, this.reduced, this.particles, at, THEMES[this.stadium].confetti);
     }
     if (this.mode === "react") return reactionBeat(this.reaction, this.modeTime, this.reduced);
@@ -372,22 +381,22 @@ export class Stage {
   }
 
   private drawFriendLayer(c: CanvasRenderingContext2D) {
-    const home = this.ballHome(), fkOffset = this.kind === "freekick" ? { x: home.x - SPOT.x, y: Math.min(0, home.y - SPOT.y) } : { x: 0, y: 0 };
-    let x = STRIKER.x + fkOffset.x, y = STRIKER.y + fkOffset.y, facing: Facing = "up", walking = false, sx = 1, sy = 1, rotate = 0, flip = false, cape = this.layers.cape, trophy = false;
+    // Run-up, plant and strike in world metres through the view's camera (gfx/kick.ts): the sprite's
+    // scale follows its depth, so the Friend is ~1.2 × a keeper's height in both views.
+    const view = this.kickView(), shot = this.mode === "shot" ? this.shot : null;
+    const kicking = Boolean(shot && this.modeTime < shot.strikeAt + shot.flight + 0.1);
+    const pose = kickPose(view, kicking ? this.modeTime : this.mode === "idle" || this.mode === "walkout" ? 0 : 99);
+    let { x, y, sx, sy, rotate } = pose, facing: Facing = "up", walking = pose.walking, flip = false, cape = this.layers.cape, trophy = false;
     const frame = this.reduced ? 0 : Math.floor(this.time * 9) % 8;
-    if (this.mode === "shot" && this.shot) {
-      const p = clamp01(this.modeTime / STRIKE_AT);
-      x = lerp(STRIKER.x, KICK_SPOT.x, ease.inOutCubic(p)) + fkOffset.x; y = lerp(STRIKER.y, KICK_SPOT.y, ease.inOutCubic(p)) + fkOffset.y; walking = p > 0 && p < 1;
-      if (walking) { const step = (this.modeTime * 6) % 1; sy = 1 - Math.abs(Math.sin(step * Math.PI)) * 0.08; sx = 2 - sy; }
-      if (Math.abs(this.modeTime - STRIKE_AT) < 0.1) { sx = 1.12; sy = 0.9; rotate = -0.12; }
-    }
-    if (this.mode !== "idle" && this.mode !== "walkout" && !(this.mode === "shot" && this.shot && this.modeTime < this.shot.strikeAt + this.shot.flight + 0.1)) { x = KICK_SPOT.x + fkOffset.x; y = KICK_SPOT.y + fkOffset.y; }
     const beat = this.friendBeat();
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
-    if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, STRIKER.x, p); y = lerp(360, STRIKER.y, p); walking = p < 1; facing = "up"; }
+    if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, pose.x, p); y = lerp(360, pose.y, p); walking = p < 1; facing = "up"; }
     const rows = this.rows(facing, walking, frame);
-    drawFriend(c, rows, { x, y, scale: 4, rotate, sx, sy, flip, alpha: 1 }, { ...this.layers, cape }, this.time);
-    if (trophy) drawTrophy(c, x, y - 78);
+    drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: 1 }, { ...this.layers, cape }, this.time);
+    // Overlays on top of the (unaltered) sprite: the kicking leg's pixel frames and the contact flash.
+    if (kicking && pose.leg && !beat) drawKickLeg(c, pose.leg, pose.scale, this.layers.halo, this.layers.boots);
+    if (kicking && pose.flash > 0) drawContactFlash(c, view.ball.x, view.ball.y, view.ball.r, pose.flash, this.reduced);
+    if (trophy) drawTrophy(c, x, y - FRIEND_CELL * pose.scale - 14);
   }
 
   private drawBallLayer(c: CanvasRenderingContext2D) {
@@ -526,7 +535,7 @@ export class Stage {
   private drawWalkout(c: CanvasRenderingContext2D) {
     const t = this.modeTime, dark = 0.55 * (1 - clamp01((t - 2.2) / 0.8));
     c.fillStyle = `rgba(0,0,0,${dark})`; c.fillRect(0, 0, W, H);
-    const p = ease.outCubic(clamp01(t / 2)), fx = lerp(240, STRIKER.x, p), fy = lerp(360, STRIKER.y, p);
+    const p = ease.outCubic(clamp01(t / 2)), start = this.kickPose(0), fx = lerp(240, start.x, p), fy = lerp(360, start.y, p);
     const g = c.createRadialGradient(fx, fy - 30, 4, fx, fy - 30, 70); g.addColorStop(0, "rgba(255,246,200,0.35)"); g.addColorStop(1, "rgba(255,246,200,0)");
     c.fillStyle = g; c.fillRect(0, 0, W, H);
     const banner = ease.outBack(clamp01((t - 0.6) / 0.5));
