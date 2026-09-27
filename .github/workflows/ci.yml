@@ -43,6 +43,8 @@ jobs:
         run: node scripts/economy-sim.mjs --smoke
       - name: Weekly Cup computation tests (drops, race, wildcards)
         run: npm run test:cup
+      - name: DEV server answers a missing file with 404 and keeps serving (BQ-X10)
+        run: npm run test:dev-server
       - name: Verifier tests (Skill Cup referee)
         run: npm run test:verifier
       - name: Verifier Worker bundles
