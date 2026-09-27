@@ -375,6 +375,74 @@ export function drawBall(c: CanvasRenderingContext2D, x: number, y: number, r: n
   if (squash) c.restore();
 }
 
+// ── B7: readable in flight ───────────────────────────────────────────────────
+// Drawing only: the physics radius (BALL_RADIUS at the crossing) is untouched. In flight the ball is DRAWN
+// bigger (so its 1 px identity outline and panel pattern survive: a sprite of 8 px or more), easing back to the
+// exact physics radius over the last stretch, so at the crossing the drawn disc is the one the keeper rig tested.
+/** In-flight draw scale and floor (logical px radius). */
+export const FLIGHT_SCALE = 1.45, FLIGHT_MIN_R = 4;
+const smooth = (t: number) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+/** 0 at the strike → 1 by 12 % of the flight, held, → 0 at the crossing (from 78 %). */
+export const flightBoost = (p: number) => (p <= 0 || p >= 1 ? 0 : Math.min(smooth(p / 0.12), 1 - smooth((p - 0.78) / 0.22)));
+/** The radius a ball of physics radius `r` is drawn at, `p` (0..1) through its flight. Never smaller than `r`. */
+export function flightRadius(r: number, p: number): number {
+  const big = Math.max(r * FLIGHT_SCALE, FLIGHT_MIN_R);
+  return big <= r ? r : r + (big - r) * flightBoost(p);
+}
+
+/** Ribbon trail colours: `edge` (the rarity colour), `core` (its bright centre line) and a width cap. */
+export type Ribbon = { edge: string; core: string | null; maxWidth: number };
+/** Index = rarity (7 = standard ball). Colours reused from RARITY_FX / BALL_IDENTITY (fixed, learnable hues). */
+export const RIBBONS: readonly Ribbon[] = [
+  { edge: "#8a7a66", core: "#b3a48f", maxWidth: 99 }, // Scuffed: dusty brown
+  { edge: "#f08a24", core: "#ffd23f", maxWidth: 99 }, // Training: orange
+  { edge: "#2a6fdb", core: "#7fd3ff", maxWidth: 99 }, // Match: blue
+  { edge: "#16a34a", core: "#b9f6ca", maxWidth: 99 }, // Pro: green
+  { edge: "#8a96a8", core: "#ffffff", maxWidth: 99 }, // Silver: steel with a white-hot core
+  { edge: "#c8921a", core: "#fff2b3", maxWidth: 99 }, // Gold
+  { edge: "#ff3b1f", core: "#ffd23f", maxWidth: 99 }, // Golden Boot: fire
+  { edge: "#f4f4f4", core: null, maxWidth: 2 },       // Standard: a thin chalk streak (not a rarity)
+];
+const vintageRibbons = new Map<number, Ribbon>();
+/** The ribbon for a ball (Season 0 editions trail their vintage leather colour). */
+export function ribbonFor(fx: RarityFx): Ribbon {
+  const rarity = fx.id ?? 7;
+  if (fx.season !== "S0") return RIBBONS[rarity] ?? RIBBONS[7];
+  let out = vintageRibbons.get(rarity);
+  if (!out) { out = { edge: VINTAGE[rarity] ?? VINTAGE[0], core: "#f5e6c8", maxWidth: 99 }; vintageRibbons.set(rarity, out); }
+  return out;
+}
+export type RibbonPoint = { x: number; y: number; r: number };
+/**
+ * A short, pixel-snapped ribbon behind a flying ball: `points` run head (the ball) → tail. Square stamps every
+ * pixel, tapering from 0.8 × the ball's diameter to 1 px, the rarity colour with a bright core, the far half
+ * dithered on a fixed screen checker (no random flicker).
+ */
+export function drawRibbon(c: CanvasRenderingContext2D, points: readonly RibbonPoint[], ribbon: Ribbon) {
+  if (points.length < 2) return;
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  if (total < 1) return;
+  for (const pass of [0, 1] as const) {
+    const color = pass ? ribbon.core : ribbon.edge;
+    if (!color) continue;
+    c.fillStyle = color;
+    let run = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1], len = Math.hypot(b.x - a.x, b.y - a.y), steps = Math.max(1, Math.ceil(len));
+      for (let s = 0; s < steps; s++) {
+        const k = s / steps, t = (run + len * k) / total, x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, r = a.r + (b.r - a.r) * k;
+        const w = Math.min(ribbon.maxWidth, Math.max(1, Math.round(r * 1.6 * (1 - t)))) - pass * 2;
+        if (w < 1) continue;
+        const px = Math.round(x - w / 2), py = Math.round(y - w / 2);
+        if (t > 0.55 && ((px + py) & 1)) continue;
+        c.fillRect(px, py, w, w);
+      }
+      run += len;
+    }
+  }
+}
+
 /** Per-frame trail particles for a flying ball. */
 export function emitTrail(particles: Particles, fx: RarityFx, x: number, y: number, onFire: boolean) {
   switch (onFire ? "fire" : fx.kind) {
