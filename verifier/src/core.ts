@@ -1,5 +1,5 @@
 /**
- * Skill Cup referee — pure logic, no platform APIs beyond WebCrypto.
+ * Skill Cup referee (5 kicks vs THE FINAL WALL) — pure logic, no platform APIs beyond WebCrypto.
  *
  * Protocol (one entry = one 5-kick shootout vs Ghost):
  *  1. Week start: the referee publishes sha256(weekSecret). The secret stays private until week end.
@@ -14,10 +14,10 @@
  *  5. Week end: the secret is revealed; anyone can recompute every dive and score from the
  *     published inputs (see replayEntry).
  */
-import { KEEPERS, keeperById, resolveShot, goalPoints, clamp, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
+import { KEEPERS, keeperById, resolveShot, shotTarget, goalPoints, clamp, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
 
 export const KICKS_PER_ENTRY = 5;
-export const SKILL_KEEPER = keeperById("ghost");
+export const SKILL_KEEPER = keeperById("finalwall");
 
 export type KickInput = ShotInput & { /** ms from aim start to release; recorded for review, not used by physics. */ releaseMs: number };
 export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number }[]; score: number; signature?: string };
@@ -54,8 +54,8 @@ export function sanitize(input: KickInput): KickInput {
 }
 
 /** Pure scoring shared by the live referee and public replays. */
-export function scoreKick(input: ShotInput, seed: number, goalsBefore: number) {
-  const outcome = resolveShot(input, SKILL_KEEPER, seed);
+export function scoreKick(input: ShotInput, seed: number, goalsBefore: number, kickIndex: number, previous: readonly ShotInput[]) {
+  const outcome = resolveShot(input, SKILL_KEEPER, seed, { kickIndex, history: previous.map(shot => shotTarget(shot).x) });
   const streak = outcome.result === "goal" ? goalsBefore + 1 : 0;
   return { result: outcome.result, points: outcome.result === "goal" ? goalPoints(SKILL_KEEPER, 1, streak, false) : 0, plan: outcome.plan };
 }
@@ -107,7 +107,7 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
       const input = sanitize(body.input);
       const seed = await diveSeed(secret, entry.id, body.kickIndex);
       const goals = entry.kicks.reduce((streak, kick) => (kick.result === "goal" ? streak + 1 : 0), 0);
-      const scored = scoreKick(input, seed, goals);
+      const scored = scoreKick(input, seed, goals, body.kickIndex, entry.kicks.map(kick => kick.input));
       entry.kicks.push({ input, result: scored.result, points: scored.points });
       entry.score += scored.points;
       let signed: { payload: string; signature: string } | undefined;
@@ -122,7 +122,7 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
 export async function replayEntry(secret: Uint8Array<ArrayBuffer>, entryId: number, inputs: ShotInput[]) {
   let score = 0, goals = 0; const results: ShotResult[] = [];
   for (let index = 0; index < inputs.length; index++) {
-    const scored = scoreKick(inputs[index], await diveSeed(secret, entryId, index), goals);
+    const scored = scoreKick(inputs[index], await diveSeed(secret, entryId, index), goals, index, inputs.slice(0, index));
     goals = scored.result === "goal" ? goals + 1 : 0; score += scored.points; results.push(scored.result);
   }
   return { score, results };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveShot, keeperById } from "../../packages/engine/src/index.ts";
+import { resolveShot, keeperById, shotTarget } from "../../packages/engine/src/index.ts";
 import { createReferee, memoryStore, diveSeed, replayEntry, secretHash, RefereeError, type Chain } from "../src/core.ts";
 
 const secret = crypto.getRandomValues(new Uint8Array(32));
@@ -19,7 +19,8 @@ test("server replay matches the client engine bit-for-bit", async () => {
   const { entryId } = await ref.enter({ txHash: hashFor(1) });
   for (let i = 0; i < 5; i++) {
     const response = await ref.kick({ entryId, kickIndex: i, input: kickInput(i) });
-    const local = resolveShot(kickInput(i), keeperById("ghost"), await diveSeed(secret, entryId, i));
+    const history = [0, 1, 2, 3, 4].slice(0, i).map(k => shotTarget(kickInput(k)).x);
+    const local = resolveShot(kickInput(i), keeperById("finalwall"), await diveSeed(secret, entryId, i), { kickIndex: i, history });
     assert.equal(response.result, local.result);
     assert.deepEqual(response.dive, { x: local.plan.x, y: local.plan.y });
   }
