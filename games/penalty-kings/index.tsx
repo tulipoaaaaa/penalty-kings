@@ -12,6 +12,7 @@ import {
   swipeToShot, aimedShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
+import { FREE_PLAY_MODES, type BallGlow, type TimeOfDay } from "@penalty-kings/game-director";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
 import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
@@ -31,7 +32,8 @@ import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
-import { MatchDirector, type KickFacts } from "./game/director.js";
+import { MatchDirector, createGameDirector, applyBeat, playMoment, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
+import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
@@ -66,6 +68,11 @@ const SIM_SKILL = [9350, 7900, 6120, 4600, 3800];
 const LADDER_SHOWCASE: readonly KeeperId[] = ["squirrel", "peacock", "octopus", "mime", "disco", "sumo", "robot", "ghost", "finalwall"];
 const TIME_UP = "Time up — kick lost", TIME_UP_PAUSE_MS = 1600;
 const LABELS: Record<ShotResult | "wall", string> = { goal: "GOAL!", save: "SAVED!", post: "OFF THE POST!", over: "OVER THE BAR!", wide: "WIDE!", wall: "BLOCKED!" };
+/** Director moments that need a keeper on screen (Target Practice has none, so they are skipped there). */
+const KEEPER_MOMENTS = new Set(["keeper-taunt", "keeper-tell", "keeper-banter", "keeper-stretch", "keeper-gloat", "slow-clap", "keeper-sub", "boss-appearance", "keeper-mind-games"]);
+/** How long a Director jumbotron message holds before the prize slides come back. */
+const JUMBOTRON_HOLD_MS = 6000;
+const timeOfDay = (hour = new Date().getHours()): TimeOfDay => (hour < 11 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night");
 const vibrate = (pattern: number | number[]) => { try { navigator.vibrate?.(pattern); } catch { /* iPhone Safari: unsupported, skip */ } };
 
 /** Penalty Kings. The SDK runtime supplies the verified Friend, the fixed action client and pause state. */
@@ -124,9 +131,23 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const keys = useRef(new Set<string>());
   const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, aimY: 0.5, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
   const aimStarted = useRef(0);
-  const pendingKick = useRef<{ record: KickRecord; result: ShotResult | "wall" } | null>(null);
-  const director = useRef(new MatchDirector(Number(friendId % 997n)));
-  const pendingWave = useRef(false);
+  const pendingKick = useRef<{ record: KickRecord & { golden?: boolean }; result: ShotResult | "wall" } | null>(null);
+  /**
+   * The Match Director (@penalty-kings/game-director, cosmetic only): keeper rotation in free play, a
+   * moment every kick, a notable every 3–4, a set piece every round, and a no-repeat commentary line.
+   * Created per Friend with the seen moments from progress (the Discovery meter).
+   */
+  const dir = useRef<GameDirector | null>(null);
+  /** Bumped on every session start/leave: queued Director lines from an old session never play. */
+  const sessionEpoch = useRef(0);
+  /** Director lines are said one after another from this time (ms), so each can be read. */
+  const lineCursor = useRef(0);
+  /** Bumped when a line must be read now: queued Director lines from before never play over it. */
+  const lineEpoch = useRef(0);
+  /** A Director jumbotron message holds the screen until this time (ms, Date.now). */
+  const jumboHold = useRef(0);
+  /** The Director's beat for the kick in flight (reaction moments on "resolved", between moments on "done"). */
+  const afterBeat = useRef<Beat | null>(null);
   const kicksTaken = useRef(0);
   const progressRef = useRef(progress); progressRef.current = progress;
   const bagRef = useRef(bag); bagRef.current = bag;
@@ -199,6 +220,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // Session start: snapshot, Friend artwork, sound, motion preference.
   useEffect(() => {
     const version = ++epoch.current;
+    dir.current = null; // a Director per Friend (created on first use with this Friend's seen moments)
     sound.current = createFriendSoundKit({ muted: true }); crowd.current = createCrowd();
     cancelKick(); setSnapshot(null); setError(""); setMenu(null); setPhaseNow("idle"); setSession(null); setScreen("title"); locked.current = false;
     void client.read().then(value => { if (version === epoch.current) setSnapshot(value); }).catch(cause => {
@@ -343,6 +365,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, [equipped, ready]);
   useEffect(() => {
     const scene = stage.current; if (!scene) return;
+    if (Date.now() < jumboHold.current) return; // a Director jumbotron moment is on (KISS CAM, GOLDEN HOUR…)
     const slides = jumbotronSlides(prizeSource, now, { rank: race > 0 ? raceRank : null, lastBigPull });
     scene.jumbotron = slides[Math.floor(now / 4000) % slides.length];
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -359,6 +382,48 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     else if (name === "net") s?.play("reward");
     else if (name === "glove" || name === "stomp" || name === "heartbeat") c?.thud();
   }
+
+  // ── Match Director ──────────────────────────────────────────────────────
+  function director(): GameDirector {
+    if (!dir.current) {
+      dir.current = createGameDirector((Number(friendId % 1000003n) * 7919 + Date.now()) >>> 0, { name: `Friend #${friendId}`, number: String(friendId) }, progressRef.current.directorSeen);
+    }
+    return dir.current;
+  }
+  /** Director lines, one after another (a stale queue is dropped: silence beats a line about an old kick). */
+  const lineLater: Later = (_ms, run) => {
+    const now = performance.now(), at = Math.max(now, lineCursor.current), epochAt = sessionEpoch.current, queueAt = lineEpoch.current;
+    if (at - now > 3000) return;
+    lineCursor.current = at + LINE_GAP_MS * 0.75;
+    if (at <= now) run(); else window.setTimeout(() => { if (sessionEpoch.current === epochAt && lineEpoch.current === queueAt && stage.current) run(); }, at - now);
+  };
+  /** A line that must be read now (a kick's result, a first-session script line): drop the queue, then hold the box. */
+  function priorityLine(holdMs = LINE_GAP_MS * 0.6) { lineEpoch.current++; lineCursor.current = performance.now() + holdMs; }
+  /** Stage the Director's moments of these slots (Target Practice skips keeper moments: there is no keeper). */
+  function playMoments(beat: Beat | null, slots: readonly Moment["slot"][], kind: Session["kind"] | undefined) {
+    const scene = stage.current; if (!scene || !beat) return;
+    for (const moment of beat.moments) {
+      if (!slots.includes(moment.slot) || (kind === "target" && KEEPER_MOMENTS.has(moment.id))) continue;
+      const played = playMoment(scene, moment, lineLater);
+      if (played.jumbotron) jumboHold.current = Date.now() + JUMBOTRON_HOLD_MS;
+    }
+  }
+  /** A beat before a kick / at a session start: its keeper change (walk-on), hush, lines and "before" moments. */
+  function playBeat(beat: Beat, kind: Session["kind"]) {
+    const scene = stage.current; if (!scene) return;
+    const moments = kind === "target" ? beat.moments.filter(moment => !KEEPER_MOMENTS.has(moment.id)) : beat.moments;
+    const played = applyBeat(scene, { ...beat, moments, keeperChanged: kind !== "target" && beat.keeperChanged }, ["before"], lineLater);
+    if (played.jumbotron) jumboHold.current = Date.now() + JUMBOTRON_HOLD_MS;
+  }
+  /** Persist the Director's seen moments (its seen code) into progress and so into the save code. */
+  function syncDiscovery() {
+    const seenCode = dir.current?.seenCode();
+    if (seenCode !== undefined) updateProgress(p => (seenCode === p.directorSeen ? p : { ...p, directorSeen: seenCode }));
+  }
+  /** Session changes the next event/frame must see immediately (keeper swaps before a kick). */
+  const setSessionNow = (next: Session) => { live.current = { ...live.current, session: next }; setSession(next); };
+  /** Cosmetic glow of the ball in play, for a Director line only (Big Match balls; never odds or value). */
+  const glowOf = (current: Session): BallGlow => (current.mode !== "match" || !current.ball ? "standard" : current.ball.rarity >= 6 ? "top" : current.ball.rarity >= 4 ? "high" : "standard");
 
   // ── Difficulty for the current kick ─────────────────────────────────────
   function difficultyFor(current: Session): Difficulty {
@@ -420,8 +485,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const ladder = nextRung(progress);
     const base: Session = { mode, kind: "penalty", keeper: ladder, seed: (Date.now() ^ Number(friendId % 100000n)) >>> 0, total: 5, kicks: [], points: 0, streak: 0, rung: progress.difficulty, earned: { rf: 0n, gboot: 0, race: 0 } };
     if (mode === "tutorial") return { ...base, keeper: "mouse", total: 3, ...extra };
-    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, keeper: director.current.keeperForKick(progress.stamps, ladder, 0), setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4, wallHeight: WALL_HEIGHTS[tier.id] }), ...extra };
-    if (mode === "penalties") return { ...base, keeper: director.current.keeperForRound(progress.stamps, ladder), ...extra };
+    // Free play starts on the ladder keeper; the Match Director rotates keepers from there (beginSession/startAim).
+    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, keeper: ladder, setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4, wallHeight: WALL_HEIGHTS[tier.id] }), ...extra };
+    if (mode === "penalties") return { ...base, keeper: ladder, ...extra };
     if (mode === "target") return { ...base, kind: "target", total: 0, target: { startedAt: clockNow(), round: 0, targets: spawnTargets(base.seed, 0), combo: 0, hits: 0 }, ...extra };
     if (mode === "skill") return { ...base, keeper: "finalwall", ...extra };
     if (mode === "match") return { ...base, keeper: progress.stamps.includes(ladder) ? ladder : ladder, ...extra };
@@ -430,15 +496,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   /** Abandon an in-flight kick without scoring it (mode switch, redeemed ball). */
   function cancelKick() {
-    stage.current?.cancel(); pendingKick.current = null; pendingWave.current = false; inFlight.current = 0; kickId.current++;
+    stage.current?.cancel(); pendingKick.current = null; afterBeat.current = null; inFlight.current = 0; kickId.current++; sessionEpoch.current++;
     window.clearTimeout(timeoutTimer.current); swipe.current = null; pointer.current = null; keyAim.current.charging = false; setBanner(null);
   }
 
-  function beginSession(next: Session) {
+  function beginSession(start: Session) {
     const scene = stage.current;
     if (inFlight.current) cancelKick();
+    sessionEpoch.current++; lineCursor.current = 0; afterBeat.current = null;
     targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
-    setSession(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
+    // The Match Director opens the session (replaces the old round intro). It keeps the shell's keeper in
+    // paid, ranked and scripted modes, and may rotate it in free play (Pro/Champions between sessions).
+    let next = start, opening: Beat | null = null;
+    const setup = { stadium: tier.id, weather: scene?.weather ?? "sun", timeOfDay: timeOfDay() } as const;
+    if (next.mode === "tutorial") director().startSession({ ...setup, mode: "tutorial", keeper: next.keeper }); // the tutorial keeps its own lines
+    else { opening = director().startSession({ ...setup, mode: next.mode, keeper: next.keeper }); if (opening.keeperChanged && next.kind !== "target") next = { ...next, keeper: opening.keeper }; }
+    setSessionNow(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
       if (!inFlight.current) scene.cancel(); // clear any showreel/attract shot still playing on the Stage
       if (scene.stadium !== tier.id) scene.setStadium(tier.id);
@@ -449,8 +522,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (next.mode !== "match") { scene.rarity = 7; scene.lucky = false; scene.season = "S1"; }
       scene.streak = 0; scene.cue = null;
       if (next.mode === "tutorial") scene.walkout();
-      else scene.say(next.kind === "freekick" ? "freekick" : next.kind === "target" ? "target" : director.current.roundIntro(next.keeper, scene.weather, next.mode));
+      else if (opening) playBeat({ ...opening, keeperChanged: false }, next.kind);
     }
+    syncDiscovery();
     if (next.mode === "match") { setPhaseNow("idle"); return; }
     startAim(next);
   }
@@ -483,17 +557,29 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     beginSession(newSession("daily", { kind: scenario.mode === "freekick" ? "freekick" : "penalty", keeper: scenario.keeper, total: scenario.kicks, daily: scenario, setup: scenario.setup, seed: scenario.seed }));
   }
 
-  function startAim(current: Session | null = live.current.session) {
+  function startAim(start: Session | null = live.current.session) {
     const scene = stage.current;
+    let current = start;
     keyAim.current = { ...keyAim.current, power: 0, charging: false, curl: 0, top: 0 };
     aimStarted.current = clockNow();
     if (scene && current) {
       scene.ballVisible = true;
+      const index = current.kicks.length;
+      if (current.mode === "tutorial") {
+        const epochAt = sessionEpoch.current;
+        scene.hints = 1; window.setTimeout(() => { if (sessionEpoch.current !== epochAt) return; priorityLine(); stage.current?.say(`tutorial-${Math.min(3, index + 1)}` as "tutorial-1"); }, index === 0 ? 2600 : 300);
+      } else {
+        // The Director, per kick: the keeper for THIS kick (set before keeperPlan/resolveShot), then the pre-kick moments.
+        const beat = director().beforeKick({ suddenDeath: Boolean(current.suddenDeath), now: clockNow() / 1000, glow: glowOf(current) });
+        if (current.kind !== "target" && beat.keeper !== current.keeper) {
+          current = { ...current, keeper: beat.keeper }; setSessionNow(current);
+          if (current.kind === "freekick" && current.setup) scene.freeKick = { setup: current.setup, wall: resolveFreeKick(current.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(current.keeper)).wall };
+        }
+        playBeat(beat, current.kind);
+      }
       if (current.kind !== "target") {
-        const index = current.kicks.length;
-        if (current.mode === "tutorial") { scene.hints = 1; window.setTimeout(() => stage.current?.say(`tutorial-${Math.min(3, index + 1)}` as "tutorial-1"), index === 0 ? 2600 : 300); }
-        else if (index > 0 || current.mode === "match") { const pre = director.current.beforeKick(index, current.streak); if (pre.say) scene.say(pre.say); if (pre.taunt) scene.taunt(); }
         scene.tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
+        syncDiscovery();
       }
     }
     setPhaseNow("aim"); setMenu(null);
@@ -514,6 +600,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo, STRIKE_AT + penaltyFlight(target.time));
       const result: ShotResult = Math.abs(target.x) > 1 ? "wide" : target.y > 1 ? "over" : hit.hit || hit.crossbar ? "goal" : "save";
       pendingKick.current = { record: { result, zone: "centre", points: hit.points, x: target.x, y: target.y }, result };
+      direct(current, pendingKick.current.record);
       pendingTarget.current = { hit: hit.hit, combo: hit.combo };
       targetMotion.current.release = t;
       scene.play({ result, target, plan: keeperPlan(keeperById("mouse"), 1, target), zone: "centre", postIn: false }, shot.curl);
@@ -545,14 +632,19 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     scene.playFreeKick(outcome);
   }
 
-  /** Tell the Match Director what just happened; it picks the line (and maybe a wave) the Stage plays on resolve. */
-  function direct(current: Session, record: KickRecord) {
+  /**
+   * Tell the Match Director what the engine decided (it only reacts): the commentator line the Stage says
+   * on resolve, the reaction moments ("resolved") and the between-kick moments ("done"). Golden Hour: a
+   * FREE-PLAY kick's skill points ×2 (never Big Match, Skill Cup, tour, daily, tutorial or targets).
+   */
+  function direct(current: Session, record: KickRecord & { golden?: boolean }) {
     const scene = stage.current; if (!scene) return;
-    let misses = 0; for (let i = current.kicks.length - 1; i >= 0 && current.kicks[i].result !== "goal"; i--) misses++;
-    const goal = record.result === "goal";
-    const facts: KickFacts = { kind: current.kind, result: record.result, zone: record.zone, postIn: record.postIn, x: record.x, y: record.y, spin: record.spin, knuckle: record.knuckle, streak: goal ? current.streak + 1 : 0, misses: goal ? 0 : misses + 1 };
-    const cue = director.current.afterKick(facts);
-    scene.cue = current.kind === "target" ? null : cue.say; pendingWave.current = cue.wave;
+    const beat = director().afterKick({ kind: current.kind, result: record.result, zone: record.zone, x: record.x, y: record.y, postIn: record.postIn, spin: record.spin, knuckle: record.knuckle, now: clockNow() / 1000 });
+    afterBeat.current = beat;
+    scene.cue = beat.lines[0] ? cueLine(beat.lines[0]) : null;
+    if (beat.skillScoreMultiplier === 2 && (FREE_PLAY_MODES as readonly string[]).includes(current.mode) && record.points > 0) {
+      record.points *= beat.skillScoreMultiplier; record.golden = true;
+    }
   }
 
   /** The countdown bar: fraction left, red in the last 1.5 s; hidden when the clock is off. */
@@ -581,7 +673,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const record = kick.record, goal = record.result === "goal";
     timing.current.resolved = performance.now();
     if (current.mode === "match" && current.ball) { const id = current.ball.recordId; setBag(list => list.map(ball => (ball.id === id ? recordKick(ball, { goal, zone: record.zone }) : ball))); }
-    if (pendingWave.current) { pendingWave.current = false; stage.current?.wave(); }
+    // The Director's reaction moments (the result line was already said by the Stage).
+    priorityLine();
+    if (!timedOut) playMoments(afterBeat.current, ["reaction"], current.kind);
     kicksTaken.current++;
     if (goal && haptics) vibrate([40, 30, 40]);
     const streak = goal ? current.streak + 1 : 0;
@@ -597,7 +691,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = streak; }
     // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
-    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${streak >= 2 ? ` · ${streak} in a row` : ""}` : current.streak >= 2 ? `Your run of ${current.streak} goals ends` : "No goal this time";
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${streak >= 2 ? ` · ${streak} in a row` : ""}` : current.streak >= 2 ? `Your run of ${current.streak} goals ends` : "No goal this time";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
@@ -622,6 +716,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved) }); t.release = 0; }
     setBanner(null);
     if (!current) return;
+    // The Director's between-kick moments (substitution walk-ons, weather, the cat…).
+    const between = afterBeat.current; afterBeat.current = null;
+    playMoments(between, ["between"], current.kind);
+    syncDiscovery();
     if (current.kind === "target") {
       targetMotion.current.release = null;
       if (current.target && hitTargets.current.size) { const gone = hitTargets.current; current = { ...current, target: { ...current.target, targets: current.target.targets.filter(item => !gone.has(item.id)) } }; hitTargets.current = new Set(); setSession(current); }
@@ -639,13 +737,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       setPhaseNow("idle"); return;
     }
     if (current.kicks.length >= current.total) { endSession(current); return; }
-    // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
+    // Free kicks: a new setup for every kick (except levels/daily with a fixed setup); the Director picks the keeper in startAim.
     if (current.mode === "freekicks") {
       const setup = freeKickSetup((current.seed + current.kicks.length * 101) >>> 0, { maxWind: tier.id === "champions" ? 0 : 4, wallHeight: WALL_HEIGHTS[tier.id] });
-      const keeper = director.current.keeperForKick(progressRef.current.stamps, nextRung(progressRef.current), current.kicks.length);
-      const updated = { ...current, setup, keeper };
-      if (stage.current) { stage.current.keeper = keeper; if (keeper !== current.keeper) stage.current.say(`intro:${keeper}`); }
-      setSession(updated);
+      const updated = { ...current, setup };
+      setSessionNow(updated);
       if (stage.current) stage.current.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(current.keeper)).wall };
       startAim(updated); return;
     }
@@ -760,7 +856,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
       setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race }));
       const best = Math.max(...rarities);
-      if (best >= 5) setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`);
+      if (best >= 5) { setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`); director().noteBigPull(); } // the Director only learns "a big pull happened" (intensity), never its value
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
       setBag(list => addPulls(list, rarities, tier.id, Date.now()));
       setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
@@ -1097,7 +1193,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
           <label>Restore from a save code<textarea rows={2} value={restoreCode} onChange={event => setRestoreCode(event.target.value)} data-testid="save-code-in" /></label>
           <button type="button" disabled={!restoreCode.trim()} data-testid="save-code-restore" onClick={() => {
             const restored = decodeSaveCode(restoreCode, friendId);
-            if (restored.ok) { updateProgress(() => restored.progress); setRestoreCode(""); setRestoreNote("Progress restored from your save code."); } else setRestoreNote(restored.reason);
+            if (restored.ok) { updateProgress(() => restored.progress); dir.current = null; setRestoreCode(""); setRestoreNote("Progress restored from your save code."); } else setRestoreNote(restored.reason);
           }}>Restore</button>
           {restoreNote && <p role="status" data-testid="save-code-note">{restoreNote}</p>}
           <p className="pk-note">Save codes hold progression only (never RF, balls or $GBOOT: those always come from the chain).</p>

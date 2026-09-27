@@ -102,6 +102,34 @@ export function commentary(context: CommentaryContext | string, names: { friend:
   return list[pick].replaceAll("{friend}", names.friend).replaceAll("{keeper}", names.keeper);
 }
 
+/** Seconds within which the same line is never shown twice (owner's target: 0 repeats in 60 s). */
+export const NO_REPEAT_SECONDS = 60;
+const shownAt = new Map<string, number>();
+const fill = (text: string, names: { friend: string; keeper: string }) => text.replaceAll("{friend}", names.friend).replaceAll("{keeper}", names.keeper).replaceAll("{number}", names.friend.replace(/\D/g, "") || names.friend);
+/**
+ * The line the Stage should show now, or null when every candidate was shown in the last 60 s
+ * (silence beats a repeat). A Match Director line (`line:` context) is shown verbatim unless that exact
+ * text was on screen within the window; a legacy context picks a line not shown within the window.
+ * `now` is seconds on any monotonic clock (the Stage passes real time).
+ */
+export function freshCommentary(context: CommentaryContext | string, names: { friend: string; keeper: string }, now: number): string | null {
+  const recent = (text: string) => { const at = shownAt.get(text); return at !== undefined && now - at < NO_REPEAT_SECONDS; };
+  let text: string | null = null;
+  if (context.startsWith("line:")) {
+    const cue = cued.get(context) ?? lineTemplate(context.slice(5));
+    if (cue) { const filled = fill(cue, names); text = recent(filled) ? null : filled; }
+  }
+  if (text === null && !context.startsWith("line:")) {
+    const list = (LINES[context] ?? LINES.keeper).map(line => fill(line, names)).filter(line => !recent(line));
+    if (list.length) text = list[Math.floor(Math.random() * list.length)];
+  }
+  if (text !== null) {
+    shownAt.set(text, now);
+    if (shownAt.size > 400) for (const [key, at] of shownAt) if (now - at >= NO_REPEAT_SECONDS) shownAt.delete(key);
+  }
+  return text;
+}
+
 /** Pixel portrait with mouth flap while talking. */
 export function drawCommentator(c: CanvasRenderingContext2D, x: number, y: number, talking: boolean, time: number) {
   c.fillStyle = "#0b0d1a"; c.fillRect(x - 1, y - 1, 20, 20);

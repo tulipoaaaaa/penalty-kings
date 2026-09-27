@@ -25,12 +25,15 @@ export type Progress = {
   best: { target: number; penalties: number; freekicks: number };
   /** Unlocked cosmetic rewards from stars (ids from economy COSMETICS). */
   rewards: string[];
+  /** Match Director moments seen (the Director's encoded seen code, for the Discovery meter). */
+  directorSeen: string;
 };
 
 export const STORAGE_KEY = "penalty-kings/progress/v1";
 export const fresh = (): Progress => ({
   version: 1, xp: 0, stars: {}, stamps: [], pulled: [], matches: 0, tutorialDone: false, difficulty: 3, history: [],
   daily: { date: "", attempts: 0, best: 0, played: [] }, best: { target: 0, penalties: 0, freekicks: 0 }, rewards: [],
+  directorSeen: "",
 });
 
 export function loadProgress(storage: Pick<Storage, "getItem"> | null = safeStorage()): Progress {

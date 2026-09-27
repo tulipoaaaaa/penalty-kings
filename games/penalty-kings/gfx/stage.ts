@@ -11,7 +11,7 @@ import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
-import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
+import { freshCommentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
 import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, FRIEND_CELL, type KickView, type KickPose } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
@@ -22,7 +22,7 @@ export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => 
 export const BACKDROP_DROP = Math.round(PENALTY_GOAL.y - 30 - 102);
 /** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. Defined in gfx/kick.ts. */
 export { STRIKE_AT };
-export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal";
+export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "walkon-done";
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
@@ -113,7 +113,9 @@ export class Stage {
   /** DEV (Showroom): draw the keeper hitbox and the ball at arrival over the scene. */
   debugHitbox = false;
   /** What the viewer actually saw (the 90-second QA reads this). */
-  stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0 };
+  stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0, walkOns: 0,
+    /** Every line shown, with real-time seconds (the QA checks 0 repeats within 60 s). Bounded. */
+    lineLog: [] as { text: string; at: number }[] };
 
   private mode: "idle" | "shot" | "celebrate" | "react" | "walkout" = "idle";
   private modeTime = 0;
@@ -133,6 +135,9 @@ export class Stage {
   private fanCatch: { x: number; t: number } | null = null;
   private ballKid: { t: number; x: number } | null = null;
   private lastRealFrame = 0;
+  /** A keeper walk-on (surprise keeper, substitution, boss): the old keeper walks off, the new one walks on, then a taunt. */
+  private walkOn: { from: KeeperId; t: number } | null = null;
+  private walkOnFade = 0;
 
   constructor(options: Partial<Pick<Stage, "stadium" | "weather" | "keeper" | "reduced">> = {}) {
     Object.assign(this, options);
@@ -145,16 +150,29 @@ export class Stage {
   setReduced(value: boolean) { this.reduced = value; this.camera.reduced = value; this.particles.budget = value ? 0.25 : 1; }
   get busy() { return this.mode !== "idle" || Boolean(this.reveal); }
   /** A moment a kick must not cut short: the walkout or a pack reveal sequence. */
-  get moment() { return this.mode === "walkout" || Boolean(this.reveal); }
+  get moment() { return this.mode === "walkout" || Boolean(this.reveal) || Boolean(this.walkOn); }
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
 
   // ── Moments ───────────────────────────────────────────────────────────────
   say(context: CommentaryContext) {
-    const text = commentary(context, { friend: this.friendName, keeper: keeperById(this.keeper).name });
+    const now = (typeof performance === "undefined" ? Date.now() : performance.now()) / 1000;
+    const text = freshCommentary(context, { friend: this.friendName, keeper: keeperById(this.keeper).name }, now);
+    if (text === null) return; // every candidate was on screen in the last 60 s: stay quiet rather than repeat
     this.said = { text, t: 0 }; this.stats.lines.add(text); this.stats.contexts.add(context);
+    this.stats.lineLog.push({ text, at: Math.round(now * 100) / 100 }); if (this.stats.lineLog.length > 500) this.stats.lineLog.shift();
+  }
+  /** Seconds a keeper walk-on takes (walk off, then walk on). Reduced motion: an instant swap with a short hold for the taunt. */
+  static readonly WALK_OFF = 0.4; static readonly WALK_ON = 1.05;
+  /** Swap the keeper with a short walk-off / walk-on and a taunt (a protected moment: no kick meanwhile). */
+  keeperWalkOn(id: KeeperId) {
+    if (id === this.keeper) return;
+    const from = this.walkOn && this.walkOn.t < Stage.WALK_OFF ? this.walkOn.from : this.keeper;
+    this.keeper = id; this.stats.walkOns++;
+    this.walkOn = { from, t: this.reduced ? Stage.WALK_ON - 0.45 : 0 };
+    this.crowd.react("ooh");
   }
   /** A keeper taunt bubble with its signature sound. */
   taunt() {
@@ -260,7 +278,8 @@ export class Stage {
     if (plan.rarity >= 5) this.say(plan.fullScreen ? "rarity-top" : "rarity-high");
     if (plan.fullScreen) { this.crowd.react("cheer"); this.sfx("roar"); }
   }
-  wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; this.say("wave"); }
+  /** The Mexican wave; its line only when the box is free (a goal's result line is never cut short). */
+  wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; if (!this.said || this.said.t > 1.2) this.say("wave"); }
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
   private finish() { this.mode = "idle"; this.shot = null; this.ballVisible = false; this.onEvent("done"); }
   /** The view the taker runs up in (the penalty camera, or this free kick's camera). */
@@ -299,6 +318,10 @@ export class Stage {
     if (this.mode === "celebrate" && this.modeTime > 2.6) { this.mode = "idle"; this.shot = null; } // "done" was already sent
     if (this.mode === "react" && this.modeTime > 1.6) { this.mode = "idle"; this.onEvent("done"); }
     if (this.mode === "walkout" && this.modeTime > 3) { this.mode = "idle"; this.onEvent("walkout-done"); }
+    if (this.walkOn) {
+      this.walkOn.t += realDt;
+      if (this.walkOn.t >= Stage.WALK_ON) { this.walkOn = null; this.walkOnFade = 0.9; this.taunt(); this.onEvent("walkon-done"); }
+    } else if (this.walkOnFade > 0) this.walkOnFade = Math.max(0, this.walkOnFade - dt);
     if (this.keeper === "sloth" && Math.random() < dt * 0.6) { const z = this.goalPoint({ x: GOAL.cx + 14, y: GOAL.line - 60 }); this.particles.emit("zzz", z.x, z.y, 1, { color: "#ffffff", speed: 8, angle: -1.2, spread: 0.3, life: 1.5, gravity: -6 }); }
   }
 
@@ -411,6 +434,8 @@ export class Stage {
 
   private keeperAlpha() {
     const shot = this.shot;
+    if (this.walkOn) return 1; // a walk-on is always visible (even Chroma), then fades back to its camouflage
+    if (this.walkOnFade > 0 && this.keeper === "chameleon" && !(shot && this.mode === "shot")) return Math.max(0.12, this.walkOnFade / 0.9);
     if (this.keeper === "ghost") return 0.7 + 0.2 * Math.sin(this.time * 8);
     if (this.keeper === "chameleon") return shot && this.mode === "shot" && this.modeTime >= shot.strikeAt ? 1 : 0.12 + 0.06 * Math.sin(this.time * 3);
     return 1;
@@ -428,6 +453,13 @@ export class Stage {
     const frame = this.keeperFrameNow();
     if (frame) { this.drawDivingKeeper(c, frame); this.drawHitboxOverlay(c, frame); return; }
     const pose = this.keeperPose();
+    if (this.walkOn) { // walk-off (the old keeper exits right), then walk-on (the new keeper enters from the left)
+      const t = this.walkOn.t, off = t < Stage.WALK_OFF;
+      const k = off ? ease.inQuad(clamp01(t / Stage.WALK_OFF)) : 1 - ease.outCubic(clamp01((t - Stage.WALK_OFF) / (Stage.WALK_ON - Stage.WALK_OFF - 0.15)));
+      const gx = off ? k * 2.6 : -k * 2.6, dx = toScreen(gx, 0).x - toScreen(0, 0).x, step = this.reduced ? 0 : Math.abs(Math.sin(t * 14)) * 3;
+      drawKeeper(c, off ? this.walkOn.from : this.keeper, { ...pose, x: pose.x + dx, y: pose.y - step, rotate: 0, stretch: 1, alpha: 1, mood: off ? "sad" : k > 0.05 ? "idle" : "taunt" }, this.time);
+      return;
+    }
     // Signature FX behind the keeper.
     // (Peacock's fan is part of his sprite now and leans with pose.lean, the tell.)
     if (this.keeper === "disco" && !this.reduced) { const colors = ["#ff4fd8", "#ccff00", "#7fd3ff"]; for (let i = 0; i < 6; i++) { c.fillStyle = colors[(Math.floor(this.time * 4) + i) % 3] + "55"; c.fillRect(GOAL.left + i * 30, GOAL.bar + ((i * 13 + Math.floor(this.time * 8)) % 60), 20, 3); } }

@@ -96,7 +96,8 @@ const fireworks = (scene: Stage, bursts: number) => {
   for (let i = 0; i < bursts; i++) scene.particles.emit("firework", 90 + ((i * 97) % 300), 30 + ((i * 37) % 40), 18, { color: ["#ffd23f", "#ff5a6e", "#7fd3ff", "#ccff00", "#ffffff"], speed: 55, spread: Math.PI * 2, life: 1.1, gravity: 30 });
 };
 const entry = (support: StageSupport, uses: string, play: Play, missing?: string): MomentStaging => ({ support, uses, play, missing });
-const keeperOn: Play = (scene, m) => { if (m.keeper) scene.keeper = m.keeper; };
+/** A keeper change walks on (Stage.keeperWalkOn: walk-off, walk-on, taunt; reduced motion: an instant swap). */
+const keeperOn: Play = (scene, m) => { if (m.keeper && m.keeper !== scene.keeper) scene.keeperWalkOn(m.keeper); };
 const weatherOn: Play = (scene, m) => { if (m.weather) scene.weather = m.weather; };
 const nothing: Play = () => {};
 
@@ -126,7 +127,7 @@ export const MOMENT_STAGE: Readonly<Record<string, MomentStaging>> = {
   "slow-clap": entry("partial", "crowd.react('cheer')", s => s.crowd.react("cheer"), "no slow-clap crowd frame"),
   "chin-up": entry("full", "say(cold line) + crowd.react('cheer')", s => s.crowd.react("cheer")),
   "photo-flash": entry("partial", "white 'spark' particles behind the goal", s => s.particles.emit("spark", 240, 150, 14, { color: "#ffffff", speed: 8, spread: Math.PI * 2, life: 0.25, gravity: 0 }), "no photographers' row"),
-  "keeper-sub": entry("partial", "scene.keeper = moment.keeper + say(intro) + taunt()", (s, m) => { keeperOn(s, m); s.taunt(); }, "no keeper walk-on/walk-off animation (the keeper swaps in place)"),
+  "keeper-sub": entry("full", "keeperWalkOn(moment.keeper): walk-off, walk-on, taunt + say(intro)", keeperOn),
   "weather-rain": entry("partial", "scene.weather = 'rain'", weatherOn, "weather switches instantly (no roll-in transition)"),
   "weather-snow": entry("partial", "scene.weather = 'snow'", weatherOn, "weather switches instantly (no roll-in transition)"),
   "weather-fog": entry("partial", "scene.weather = 'fog'", weatherOn, "weather switches instantly (no roll-in transition)"),
@@ -150,7 +151,7 @@ export const MOMENT_STAGE: Readonly<Record<string, MomentStaging>> = {
   "keeper-mind-games": entry("full", "taunt() + say(line)", s => s.taunt()),
   "sprinklers": entry("line-only", "say(line)", nothing, "no sprinklers on the park pitch"),
   "selfie-cam": entry("partial", "jumbotron 'SELFIE CAM'", nothing, "no Selfie Cam art"),
-  "boss-appearance": entry("partial", "scene.keeper = 'finalwall' + camera trauma + sfx stomp", (s, m) => { keeperOn(s, m); s.camera.addTrauma(0.4); sfx(s, "stomp"); }, "no boss entrance animation"),
+  "boss-appearance": entry("partial", "keeperWalkOn('finalwall') + camera trauma + sfx stomp", (s, m) => { keeperOn(s, m); s.camera.addTrauma(0.4); sfx(s, "stomp"); }, "no bespoke boss entrance (the shared keeper walk-on plays)"),
   "golden-hour": entry("full", "scene.weather = 'sunset' + jumbotron; the shell applies beat.skillScoreMultiplier (free play only)", weatherOn),
   "lights-out": entry("line-only", "say(line) + sfx heartbeat", s => sfx(s, "heartbeat"), "no lights-out spotlight render"),
   "friend-chant": entry("full", "jumbotron '#number' + sfx chant + crowd.react('cheer')", s => { sfx(s, "chant"); s.crowd.react("cheer"); }),
@@ -190,7 +191,7 @@ export function playMoment(scene: Stage, moment: DirectorMoment, later: Later = 
 
 /** Apply a whole Beat: keeper change, hush, the beat's own lines, then its moments of the given slots. */
 export function applyBeat(scene: Stage, beat: DirectorBeat, slots: readonly DirectorMoment["slot"][] = ["before", "reaction", "between"], later: Later = defaultLater) {
-  if (beat.keeperChanged) scene.keeper = beat.keeper;
+  if (beat.keeperChanged && scene.keeper !== beat.keeper) scene.keeperWalkOn(beat.keeper);
   if (beat.hush) scene.crowd.react("tense");
   let at = sayLines(scene, beat.lines, later), jumbotron: string | undefined;
   for (const moment of beat.moments) if (slots.includes(moment.slot)) { const played = playMoment(scene, moment, later, at); at = played.ms; jumbotron = played.jumbotron ?? jumbotron; }
