@@ -17,6 +17,11 @@
   body.phone .screen { width: 360px; }
   body.phone .layout { grid-template-columns: 360px 360px; }
   #meter { position: absolute; top: 6px; left: 6px; background: #000a; padding: 2px 6px; font: 11px monospace; color: #7fffa0; }
+  #director-overlay { position: absolute; top: 28px; right: 6px; max-width: 46%; max-height: calc(100% - 40px); overflow: auto; margin: 0; background: #000c; padding: 4px 6px; font: 10px/1.35 monospace; color: #ffd23f; pointer-events: none; white-space: pre-wrap; }
+  #director-overlay[hidden] { display: none; }
+  #director-moments button { font-size: 11px; min-height: 24px; padding: 2px 6px; }
+  #director-moments button.seen { border-color: var(--gold); }
+  #director-moments h4 { margin: 6px 0 2px; font-size: 12px; color: var(--muted); }
   aside { background: var(--panel); border: 1px solid var(--line); padding: 10px; max-height: calc(100vh - 60px); overflow: auto; }
   h3 { margin: 12px 0 6px; font-size: 13px; color: var(--gold); }
   button, select, input { font: inherit; color: var(--text); background: #222a55; border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; margin: 2px; min-height: 30px; cursor: pointer; }
@@ -33,7 +38,7 @@
 <div class="devbar">DEV SHOWROOM — local only, never deployed. Outcomes come from the real engine.</div>
 <div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button><button data-tab="balls" data-testid="tab-balls">Balls</button></div>
 <div class="layout" data-panel="stage">
-  <div class="screen"><canvas id="stage"></canvas><div id="meter"></div></div>
+  <div class="screen"><canvas id="stage"></canvas><div id="meter"></div><pre id="director-overlay" data-testid="director-overlay"></pre></div>
   <aside>
     <h3>Friend</h3>
     <input id="friend-id" value="336583" size="8" aria-label="Friend ID"><button id="friend-load">Load</button>
@@ -53,6 +58,13 @@
     <h3>Rarity reveals</h3><div id="rarities"></div>
     <h3>Moments</h3><div id="moments"></div>
     <h3>Commentary (<span id="line-count"></span> lines)</h3><div id="commentary"></div>
+    <h3>Director debug</h3>
+    <label><input id="director-overlay-toggle" type="checkbox" checked data-testid="director-overlay-toggle"> Overlay on the stage</label>
+    <label>Mode <select id="director-mode"><option value="penalties">penalties (free)</option><option value="freekicks">freekicks (free)</option><option value="match">match (paid ball)</option><option value="daily">daily</option></select></label>
+    <button id="director-session">New session</button>
+    <div id="director-kicks"></div>
+    <div class="muted" id="director-discovery"></div>
+    <div id="director-moments" data-testid="director-moments"></div>
     <h3>Time</h3>
     <label>Speed <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1"> <span id="speed-value">1.00×</span></label>
     <button id="pause">Pause</button><button id="step">Step frame</button>

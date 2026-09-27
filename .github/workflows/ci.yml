@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - name: Secret scan (mnemonics, private keys)
         run: npm run secret-scan
-      - name: Engine copy matches packages/engine
+      - name: Engine and Director copies match packages/
         run: npm run check:engine-sync
       - run: npm run typecheck
       - name: Site builds with no dev-only code (mock wallet, Showroom)
@@ -35,6 +35,8 @@ jobs:
         run: npm run test:game-logic
       - name: Engine unit tests
         run: npm run test:engine
+      - name: Match Director unit tests (cadence, rotation, commentary, cosmetic-only)
+        run: npm run test:director
       - name: Dynamic difficulty keeps every bot profile at 55–65 % goals
         run: npm run sim:difficulty
       - name: Economy simulator smoke

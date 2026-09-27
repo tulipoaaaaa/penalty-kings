@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@penalty-kings/engine": "file:packages/engine",
+    "@penalty-kings/game-director": "file:packages/game-director",
     "@rarefriends/friendsdk": "file:vendor/rarefriends-friendsdk-0.1.2.tgz",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
@@ -29,12 +30,14 @@
     "test:smoke": "friendsdk test ./games/penalty-kings --screenshot ./artifacts/game.png && friendsdk test ./games/penalty-kings --width 360 --screenshot ./artifacts/game-360.png",
     "test:game": "node scripts/test-game.mjs --screenshot ./artifacts/kick.png && node scripts/test-game.mjs --width 360 --screenshot ./artifacts/kick-360.png",
     "test:engine": "node --experimental-strip-types --test packages/engine/test/*.test.ts",
+    "test:director": "node --experimental-strip-types --test packages/game-director/test/*.test.ts",
     "verify:odds": "node scripts/verify-odds.mjs",
     "secret-scan": "node scripts/secret-scan.mjs",
     "build:site": "node scripts/build-site.mjs",
     "dev": "friendsdk dev ./games/penalty-kings",
     "sync:engine": "rm -rf node_modules/@penalty-kings/engine && npm install ./packages/engine --no-audit --no-fund",
-    "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src",
+    "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src && diff -r packages/game-director/src node_modules/@penalty-kings/game-director/src",
+    "sync:director": "rm -rf node_modules/@penalty-kings/game-director && npm install ./packages/game-director --no-audit --no-fund",
     "test:cup": "node --test scripts/cup/compute.test.mjs",
     "test:verifier": "node --experimental-strip-types --test verifier/test/*.test.ts",
     "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning",

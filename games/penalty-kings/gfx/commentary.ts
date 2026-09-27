@@ -3,12 +3,15 @@
  * never repeating a line until its context's pool is used up. {friend} and {keeper} are filled in.
  */
 import type { KeeperId } from "@penalty-kings/engine";
+import { LINE_COUNT, BANTER_COUNT, lineTemplate } from "@penalty-kings/game-director";
 
 export type CommentaryContext =
   | "walkout" | "buildup" | "goal" | "save" | "post" | "crossbar" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
   | "timeout" | "level-up" | "stamp" | "tutorial-1" | "here-comes-trouble" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
-  | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`;
+  | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
+  /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
+  | `line:${string}`;
 
 const LINES: Readonly<Record<string, readonly string[]>> = {
   walkout: ["And here comes {friend}, cool as a cucumber.", "What an entrance from {friend}!", "The crowd rise for {friend}.", "{friend} steps out of the tunnel. Goosebumps.", "Listen to that noise for {friend}!", "{friend} kisses the badge on the way out."],
@@ -67,11 +70,30 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   "intro:finalwall": ["THE FINAL WALL. Three phases. One legend.", "Only the bravest shoot at THE FINAL WALL."],
 };
 export const COMMENTARY_COUNT = Object.values(LINES).reduce((n, list) => n + list.length, 0);
+/** Every commentator line in the game: these contexts plus the Match Director's bank and keeper banter pairs. */
+export const ALL_COMMENTARY_COUNT = COMMENTARY_COUNT + LINE_COUNT + BANTER_COUNT;
 export const commentaryContexts = () => Object.keys(LINES);
+
+/** Filled-in Match Director lines waiting to be said, by context key (bounded). */
+const cued = new Map<string, string>();
+/**
+ * Hand a Match Director line to the Stage: `scene.say(cueLine(line))` shows exactly that text
+ * (already filled in by the Director), so the Director's no-repeat window applies.
+ */
+export function cueLine(line: { id: string; text: string }): CommentaryContext {
+  const key = `line:${line.id}` as const;
+  cued.delete(key); cued.set(key, line.text);
+  if (cued.size > 64) cued.delete(cued.keys().next().value!);
+  return key;
+}
 
 const recent = new Map<string, number[]>();
 /** A line for the context; cycles through the whole pool before repeating (shuffled order). */
 export function commentary(context: CommentaryContext | string, names: { friend: string; keeper: string }) {
+  if (context.startsWith("line:")) {
+    const text = cued.get(context) ?? lineTemplate(context.slice(5));
+    if (text) return text.replaceAll("{friend}", names.friend).replaceAll("{keeper}", names.keeper).replaceAll("{number}", names.friend.replace(/\D/g, "") || names.friend);
+  }
   const list = LINES[context] ?? LINES.keeper;
   const used = recent.get(context) ?? [];
   const free = list.map((_, i) => i).filter(i => !used.includes(i));

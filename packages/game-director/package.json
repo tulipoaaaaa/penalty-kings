@@ -1,0 +1,9 @@
+{
+  "name": "@penalty-kings/game-director",
+  "version": "0.1.0",
+  "description": "Deterministic, seeded Match Director for Penalty Kings: intensity, phase cycle, moment deck, keeper rotation and commentary. Cosmetic only.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src"]
+}

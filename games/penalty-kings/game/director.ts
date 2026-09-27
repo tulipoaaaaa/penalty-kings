@@ -6,8 +6,10 @@
  * it never touches outcomes (the engine and on-chain randomness decide those).
  */
 import { LADDER } from "./progress.js";
-import type { KeeperId, Zone } from "@penalty-kings/engine";
-import type { CommentaryContext } from "../gfx/commentary.js";
+import { KEEPERS, keeperById, type KeeperId, type Zone } from "@penalty-kings/engine";
+import { GameDirector, type Beat as DirectorBeat, type Moment as DirectorMoment, type Line as DirectorLine } from "@penalty-kings/game-director";
+import { cueLine, type CommentaryContext } from "../gfx/commentary.js";
+import type { Stage, Sfx } from "../gfx/stage.js";
 
 export type KickFacts = {
   kind: "penalty" | "freekick" | "target";
@@ -74,4 +76,123 @@ export class MatchDirector {
 
   /** Attract-mode showreel: a fixed, varied loop of skill moments (never paid reveals). */
   static readonly SHOWREEL: readonly ShowreelBeat[] = ["walkout", "penalty-goal", "celebration", "taunt", "penalty-save", "wave", "freekick", "post", "penalty-goal"];
+}
+
+// ── The seeded Game Director (@penalty-kings/game-director) and its Stage adapter ─────────────
+// The package decides WHAT to show (phase, intensity, moment deck, keeper rotation, lines); this
+// adapter maps each moment onto the Stage calls that exist today. MOMENT_STAGE says, per moment,
+// whether the Stage shows it fully, partly, or only as a line, and what is missing.
+export { GameDirector, CATALOGUE, MOMENTS, discovery, encodeSeen, decodeSeen, type Beat, type Moment, type Line } from "@penalty-kings/game-director";
+
+/** A Director for this Friend: the engine's keepers, the game's ladder, and the seen code from progress. */
+export const createGameDirector = (seed: number, friend: { name: string; number: string }, seen?: string) =>
+  new GameDirector({ seed, keepers: KEEPERS, ladder: LADDER, friendName: friend.name, friendNumber: friend.number, seen });
+
+export type StageSupport = "full" | "partial" | "line-only";
+type Play = (scene: Stage, moment: DirectorMoment) => void;
+export type MomentStaging = Readonly<{ support: StageSupport; uses: string; play: Play; missing?: string }>;
+const sfx = (scene: Stage, name: Sfx) => scene.onEvent("sfx", name);
+const fireworks = (scene: Stage, bursts: number) => {
+  for (let i = 0; i < bursts; i++) scene.particles.emit("firework", 90 + ((i * 97) % 300), 30 + ((i * 37) % 40), 18, { color: ["#ffd23f", "#ff5a6e", "#7fd3ff", "#ccff00", "#ffffff"], speed: 55, spread: Math.PI * 2, life: 1.1, gravity: 30 });
+};
+const entry = (support: StageSupport, uses: string, play: Play, missing?: string): MomentStaging => ({ support, uses, play, missing });
+const keeperOn: Play = (scene, m) => { if (m.keeper) scene.keeper = m.keeper; };
+const weatherOn: Play = (scene, m) => { if (m.weather) scene.weather = m.weather; };
+const nothing: Play = () => {};
+
+/** Every catalogue moment → the Stage calls that show it. playMoment() also says the moment's lines. */
+export const MOMENT_STAGE: Readonly<Record<string, MomentStaging>> = {
+  "crowd-hush": entry("full", "crowd.react('tense') + sfx heartbeat", s => { s.crowd.react("tense"); sfx(s, "heartbeat"); }),
+  "keeper-taunt": entry("full", "taunt()", s => s.taunt()),
+  "keeper-tell": entry("full", "say(tell line)", nothing),
+  "shot-clock": entry("partial", "sfx beep (the shell's shot clock already draws scene.clock)", s => sfx(s, "beep"), "no pulse/zoom emphasis on the clock"),
+  "drumbeat": entry("partial", "sfx heartbeat", s => sfx(s, "heartbeat"), "no drummer sprite in the crowd"),
+  "ref-whistle": entry("partial", "sfx whistle", s => sfx(s, "whistle"), "no referee sprite"),
+  "keeper-banter": entry("partial", "say(set-up) then say(keeper answer)", nothing, "no Stage.taunt(text): the keeper's answer shows in the commentator box, not the keeper's bubble"),
+  "commentator-banter": entry("full", "say(line)", nothing),
+  "vuvuzela": entry("partial", "sfx honk", s => sfx(s, "honk"), "no trumpeter in the crowd"),
+  "jumbotron-fact": entry("full", "jumbotron text", nothing),
+  "ball-glow": entry("full", "say(line)", nothing),
+  "keeper-stretch": entry("line-only", "say(line)", nothing, "no keeper stretch animation"),
+  "crowd-roar": entry("full", "crowd.react('cheer') + sfx roar", s => { s.crowd.react("cheer"); sfx(s, "roar"); }),
+  "crowd-ooh": entry("full", "crowd.react('ooh') + sfx ooh", s => { s.crowd.react("ooh"); sfx(s, "ooh"); }),
+  "crowd-groan": entry("full", "crowd.react('groan') + sfx groan", s => { s.crowd.react("groan"); sfx(s, "groan"); }),
+  "keeper-gloat": entry("full", "taunt()", s => s.taunt()),
+  "streak-chant": entry("full", "sfx chant + crowd.react('cheer')", s => { sfx(s, "chant"); s.crowd.react("cheer"); }),
+  "fan-catch": entry("full", "built into the Stage on 'over' (fanCatch)", nothing),
+  "ball-kid": entry("full", "built into the Stage on a miss (ballKid)", nothing),
+  "scarf-twirl": entry("partial", "crowd.react('cheer')", s => s.crowd.react("cheer"), "no scarf-twirl crowd frame"),
+  "air-horn": entry("full", "sfx honk", s => sfx(s, "honk")),
+  "slow-clap": entry("partial", "crowd.react('cheer')", s => s.crowd.react("cheer"), "no slow-clap crowd frame"),
+  "chin-up": entry("full", "say(cold line) + crowd.react('cheer')", s => s.crowd.react("cheer")),
+  "photo-flash": entry("partial", "white 'spark' particles behind the goal", s => s.particles.emit("spark", 240, 150, 14, { color: "#ffffff", speed: 8, spread: Math.PI * 2, life: 0.25, gravity: 0 }), "no photographers' row"),
+  "keeper-sub": entry("partial", "scene.keeper = moment.keeper + say(intro) + taunt()", (s, m) => { keeperOn(s, m); s.taunt(); }, "no keeper walk-on/walk-off animation (the keeper swaps in place)"),
+  "weather-rain": entry("partial", "scene.weather = 'rain'", weatherOn, "weather switches instantly (no roll-in transition)"),
+  "weather-snow": entry("partial", "scene.weather = 'snow'", weatherOn, "weather switches instantly (no roll-in transition)"),
+  "weather-fog": entry("partial", "scene.weather = 'fog'", weatherOn, "weather switches instantly (no roll-in transition)"),
+  "weather-clear": entry("partial", "scene.weather = 'sun'", weatherOn, "weather switches instantly"),
+  "cat-invader": entry("full", "crowd.catActive = true (crowd.drawCat runs it)", s => { if (!s.crowd.catActive) { s.crowd.catActive = true; s.crowd.catX = -20; } }),
+  "mexican-wave": entry("full", "wave()", s => s.wave()),
+  "jumbotron-replay": entry("partial", "jumbotron 'REPLAY'", nothing, "no replay playback of the last shot on the jumbotron"),
+  "kiss-cam": entry("partial", "jumbotron 'KISS CAM'", nothing, "no Kiss Cam art on the jumbotron"),
+  "var-check": entry("partial", "jumbotron 'VAR CHECK...' + sfx beep", s => sfx(s, "beep"), "no VAR overlay / freeze-frame of the post"),
+  "mascot-race": entry("partial", "jumbotron 'MASCOT RACE'", nothing, "no mascot race animation"),
+  "fireworks": entry("full", "'firework' particle bursts + sfx roar", s => { fireworks(s, 4); sfx(s, "roar"); }),
+  "beach-ball": entry("line-only", "say(line)", nothing, "no beach ball in the crowd"),
+  "pigeon": entry("line-only", "say(line)", nothing, "no pigeon on the crossbar"),
+  "floodlight-flicker": entry("line-only", "say(line)", nothing, "no floodlight flicker"),
+  "conga": entry("line-only", "say(line)", nothing, "no conga line in the crowd"),
+  "tifo": entry("line-only", "say(line)", nothing, "no tifo banner"),
+  "drone-cam": entry("line-only", "say(line)", nothing, "no drone camera move"),
+  "brass-band": entry("partial", "sfx chant", s => sfx(s, "chant"), "no band sprite or brass sound"),
+  "ref-cards": entry("line-only", "say(line)", nothing, "no referee sprite"),
+  "rainbow": entry("line-only", "say(line)", nothing, "no rainbow in the sky"),
+  "keeper-mind-games": entry("full", "taunt() + say(line)", s => s.taunt()),
+  "sprinklers": entry("line-only", "say(line)", nothing, "no sprinklers on the park pitch"),
+  "selfie-cam": entry("partial", "jumbotron 'SELFIE CAM'", nothing, "no Selfie Cam art"),
+  "boss-appearance": entry("partial", "scene.keeper = 'finalwall' + camera trauma + sfx stomp", (s, m) => { keeperOn(s, m); s.camera.addTrauma(0.4); sfx(s, "stomp"); }, "no boss entrance animation"),
+  "golden-hour": entry("full", "scene.weather = 'sunset' + jumbotron; the shell applies beat.skillScoreMultiplier (free play only)", weatherOn),
+  "lights-out": entry("line-only", "say(line) + sfx heartbeat", s => sfx(s, "heartbeat"), "no lights-out spotlight render"),
+  "friend-chant": entry("full", "jumbotron '#number' + sfx chant + crowd.react('cheer')", s => { sfx(s, "chant"); s.crowd.react("cheer"); }),
+  "walkout": entry("full", "walkout()", s => s.walkout()),
+  "card-mosaic": entry("line-only", "say(line)", nothing, "no card mosaic in the stands"),
+  "anthem": entry("partial", "sfx chant", s => sfx(s, "chant"), "no anthem audio"),
+  "trophy-lap": entry("line-only", "say(line)", nothing, "no standalone trophy (drawTrophy only appears inside a celebration)"),
+  "midnight-fireworks": entry("full", "'firework' particle bursts", s => fireworks(s, 7)),
+  "legend-in-stands": entry("partial", "jumbotron 'A LEGEND IS WATCHING'", nothing, "no legend cameo in the crowd"),
+  "duel-cam": entry("line-only", "say(line)", nothing, "no split-screen camera"),
+  "thunderstorm": entry("partial", "scene.weather = 'rain' + camera trauma", (s, m) => { weatherOn(s, m); s.camera.addTrauma(0.25); }, "no lightning flash"),
+};
+
+export type Later = (ms: number, run: () => void) => void;
+const defaultLater: Later = (ms, run) => { if (ms <= 0) run(); else setTimeout(run, ms); };
+/** Milliseconds between queued lines so each can be read. */
+export const LINE_GAP_MS = 2400;
+
+/** Say Director lines one after another (a keeper's answer shows as `Keeper: "…"`). Returns when the last one starts + one gap. */
+export function sayLines(scene: Stage, lines: readonly DirectorLine[], later: Later = defaultLater, startMs = 0) {
+  lines.forEach((line, i) => later(startMs + i * LINE_GAP_MS, () => {
+    const text = line.by === "keeper" ? `${keeperById(scene.keeper).name}: "${line.text}"` : line.text;
+    scene.say(cueLine({ id: line.id, text }));
+  }));
+  return startMs + lines.length * LINE_GAP_MS;
+}
+
+/**
+ * Stage one moment: its effects now, its lines queued. Returns the jumbotron text the shell should hold
+ * on screen for a few seconds (the shell's slide loop overwrites scene.jumbotron every 4 s).
+ */
+export function playMoment(scene: Stage, moment: DirectorMoment, later: Later = defaultLater, startMs = 0): { jumbotron?: string; ms: number } {
+  MOMENT_STAGE[moment.id]?.play(scene, moment);
+  if (moment.jumbotron) scene.jumbotron = moment.jumbotron;
+  return { jumbotron: moment.jumbotron, ms: sayLines(scene, moment.lines, later, startMs) };
+}
+
+/** Apply a whole Beat: keeper change, hush, the beat's own lines, then its moments of the given slots. */
+export function applyBeat(scene: Stage, beat: DirectorBeat, slots: readonly DirectorMoment["slot"][] = ["before", "reaction", "between"], later: Later = defaultLater) {
+  if (beat.keeperChanged) scene.keeper = beat.keeper;
+  if (beat.hush) scene.crowd.react("tense");
+  let at = sayLines(scene, beat.lines, later), jumbotron: string | undefined;
+  for (const moment of beat.moments) if (slots.includes(moment.slot)) { const played = playMoment(scene, moment, later, at); at = played.ms; jumbotron = played.jumbotron ?? jumbotron; }
+  return { jumbotron, ms: at };
 }
