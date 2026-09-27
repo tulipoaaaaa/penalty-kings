@@ -1267,6 +1267,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     stage.current?.cancel(); // ends the sealed pack's wait and any card reveal on the Stage
     live.current = { ...live.current, pack: false }; setPack(null);
   }
+  /** Close a menu. With no session and no pack on the pitch (a pack opened from the modes screen ends in the Bag), back to the modes screen. */
+  function closeMenu() { setMenu(null); if (live.current.screen === "play" && !live.current.session && !live.current.pack) setScreen(progress.tutorialDone ? "modes" : "title"); }
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
   function flipCard(index: number, quiet = false) {
@@ -1580,7 +1582,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     <RotateOverlay onShownChange={setRotating} />
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
-    {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
+    {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : closeMenu}>
       {menu === "hub" && <div className="pk-hub">
         {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
         <button type="button" onClick={() => { leavePack(); cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>

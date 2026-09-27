@@ -56,6 +56,31 @@ await testGame("./games/penalty-kings", {
       assert.ok(box && box.width >= 44 && box.height >= 44, `${name} on the modes screen, ≥ 44 px (${box && `${box.width}×${box.height}`})`);
     }
     ok("Kit shop and Rules on the modes screen, ≥ 44 px");
+
+    // A menu opened from the modes screen closes back to it (Close or Escape), also after a pack opened from the
+    // Ball shop has sent the player to the Bag (it used to leave an empty pitch with no session).
+    const screen = () => game.locator("section.pk").getAttribute("data-screen");
+    const backOnModes = async where => { await modes.waitFor({ timeout: 3000 }); assert.equal(await screen(), "modes", `${where}: back on the modes screen`); };
+    for (const name of ["Kit shop", "Ball shop", "Settings", "Scouting Book", "Rules"]) {
+      await modes.getByRole("button", { name, exact: true }).click();
+      await game.getByRole("button", { name: `Close ${name}` }).click();
+      await backOnModes(`${name} → Close`);
+    }
+    await modes.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await backOnModes("Settings → Escape");
+    await game.getByTestId("ball-shop").click();
+    await game.getByTestId("pack-1").click();
+    await game.getByTestId("buy-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByText("1 ball bought.").waitFor();
+    await game.getByTestId("open-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByTestId("reveal-all").click();
+    await game.getByTestId("to-bag").click();
+    await game.getByRole("button", { name: "Close My Bag" }).click();
+    await backOnModes("Ball shop → pack → My Bag → Close");
+    ok("menus opened from the modes screen close back to it (also after opening a pack)");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
