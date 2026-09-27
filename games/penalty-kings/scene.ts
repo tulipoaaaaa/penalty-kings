@@ -5,7 +5,8 @@
  * sprite and never edit its pixels.
  */
 import { flightAt, keeperAt, type KeeperId, type KeeperPlan, type ShotResult } from "@penalty-kings/engine";
-import { BALL_ROWS, KEEPER_ART } from "./art.js";
+import { BALL_ROWS } from "./art.js";
+import { drawKeeper as drawKeeperSprite, keeperArms } from "./gfx/keepers.js";
 
 export const W = 480, H = 320;
 export const GOAL = { left: 150, right: 330, bar: 78, line: 168, unit: 90, cx: 240 } as const;
@@ -131,14 +132,11 @@ function drawGoal(context: CanvasRenderingContext2D, state: SceneState, front: b
 }
 
 function drawKeeper(context: CanvasRenderingContext2D, state: SceneState) {
-  const art = KEEPER_ART[state.keeper], pose = state.keeperPose, scale = 3;
+  const pose = state.keeperPose;
   const { x, y } = toScreen(pose.x, pose.y);
-  context.save();
-  context.fillStyle = "#00000033"; context.beginPath(); context.ellipse(x, GOAL.line + 1, 18, 4, 0, 0, Math.PI * 2); context.fill();
-  context.translate(Math.round(x), Math.round(y - pose.lift)); context.rotate(pose.rotate);
-  if (state.keeper === "ghost") context.globalAlpha = 0.85;
-  drawMask(context, art.rows, -8 * scale, -8 * scale, scale, art.body, "#0b0d1a", art.accent);
-  context.restore();
+  const diving = Math.abs(pose.rotate) > 0.05;
+  const [armL, armR] = keeperArms(state.keeper, diving ? "dive" : "idle", state.time, pose.x, pose.y);
+  drawKeeperSprite(context, state.keeper, { x, y: Math.min(GOAL.line, y + 24) - pose.lift, rotate: pose.rotate, stretch: 1, armL, armR, alpha: state.keeper === "ghost" ? 0.85 : 1, scaleMul: 1, mood: diving ? "dive" : "idle" }, state.time);
 }
 
 function drawFriend(context: CanvasRenderingContext2D, pose: FriendPose) {

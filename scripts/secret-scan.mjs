@@ -25,9 +25,12 @@ for (const file of files) {
     for (const match of line.matchAll(/0x[0-9a-fA-F]{64}(?![0-9a-fA-F])/g)) {
       if (!allow.has(match[0].toLowerCase())) problems.push(`${file}:${index + 1}: 32-byte hex not in scripts/hex-allowlist.txt (${match[0].slice(0, 10)}…)`);
     }
-    const tokens = line.toLowerCase().split(/[^a-z]+/).filter(Boolean);
-    let run = 0;
-    for (const token of tokens) { run = words.has(token) ? run + 1 : 0; if (run >= 12) { problems.push(`${file}:${index + 1}: 12+ consecutive BIP-39 words (possible mnemonic)`); break; } }
+    // A mnemonic is 12/15/18/21/24 lowercase BIP-39 words separated by single spaces.
+    for (const match of line.matchAll(/[a-z]+(?: [a-z]+){11,}/g)) {
+      let run = 0;
+      for (const token of match[0].split(" ")) { run = words.has(token) ? run + 1 : 0; if (run >= 12) break; }
+      if (run >= 12) { problems.push(`${file}:${index + 1}: 12+ space-separated BIP-39 words (possible mnemonic)`); break; }
+    }
   });
 }
 if (problems.length) { console.error(`SECRET SCAN FAILED\n${problems.join("\n")}`); process.exit(1); }

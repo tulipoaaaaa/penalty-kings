@@ -231,7 +231,7 @@ function SkillCupPanel({ friend, client, send, approve, guard }: PanelProps) {
     return data;
   };
   return <section className="card">
-    <h2>Skill Cup: 5 kicks vs Ghost</h2>
+    <h2>Skill Cup: 5 kicks vs THE FINAL WALL</h2>
     <p>Entry 1,000 $GBOOT (50% burned, 50% to the pot), paid on-chain. Friends hardwired at Gen 4 or better only. The referee replays every kick: your inputs are committed before the keeper's dive is derived from this week's secret{week ? <> (hash <code>{week.secretHash.slice(0, 18)}…</code>, revealed after week {week.week})</> : null}. Best score wins; ties go to the earlier entry. One entry per Friend per hour, 20 per week.</p>
     {entry === null ? <button className="primary" onClick={() => void guard(async () => {
       await approve(LIVE.skillCup!, SKILL_ENTRY);
@@ -265,16 +265,16 @@ function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; 
     const context = canvas.current?.getContext("2d");
     if (!context) return;
     let frame = 0;
-    const state: SceneState = { time: 0, keeper: "ghost", keeperPose: { x: 0, y: 0.2, rotate: 0, lift: 0 }, ball: { x: SPOT.x, y: SPOT.y, r: 4.5, color: "#fff", accent: "#6a7a90", visible: true, spin: 0 }, trail: [], friend: { rows: null, x: 232, y: 262, scale: 3, halo: "#fff", boots: "#111" }, netColor: "#e8e8e8", ripple: null, shake: 0, roar: 0, reticle: null, flash: null };
+    const state: SceneState = { time: 0, keeper: "finalwall", keeperPose: { x: 0, y: 0.2, rotate: 0, lift: 0 }, ball: { x: SPOT.x, y: SPOT.y, r: 4.5, color: "#fff", accent: "#6a7a90", visible: true, spin: 0 }, trail: [], friend: { rows: null, x: 232, y: 262, scale: 3, halo: "#fff", boots: "#111" }, netColor: "#e8e8e8", ripple: null, shake: 0, roar: 0, reticle: null, flash: null };
     const draw = (now: number) => {
       state.time = now / 1000;
       state.friend = { ...state.friend, rows: sprites.current ? spriteFrame(sprites.current, "up", false, 0, "right").frame.rows : null };
-      const current = shot.current, ghost = keeperById("ghost");
+      const current = shot.current, boss = keeperById("finalwall");
       if (current?.kick) {
         const duration = current.target.time * 1.6, p = clamp((now - current.start) / 1000 / duration, 0, 1);
         const position = ballFlightScreen(current.target, current.curl, p);
         state.ball = { ...state.ball, ...position, visible: true };
-        state.keeperPose = keeperPose({ ...current.kick.dive, reaction: ghost.reaction, diveTime: ghost.diveTime, reach: ghost.reach }, p * current.target.time, state.time);
+        state.keeperPose = keeperPose({ ...current.kick.dive, reaction: boss.reaction, diveTime: boss.diveTime, reach: boss.reach, body: boss.body, maxY: boss.maxY, lean: 0 }, p * current.target.time, state.time);
         const end = toScreen(current.target.x, current.target.y);
         state.ripple = p >= 1 && current.kick.result === "goal" ? { x: end.x, y: end.y, t: (now - current.start) / 1000 - duration } : null;
         state.reticle = null;

@@ -47,7 +47,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [ball, setBall] = useState<Ball | null>(null);
-  const [keeper, setKeeper] = useState<KeeperId>("showboat");
+  const [keeper, setKeeper] = useState<KeeperId>("squirrel");
   const [banner, setBanner] = useState<{ text: string; sub: string; tone: string } | null>(null);
   const [score, setScore] = useState(0), [streak, setStreak] = useState(0), [bestRound, setBestRound] = useState(0);
   const [round, setRound] = useState<RoundState>({ kicks: [], suddenDeath: false, points: 0 });
@@ -123,7 +123,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let ripple: SceneState["ripple"] = null;
     const trail: { x: number; y: number }[] = [];
     const state: SceneState = {
-      time: 0, keeper: "showboat", keeperPose: { x: 0, y: 0.2, rotate: 0, lift: 0 },
+      time: 0, keeper: "squirrel", keeperPose: { x: 0, y: 0.2, rotate: 0, lift: 0 },
       ball: { x: SPOT.x, y: SPOT.y, r: 4.5, color: "#fff", accent: "#333", visible: false, spin: 0 },
       trail, friend: { rows: null, x: 216, y: 286, scale: 3, halo: "#fff", boots: "#111" }, netColor: "#e8e8e8",
       ripple: null, shake: 0, roar: 0, reticle: null, flash: null,
@@ -554,7 +554,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {menu === "keeper" && <div className="pk-keepers">
         {KEEPERS.map(profile => <button key={profile.id} type="button" aria-pressed={keeper === profile.id} onClick={() => { setKeeper(profile.id); setMenu(null); }}>
-          <strong>{profile.name} · score ×{profile.mult}</strong><small>{profile.blurb}</small></button>)}
+          <strong>{profile.name} · score ×{profile.mult}</strong><small>{profile.bio}</small></button>)}
         <p className="pk-note">You can change keeper between rounds. Tougher keepers score more points; they never change ball rarity or rewards.</p>
       </div>}
 
