@@ -7,7 +7,7 @@ import type { KeeperId } from "@penalty-kings/engine";
 export type CommentaryContext =
   | "walkout" | "buildup" | "goal" | "save" | "post" | "crossbar" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
-  | "timeout" | "level-up" | "stamp" | "tutorial-1" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
+  | "timeout" | "level-up" | "stamp" | "tutorial-1" | "here-comes-trouble" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
   | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`;
 
 const LINES: Readonly<Record<string, readonly string[]>> = {
@@ -40,6 +40,7 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   "level-up": ["{friend} levels up! New challenges unlocked.", "The coaches are impressed. Level up!"],
   stamp: ["{keeper} beaten! Stamp that Scouting Book.", "Another keeper conquered!"],
   "tutorial-1": ["Welcome! Swipe up from the ball towards a corner.", "First kick: a quick swipe towards the corner."],
+  "here-comes-trouble": ["Here comes trouble… where's the keeper gone?", "Hold on, who's that in goal? Here comes trouble!"],
   "tutorial-2": ["Lovely. Now curve your swipe to bend it round the keeper."],
   "tutorial-3": ["Last one: top bins are worth five times the points. Go high!"],
   rain: ["It's absolutely chucking it down.", "Slippery ball tonight."],
