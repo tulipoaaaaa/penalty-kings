@@ -1,6 +1,10 @@
 name: Pages
+# The judged preview only changes after the FULL CI run for that exact commit is green
+# (typecheck, friendsdk check/test, engine, verifier, game, flow, modes, QA-90s, geometry, phone widths, contracts).
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main, claude/clever-mccarthy-ay7qv7]
   workflow_dispatch:
 permissions:
@@ -12,9 +16,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

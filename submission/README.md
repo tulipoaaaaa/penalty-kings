@@ -1,109 +1,123 @@
 # Penalty Kings
 
-Your hardwired Rare Friend steps up to the spot: buy balls with $RAREFRIENDS, reveal each
-ball's rarity, and flick it past four original keepers, while a $GBOOT game token trades
-against RF.
+Your hardwired Rare Friend is the striker in a pixel-art football game. You swipe to shoot
+penalties and free kicks against 12 original keepers. In the Big Match you open packs of balls
+bought with $RAREFRIENDS; each ball's rarity comes from on-chain randomness and sets its RF value.
 
-**Builder:** tulipo · [PSEUDONYMOUS HANDLE] · **Category:** Economy Potential (also fits Character
-Spotlight and Token Activity) · **SDK:** FriendSDK v0.1.2
+**Builder:** tulipo · contact **@phon_ro** · **Category:** Economy Potential (also fits
+Character Spotlight and Token Activity) · **SDK:** FriendSDK v0.1.2 · UX shaped by founder feedback
 
 [Source code](https://github.com/tulipoaaaaa/penalty-kings) ·
-[Game rules](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/games/penalty-kings/README.md) ·
 [Economy design](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md) ·
-[Deployment record](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/DEPLOYMENT.md)
+[Ball market design](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/BALL-MARKET.md) ·
+[Deployment record](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/DEPLOYMENT.md) ·
+[Action-flow audit](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/FLOW-AUDIT.md)
 
-**One sentence:** Penalty Kings makes your Rare Friend the striker in a pixel-art penalty
-shootout where every ball is bought with RF and carries an on-chain-random rarity. That rarity
-sets its RF redemption value and its drop of $GBOOT, a fixed-supply game token paired with RF.
+**One sentence:** Penalty Kings makes your Rare Friend the striker in a skill-based pixel-art
+shootout. The optional Big Match sells packs of balls for RF whose rarity is decided by
+on-chain randomness: every ball is backed by RF and redeemable, and it drops $GBOOT, a
+fixed-supply game token designed to pair with RF.
 
 ## Play
 
 **Playable preview (simulated economy):** https://tulipoaaaaa.github.io/penalty-kings/
 (Pro stadium: `/pro/` · Champions: `/champions/`)
 
-Requires a browser wallet on **Robinhood mainnet (4663)** holding a **hardwired Rare Friends
-Generations NFT (generation ≥ 1)**. The SDK's real wallet connection and ownership gate run
-before play. The preview needs no RF, signature or transaction.
+The preview requires a browser wallet on **Robinhood mainnet (4663)** holding a **hardwired Rare
+Friends Generations NFT (generation ≥ 1)**. The SDK's real wallet connection and ownership gate
+run before play. The preview needs no RF, signature or transaction; every purchase and reward
+in it is **SIMULATED** and labelled.
 
-- **Aim and shoot, touch:** drag up from the ball. Direction aims, length sets power (the meter
-  turns red when the ball will clear the bar), and curving the flick adds curl.
-- **Aim and shoot, keyboard:** ← → aim, ↑ ↓ loft, A / D curl, hold **Space** to charge and
+**Controls**
+- **Touch / mouse:** swipe up from the ball. Where you release aims the shot and the reticle
+  shows the landing point; speed sets the pace; bending the swipe curls the ball.
+- **Keyboard:** arrow keys aim, A / D curl, W / S topspin (free kicks), hold **Space** to charge and
   release to shoot.
-- **Buttons:** Kit bag (buy balls), Place ball, Warm-up (free practice, no rewards) and Menu
-  (Locker, keepers, Cups, Kit shop, Stadiums, Rules, Settings).
-- **Settings:** mute and reduced motion. The game pauses whenever the runtime menu is open.
+- **Quick shot** button; **Menu** (Bag, Ball shop, Cups, Scouting Book, Rules, Settings).
+- **Settings:** mute, reduced motion, haptics. The game pauses whenever the runtime menu is open.
 
-## Rules and rewards
+**Free modes (skill only, no RF):**
+- tutorial (3 coached kicks);
+- Penalties against a ladder of 12 keepers, each with a stamp in the Scouting Book;
+- Free Kicks: a wall, wind, curl and knuckleballs, with wall heights by stadium;
+- Target Practice: 60 s, combos, crossbar bonus;
+- World Tour: 30 data-driven levels with 3-star objectives;
+- Daily Challenge: the same scenario for everyone that day.
 
-**All balances, purchases, rewards, $GBOOT amounts, Cup pots, race tables and rivals in the
-preview are SIMULATED** and reset on reload. The runtime starts each session with 20 simulated
-RF.
+A difficulty director keeps goal rates in a 55–65% band.
 
-> **Your kick never changes what you win — ball rarity is decided by on-chain randomness.
-> Skill is for glory, streaks and the leaderboard.**
+**Big Match (optional, RF):**
+1. **Buy** a pack of 1 / 2 / 5 / 10 balls.
+2. **Open** it (the SDK `play` + `settle`).
+3. **Reveal** the balls one by one or all at once. You see the true totals: spent, pulled, net.
+4. Keep the balls in your **Bag**, which tracks each ball's kicks, goals and top bins, your lucky ball, editions, and an S0 discontinued sample.
+5. **Choose** a ball to kick. Choosing changes only the score multiplier, trail and commentary. It never changes rarity, RF value, odds or prizes, and balls are not used up by kicking.
+6. **Redeem** any ball for its RF value at any time.
 
-1. **Buy balls** (the SDK consumable) in one of three stadiums:
-   - Park: **10 RF**;
-   - Pro: **1,000 RF**;
-   - Champions: **10,000 RF**.
-2. **Place a ball.** The SDK `play` + `settle` actions draw its rarity. The rarity fixes three
-   things:
-   - its RF redemption value (kept in your Locker, no expiry);
-   - its $GBOOT drop;
-   - its score multiplier.
-3. **Shoot** at one of four original keepers (Showboat, Octopus, The Wall, Ghost). The flight
-   and dive are deterministic and seeded, and resolve as goal / save / post / over / wide.
-4. **Score** = 100 × keeper × ball multiplier × streak (capped at ×3). Rounds are 5 kicks, and
-   3+ goals unlocks sudden death at ×2.
+> **Your kick never changes what you win: ball rarity is decided by on-chain randomness.
+> Skill is for glory, streaks, stars and the leaderboard.**
 
-| Ball | Chance | RF value (× price) | Park | Pro | Champions | $GBOOT drop |
-|---|---:|---:|---:|---:|---:|---:|
-| Scuffed Ball | 31.5% | 0 | 0 RF | 0 RF | 0 RF | ×1 |
-| Training Ball | 27% | 0.5 | 5 RF | 500 RF | 5,000 RF | ×1.5 |
-| Match Ball | 20% | 1 | 10 RF | 1,000 RF | 10,000 RF | ×2 |
-| Pro Ball | 11% | 1.5 | 15 RF | 1,500 RF | 15,000 RF | ×3 |
-| Silver Ball | 7% | 2.5 | 25 RF | 2,500 RF | 25,000 RF | ×5 |
-| Gold Ball | 2.5% | 5 | 50 RF | 5,000 RF | 50,000 RF | ×8 |
-| Golden Boot Ball | 1% | 10 | 100 RF | 10,000 RF | 100,000 RF | ×15 |
+| Ball | Chance | RF value (× price) | Park (10 RF) | Pro (1,000 RF) | Champions (10,000 RF) |
+|---|---:|---:|---:|---:|---:|
+| Scuffed | 31.5% | 0 | 0 RF | 0 RF | 0 RF |
+| Training | 27% | 0.5 | 5 RF | 500 RF | 5,000 RF |
+| Match | 20% | 1 | 10 RF | 1,000 RF | 10,000 RF |
+| Pro | 11% | 1.5 | 15 RF | 1,500 RF | 15,000 RF |
+| Silver | 7% | 2.5 | 25 RF | 2,500 RF | 25,000 RF |
+| Gold | 2.5% | 5 | 50 RF | 5,000 RF | 50,000 RF |
+| Golden Boot | 1% | 10 | 100 RF | 10,000 RF | 100,000 RF |
 
-- **Return and backing:** expected RF return is **exactly 90.00%** in every stadium, asserted
-  in CI. Each purchased ball reserves the 10× top prize until it settles, and kept balls stay
-  backed with no expiry. When a stadium's bank is full, the game says "Stadium full — try
-  another" before any purchase.
-- **$GBOOT drops:** base × rarity multiplier, where the base is Park 13, Pro 1,395 and
-  Champions 13,953 at launch. The average drop is worth ≤ 3% of the ball price, and the live
-  rate auto-scales with the $GBOOT price, so RF plus drops stays **≤ 93%**. Buying balls is
-  never a profitable farm.
-- **Golden Boot Cup (weekly):** the top 10 Friends by Gold and Golden Boot balls drawn,
-  weighted by stadium. It is verifiable from on-chain settle events.
-- **Skill Cup (weekly, simulated):** the best 5-kick shootout against Ghost, re-verified by a
-  replay referee.
-- **Sinks:**
-  - cosmetics (boots, halo kits, net colours, 6 celebrations) are bought with $GBOOT and
-    burned;
-  - Wildcards and Skill Cup entries are 50% burned and 50% to the pot.
+- The expected RF return is **exactly 90.00%** in every stadium, asserted in CI. Every ball
+  reserves the top prize until it settles.
+- USD figures convert with the real RF price from the RF/WETH and WETH/USDG Uniswap v4 pools on
+  4663. In the SDK preview this is a labelled on-chain snapshot, because the preview may only
+  read the game contract. Live stadiums read the price every 60 s and show "—" on failure.
 
-## Economy (RF-paired token)
+## Economy ($GBOOT, tokenomics v2: designed and tested, NOT deployed)
 
-**$GBOOT:**
-- 1,000,000,000 fixed supply; no owner, mint, tax or blacklist.
-- 60% pool liquidity (locked), 30% ball-drop treasury, 10% Cup, 0% team.
+**Supply:** 100M $GBOOT, fixed, with no owner, mint, tax or blacklist. The allocation:
 
-**Pool:** Uniswap v4 $GBOOT/**RF** with a 1% fee. Every outside buyer goes ETH → RF → $GBOOT.
-That adds RF buy pressure and pays the Rare Friends 5% WETH fee to active Friend holders.
+| Share | Amount | Use |
+|---|---:|---|
+| RF-paired Uniswap v4 pool | 55M | liquidity locked; fees burned on both sides |
+| Ball-drop vault | 20M | weekly cap with halving |
+| Friends airdrop | 10M | pre-laced |
+| Cups vault | 10M | |
+| Bounty vault | 5M | |
+| Team | 0% | |
 
-**Where the 10% edge goes:** each stadium's weekly surplus is half **burned as RF** and half
-paid to the Cup. Pool fees follow the same split: the RF side is burned and the $GBOOT side
-goes to the Cup.
+**Edge split:** the 10% edge is split 40% RF burned, 30% $GBOOT buy-back and burn, 30% Golden
+Boot Cup.
 
-**Full design:** [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md)
-covers the money-flow diagram, prize-bank capacity and solvency maths (simulated), pool growth
-(×2 needs about 2.6M RF), the farm check, a 50 / 500 / 5,000-player scale table and the
-roadmap.
+**Sinks:**
+- the Skill Cup and Wildcards (50% of each is burned);
+- cosmetics;
+- the Bootroom's early-unlace burn.
 
-**Live contracts (optional extra, real RF):** see
-[docs/DEPLOYMENT.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/DEPLOYMENT.md).
-Nothing is claimed live unless a verified transaction is linked there.
+**Drops** are worth at most ~3% of the ball price, so RF plus drops stays ≤ 93%. Buying balls is never a profitable farm: this is fuzz-tested in Foundry.
+
+**Ball market v2 (design only):** BallVault turns redeemed, friend-bound balls into transferable
+Vault Balls backed 1:1 by RF. It includes an escrow market with a floor price, and discontinued
+editions keep their floor.
+
+Full maths, supply over time, scale tables and risks are in
+[docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md).
+The v2 revisions (lacing for cosmetics, XP and seeding only, and RF-priced sinks) await the
+owner's confirmation before any deployment.
+
+## What is live, simulated, and roadmap
+
+- **Live on-chain (Robinhood 4663):** only the builder burner's Friend **#336583 hardwired at Gen
+  2**, [tx 0xd6a6a8b9…c78d0](https://robinhoodchain.blockscout.com/tx/0xd6a6a8b911e7a7eba8b5e5771a4ad17ed3fe3af785a1b7e16e0640e86acc78d0).
+  No game contract, $GBOOT or pool is deployed.
+- **Simulated (preview):** RF balance (20 RF, the SDK default), packs, reveals, rewards, $GBOOT,
+  Cup pots, race tables and rivals.
+- **Roadmap (v1.1):**
+  - an onboarding web app: email / Apple / Google sign-in with an embedded wallet, gasless play,
+    card on-ramp to RF, and "get your player" hardwiring;
+  - saved progress;
+  - the live Skill Cup referee;
+  - live stadiums and the BallVault.
 
 ## Run it
 
@@ -113,45 +127,44 @@ Node.js 22+ on Linux or Ubuntu/WSL2.
 git clone https://github.com/tulipoaaaaa/penalty-kings.git
 cd penalty-kings
 npm ci
-npm run dev          # http://localhost:4173 — connect a wallet holding a hardwired Friend
+npm run dev          # connect a wallet holding a hardwired Friend
 npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champions/)
 ```
 
 ## Checks, credits and limitations
 
-**Checks** (all passing in GitHub Actions, e.g. [CI run 19](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36297207066), 2026-09-27):
-- typecheck; `friendsdk check` (expected reward 9 RF per 10 RF ball, max 100 RF);
-- odds verification (all three stadiums: 10,000 bps, EV 90.00%); engine tests; economy simulator;
-- FriendSDK browser harness at 960 px and 360 px;
-- interaction test: buy → place → reveal → shoot → HUD update at 960 px and 360 px, zero console
-  errors;
-- **real ownership gate on Robinhood mainnet** (no mocks, read-only wallet provider): admits the
-  owner of hardwired Friend #7730 and rejects a random address;
-- Skill Cup referee tests: exact replay match, signed results, forged goals rejected,
-  unpredictable dives, rate limits;
-- Foundry unit tests and **mainnet-fork tests**: $GBOOT launch, locked liquidity, swaps, fee
-  collection, early-withdraw revert, fee hook;
-- a full launch rehearsal on a mainnet fork, including the SDK stadium deploy
-  ([rehearsal run](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36296904970));
-- `npm audit`: 0 vulnerabilities; secret scan clean.
+**Checks** (in GitHub Actions; the preview only redeploys after a fully green CI run):
+- `friendsdk check` + the SDK browser harness at 960 px and 360 px, and typecheck;
+- engine tests (28): zones, keepers, the difficulty director, the swipe mapping regression table,
+  free-kick physics;
+- game-logic tests (34): levels, progress, daily, target, the reveal ethics rule, prizes, the
+  live-price maths, pitch geometry, Bag honesty, and an action-flow state machine covering every
+  action in ≈69k states;
+- browser tests:
+  - the buy → open → reveal → Bag → kick → redeem flow;
+  - every free mode;
+  - a 13-scenario action-flow audit: double release, key plus mouse, walkout, pack reveal, resize mid-swipe, and speed (release → result ≤ 1.2 s);
+  - 90-second first-session QA;
+- odds verification (EV 90.00%); the economy simulator; the Skill Cup referee (replay match, signed results);
+- Foundry: 121 unit and fuzz tests, including the tokenomics v2 vaults, the Bootroom farm bound
+  and BallVault solvency invariants, plus mainnet-fork tests;
+- a real mainnet ownership-gate test; the secret scan.
 
 **Known issues and limitations:**
-- Browser tests use the SDK's mocked wallet and RPC. A real-wallet playthrough as a hardwired
-  Friend is still outstanding.
-- The simulated preview starts with 20 RF, which buys two Park balls. Warm-up kicks are
-  unlimited, and the Pro and Champions pages are reference builds that the preview wallet
-  cannot afford.
-- Stadium links live in a slim bar on the host page above the game, because the sandboxed game cannot navigate.
-- Persistent progress is not supplied by the SDK, so preview progress resets on reload.
-
-**Risks:** live mode (if linked in DEPLOYMENT.md) uses real RF and real wallet transactions. Dice
-RNG costs ≤ 0.000025 ETH per request plus gas. Token-priced random rewards need legal review.
-Official production publication needs separate Rare Friends review.
+- **Saved progress:** the SDK sandbox has no storage (no `allow-same-origin`), so preview progress
+  resets on reload, and the Daily limit is not enforceable there. This is an SDK capability gap;
+  we'd welcome a save API.
+- The preview wallet holds 20 simulated RF, which buys a 2-ball Park pack.
+- Browser tests use the SDK's mocked wallet; a human real-wallet playthrough is recommended.
+- **Risks:** live mode would use real RF. Paid chance with a redeemable prize needs legal review
+  before any live promotion (an 18+ gate and region notices are planned). Official production
+  publication needs Rare Friends review.
 
 **Assets:** all art is original and drawn in code:
-- the pitch, crowd, goal and ball;
-- four 16 × 16 keepers.
+- the pitch, the three stadiums, crowd, goal and wall;
+- 12 keepers;
+- ball sprites per rarity.
 
 The Friend is its canonical on-chain Generations sprite (FriendSDK sprite reader), unaltered.
-UI sounds come from the FriendSDK sound kit, and crowd and kick sounds are synthesised in code.
-No real clubs, crests, players or brands appear.
+UI sounds come from the FriendSDK sound kit; crowd, kick and music are synthesised in code. No
+real clubs, crests, players or brands appear.

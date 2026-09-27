@@ -9,7 +9,7 @@
 2. **GitHub settings:** Settings → Pages → Source = **GitHub Actions**.
 3. **Environment network access:** allow `rpc.mainnet.chain.robinhood.com`,
    `robinhoodchain.blockscout.com` and `rarefriends.com` for the live path.
-4. **Submission contact handle:** replace `[PSEUDONYMOUS HANDLE]` in `submission/README.md` and `submission/PR.md` with a pseudonymous handle (never a real name, email or main wallet).
+4. **Submission contact handle:** DONE: `@phon_ro` (pseudonymous, provided by the owner) in `submission/README.md` and `submission/PR.md`.
 5. **Review the economy parameter choices that differ from the brief:**
    - 10% of the weekly surplus is retained while a bank grows;
    - the Skill Cup pot is capped at 250k $GBOOT per week;
