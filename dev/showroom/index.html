@@ -21,7 +21,7 @@
   h3 { margin: 12px 0 6px; font-size: 13px; color: var(--gold); }
   button, select, input { font: inherit; color: var(--text); background: #222a55; border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; margin: 2px; min-height: 30px; cursor: pointer; }
   button:hover { background: #2e3a78; }
-  .tabs button.active { background: var(--gold); color: #111; }
+  .tabs button.active, #stadiums button.active { background: var(--gold); color: #111; }
   label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 8px 2px 0; }
   .muted { color: var(--muted); font-size: 12px; }
   pre#log { background: #000; color: #9f9; font-size: 11px; height: 160px; overflow: auto; padding: 6px; margin: 8px 0 0; white-space: pre-wrap; }
@@ -43,6 +43,8 @@
     <label>Keeper <select id="keeper"></select></label>
     <div class="muted" id="keeper-info"></div>
     <label>Stadium <select id="stadium"></select></label>
+    <div id="stadiums" data-testid="stadium-buttons"></div>
+    <div class="muted" id="stadium-info"></div>
     <label>Weather <select id="weather"></select></label>
     <label>Ball <select id="rarity"></select></label>
     <h3>Shot outcomes</h3><div id="outcomes"></div>

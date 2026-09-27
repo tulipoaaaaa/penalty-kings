@@ -5,7 +5,7 @@
  */
 import { keeperById, keeperAt, keeperFrame, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
@@ -295,11 +295,13 @@ export class Stage {
     const drop = fk ? 0 : BACKDROP_DROP;
     if (drop) { c.fillStyle = THEMES[this.stadium].sky[0]; c.fillRect(-40, -40, W + 80, drop + 40); }
     c.save(); c.translate(0, drop);
-    drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind });
+    const backdropEvents = { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind, drop, reduced: this.reduced };
+    drawBackdrop(c, this.stadium, this.weather, this.time, pan, backdropEvents);
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
     drawBoards(c, this.stadium, this.time, pan);
     drawPitch(c, this.stadium, this.weather);
+    drawStadiumFx(c, this.stadium, this.weather, this.time, pan, backdropEvents); // round 6 E22: stadium set pieces behind the goal
     c.restore();
     if (fk) drawPitchMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
     else drawPitchMarkings(c, PENALTY_SETUP, THEMES[this.stadium].lines, null, this.time, PENALTY_CAMERA);
