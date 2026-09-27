@@ -67,3 +67,24 @@ test("BQ-P2-8: in off the bar / OFF THE BAR / crossbar lines come from the engin
   assert.match(source, /hitBar: record\.hitBar/); // the Director's facts
   assert.match(stage, /bar = result === "post" && Boolean\(shot\.outcome\.hitBar\)/);
 });
+
+test("UI copy: multipliers use ×, menus go by their names, no double spaces, one spelling of the Golden Boot Cup and $GBOOT", () => {
+  const game = new URL("../../games/penalty-kings/", import.meta.url);
+  const files = ["index.tsx", "ui.tsx", "ballui.tsx", "potui.tsx", "share.tsx", "layout.tsx", "economy.ts", "game/shots.ts", "game/prizes.ts", "game/weekly.ts", "game/challenge.ts", "game/nextgoal.ts", "game/objectives.ts", "game/progress.ts", "game/rewards.ts", "game/firstsession.ts", "gfx/commentary.ts"];
+  const texts: string[] = [];
+  for (const file of files) {
+    const source = readFileSync(new URL(file, game), "utf8");
+    // String literals, template literals (with ${…} taken out) and JSX text.
+    for (const m of source.matchAll(/"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`|>([^<>{}\n]*[A-Za-z][^<>{}\n]*)</g)) {
+      const text = (m[1] ?? m[2] ?? m[3] ?? "").replace(/\$\{[^{}]*(\{[^{}]*\}[^{}]*)*\}/g, "\u0000");
+      if (/[A-Za-z]{2,} [A-Za-z]/.test(text)) texts.push(`${text} (${file})`);
+    }
+  }
+  assert.ok(texts.length > 300, `UI strings found: ${texts.length}`);
+  const bad = (pattern: RegExp) => texts.filter(text => pattern.test(text));
+  assert.deepEqual(bad(/\bx\d/), [], "a points multiplier is written ×1.5, never x1.5");
+  assert.deepEqual(bad(/\bthe Shop\b/), [], "the Ball shop / Kit shop go by their menu names");
+  assert.deepEqual(bad(/[^\s\u0000] {2,}[^\s\u0000(]/), [], "no double spaces");
+  assert.deepEqual(bad(/golden boot cup/i).filter(text => !/Golden Boot Cup|GOLDEN BOOT CUP/.test(text)), [], "Golden Boot Cup (or GOLDEN BOOT CUP)");
+  assert.deepEqual(bad(/(?<![$\w])GBOOT\b/), [], "the token is always $GBOOT");
+});
