@@ -1,0 +1,25 @@
+/* Penalty Kings: frame size on phones (R6-B7).
+   Loaded by the FriendSDK CLI into the trusted runtime page (HOST_INTEGRATION.md, "host.css"); it only sets the
+   SDK's documented --rf-game-max-width / --rf-game-aspect-ratio variables. Nothing here touches the sandbox or the
+   SDK frame's own rules.
+   Without it the frame is always 3:2 and page-wide: a 800 × 360 phone gets a 800 × 533 frame (the ball and the
+   buttons are below the fold) and a 360 × 800 phone gets a 360 × 240 strip.
+   Phones in landscape: a 2:1 frame as tall as the screen (the game letterboxes the pitch inside it).
+   Phones in portrait: a 9:16 frame; the game shows "Turn your phone sideways" with a portrait layout behind it. */
+@media (orientation: landscape) and (max-height: 540px) {
+  :root {
+    --rf-game-aspect-ratio: 2 / 1;
+    --rf-game-max-width: min(960px, calc((100dvh - var(--pk-host-bar, 0px)) * 2));
+  }
+  /* The static site's stadium links (scripts/build-site.mjs) sit above the frame: keep them to one fixed line. */
+  :root:has(.pk-stadiums) { --pk-host-bar: 28px; }
+  .pk-stadiums { box-sizing: border-box; height: 28px; flex-wrap: nowrap !important; overflow-x: auto; white-space: nowrap; }
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  :root {
+    --rf-game-aspect-ratio: 9 / 16;
+    --rf-game-max-width: min(600px, calc((100dvh - var(--pk-host-bar, 0px)) * 9 / 16));
+  }
+}
+/* Notches: the host page has no viewport-fit=cover, so the browser keeps the page inside the safe area already;
+   the game root also pads by env(safe-area-inset-*) for hosts that do cover the screen. */

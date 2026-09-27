@@ -26,7 +26,7 @@
 
 /* HUD: at most 4 chips (2 left, 2 right). */
 /* 3 HTML chips + the canvas scoreboard (score) = 4. Left column | pot centre | scoreboard + chip right. */
-.pk-hud { position: absolute; top: 1.2cqh; display: flex; flex-direction: column; align-items: flex-start; gap: 0.6cqh; max-width: 26cqw; font-size: clamp(7px, 1.4cqw, 14px); pointer-events: none; }
+.pk-hud { position: absolute; top: 1.2cqh; display: flex; flex-direction: column; align-items: flex-start; gap: 0.6cqh; max-width: 26cqw; font-size: clamp(11px, 1.4cqw, 14px); pointer-events: none; }
 .pk-hud > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
 .pk-hud-left { left: 1.2cqw; }
 .pk-hud-right { right: 1.2cqw; align-items: flex-end; top: 11cqh; }
@@ -38,7 +38,7 @@
 .pk-clockbar[hidden] { display: none; }
 .pk-clockbar i { position: absolute; inset: 0; background: var(--pk-volt); transform-origin: left center; transform: scaleX(var(--left, 1)); }
 .pk-clockbar[data-urgent="true"] i { background: var(--pk-red); }
-.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: 0.85em; line-height: 1.2em; color: #fff; text-shadow: 1px 1px 0 #000; }
+.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: max(11px, 0.85em); line-height: 1.2em; color: #fff; text-shadow: 1px 1px 0 #000; }
 .pk-sim { background: var(--pk-gold); color: var(--pk-ink); border-color: var(--pk-gold); }
 .pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
 
@@ -46,32 +46,32 @@
 /* Wraps onto a second line instead of truncating: every piece (pot, USD, price age, countdown, tag) stays whole. */
 .pk-pot { position: absolute; top: 0.6cqh; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; column-gap: 0.5em; row-gap: 0.1em;
   align-items: center; width: max-content; max-width: 46cqw; box-sizing: border-box; line-height: 1.2;
-  font-size: clamp(7px, 1.15cqw, 12px); padding: 0.25em 0.6em; background: #3d2600e6 !important; border-color: var(--pk-gold) !important; color: var(--pk-gold) !important; overflow: hidden; }
+  font-size: clamp(11px, 1.15cqw, 12px); padding: 0.25em 0.6em; background: #3d2600e6 !important; border-color: var(--pk-gold) !important; color: var(--pk-gold) !important; overflow: hidden; }
 .pk-pot span { white-space: nowrap; }
 .pk-pot .pk-pot-usd { color: var(--pk-paper); }
-.pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: 0.85em; }
+.pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: max(11px, 0.85em); }
 .pk-pot small { opacity: 0.8; }
 
 .pk-banner { position: absolute; top: 30cqh; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
 .pk-banner strong { display: block; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
-.pk-banner span { display: inline-block; margin-top: 0.4em; font-size: clamp(8px, 1.6cqw, 15px); background: #0b0d1ae6; padding: 0.3em 0.7em; }
+.pk-banner span { display: inline-block; margin-top: 0.4em; font-size: clamp(11px, 1.6cqw, 15px); background: #0b0d1ae6; padding: 0.3em 0.7em; }
 .pk-goal strong { color: var(--pk-volt); }
 .pk-miss strong { color: var(--pk-red); }
 @keyframes pk-pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 
-.pk-art-status, .pk-toast { position: absolute; left: 1.2cqw; bottom: 16cqh; margin: 0; max-width: 46cqw; font-size: clamp(7px, 1.35cqw, 13px); background: #0b0d1ad9; padding: 0.4em 0.8em; pointer-events: none; }
+.pk-art-status, .pk-toast { position: absolute; left: 1.2cqw; bottom: 16cqh; margin: 0; max-width: 46cqw; font-size: clamp(11px, 1.35cqw, 13px); background: #0b0d1ad9; padding: 0.4em 0.8em; pointer-events: none; }
 .pk-art-status { bottom: auto; top: 20cqh; }
 .pk-toast { background: var(--pk-paper); color: var(--pk-ink); }
 /* Discovery toast ("NEW: Kiss Cam!"): small, non-blocking, top-left above the pitch, clear of the goal
    (starts at ~36% of the width) and the striker (bottom-left), under the HUD chips. */
-.pk-discover { position: absolute; left: 1.2cqw; top: 21cqh; margin: 0; max-width: 28cqw; font-size: clamp(7px, 1.3cqw, 12px); color: var(--pk-ink); background: var(--pk-gold, #ffd23f); border: 2px solid #0b0d1a; box-shadow: 2px 2px 0 #000; padding: 0.3em 0.6em; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pk-discover-in 0.3s ease-out; }
+.pk-discover { position: absolute; left: 1.2cqw; top: 21cqh; margin: 0; max-width: 28cqw; font-size: clamp(11px, 1.3cqw, 12px); color: var(--pk-ink); background: var(--pk-gold, #ffd23f); border: 2px solid #0b0d1a; box-shadow: 2px 2px 0 #000; padding: 0.3em 0.6em; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pk-discover-in 0.3s ease-out; }
 @keyframes pk-discover-in { from { transform: translateX(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
 /* First-session keeper-unlock card: it flips into its Scouting Book page. */
 .pk-unlockcard { display: grid; justify-items: center; gap: 4px; margin: 6px 0; }
 .pk-unlock-flip { position: relative; width: min(260px, 70cqw); height: 84px; perspective: 600px; }
 .pk-unlock-front, .pk-unlock-back { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 2px; padding: 6px; background: var(--pk-card, #1b1f3a); border: 2px solid var(--pk-gold, #ffd23f); box-shadow: 2px 2px 0 #000; backface-visibility: hidden; font-size: 11px; overflow: hidden; }
 .pk-unlock-front canvas { width: 48px; height: 48px; image-rendering: pixelated; }
-.pk-unlock-back { transform: rotateY(180deg); text-align: center; font-size: 9px; }
+.pk-unlock-back { transform: rotateY(180deg); text-align: center; font-size: 11px; }
 .pk-unlock-back small { opacity: 0.85; }
 .pk-unlock-front { animation: pk-unlock-front 2.6s ease-in-out forwards; }
 .pk-unlock-back { animation: pk-unlock-back 2.6s ease-in-out forwards; }
@@ -92,20 +92,20 @@
 
 /* Action cluster: bottom-right, clear of the striker, goal and the runtime toolbar. */
 .pk-actions { position: absolute; right: 1.2cqw; bottom: 13cqh; display: flex; flex-direction: column; align-items: stretch; gap: 1cqh; width: 17cqw; min-width: 88px; }
-.pk-actions button { font-size: clamp(9px, 1.7cqw, 16px); min-height: 44px; padding: 0 0.8em; }
+.pk-actions button { font-size: clamp(12px, 1.7cqw, 16px); min-height: 44px; padding: 0 0.8em; }
 .pk-actions button:disabled { opacity: 0.45; cursor: default; }
 
-.pk-reveal { position: absolute; left: 50%; bottom: 14cqh; transform: translateX(-50%); width: min(62cqw, 480px); background: #0b0d1af2; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1.6cqh 2.4cqw; text-align: center; font-size: clamp(8px, 1.5cqw, 14px); animation: pk-rise 0.4s ease-out 1.2s both; max-height: 50cqh; overflow: auto; box-sizing: border-box; }
+.pk-reveal { position: absolute; left: 50%; bottom: 14cqh; transform: translateX(-50%); width: min(62cqw, 480px); background: #0b0d1af2; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1.6cqh 2.4cqw; text-align: center; font-size: clamp(11px, 1.5cqw, 14px); animation: pk-rise 0.4s ease-out 1.2s both; max-height: 50cqh; overflow: auto; box-sizing: border-box; }
 .pk-reveal h2 { margin: 0.1em 0; font-size: 1.7em; color: var(--pk-gold); }
 .pk-reveal small { text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.8; }
 .pk-reveal p { margin: 0.4em 0; }
 .pk-reveal b { color: var(--pk-volt); }
 .pk-reveal .pk-primary { font-size: 1.1em; padding: 0.5em 1.4em; min-height: 44px; }
-.pk-rule { font-size: 0.85em; opacity: 0.85; font-style: italic; }
+.pk-rule { font-size: max(11px, 0.85em); opacity: 0.85; font-style: italic; }
 @keyframes pk-rise { from { transform: translate(-50%, 20%); opacity: 0; } }
 
 /* Title / attract and mode select. */
-.pk-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2cqh; background: linear-gradient(#0b0d1a99, #0b0d1ae6 70%); padding: 6cqh 4cqw 14cqh; text-align: center; font-size: clamp(9px, 1.6cqw, 15px); box-sizing: border-box; }
+.pk-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2cqh; background: linear-gradient(#0b0d1a99, #0b0d1ae6 70%); padding: 6cqh 4cqw 14cqh; text-align: center; font-size: clamp(11px, 1.6cqw, 15px); box-sizing: border-box; }
 .pk-title h1 { margin: 0; font-size: clamp(28px, 9cqw, 86px); color: var(--pk-gold); letter-spacing: 0.06em; text-shadow: 4px 4px 0 #000, -2px -2px 0 #6b3e00; }
 .pk-title h2 { margin: 0; color: var(--pk-volt); font-size: 1.2em; }
 .pk-title > .pk-primary { font-size: 1.4em; padding: 0.4em 2em; min-height: 48px; }
@@ -126,7 +126,6 @@
 .pk-mode-paid { border-color: var(--pk-gold) !important; }
 .pk-mode-paid strong { color: var(--pk-gold); }
 .pk-title .pk-buyrow button { min-height: 44px; padding: 0 1em; }
-.pk-rotate { position: absolute; inset: 0; display: grid; place-items: center; background: var(--pk-ink); color: var(--pk-gold); font-size: 18px; text-align: center; padding: 24px; z-index: 5; }
 
 .pk-paused { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0d1a99; font-size: clamp(14px, 4cqw, 40px); font-weight: 700; letter-spacing: 0.2em; }
 .pk-loading { display: grid; place-items: center; align-content: center; gap: 12px; height: 100%; background: #0b0d1a; color: #f7f7f2; font-family: PixelifySans, ui-monospace, monospace; text-align: center; padding: 16px; }
@@ -150,7 +149,7 @@
 .pk-shopgroup { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .pk-shopgroup h3 { width: 100%; margin: 6px 0 0; font-size: 1em; }
 .pk-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid #0006; vertical-align: middle; }
-.pk-note { font-size: 0.85em; opacity: 0.85; }
+.pk-note { font-size: max(11px, 0.85em); opacity: 0.85; }
 .pk-roundcard { text-align: center; }
 .pk-plain { list-style: none; padding: 0; margin: 0.4em 0; }
 .pk-plain li { margin: 0.2em 0; }
@@ -193,20 +192,6 @@
 /* Keep SDK menus above the runtime toolbar (it overlays the frame's bottom edge). */
 .pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
 
-/* Phones (≈360 × 240 frame): compact HUD, keep 44px touch targets. */
-@container (max-width: 560px) {
-  .pk-hud { gap: 2px; max-width: 27cqw; font-size: 7px; }
-  .pk-hud-right { top: 12cqh; }
-  .pk-pot { max-width: 44cqw; font-size: 7px; padding: 0.15em 0.4em; column-gap: 0.4em; }
-  .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
-  .pk-actions { bottom: 13cqh; gap: 3px; width: 24cqw; min-width: 0; }
-  .pk-actions button { padding: 0 0.4em; font-size: 9px; }
-  .pk-reveal { width: 76cqw; padding: 1cqh 2cqw; font-size: 8px; }
-  .pk-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pk-mode small { display: none; }
-  .pk-title { font-size: 8px; padding: 4cqh 3cqw 13cqh; }
-  .pk-title .pk-rule, .pk-title .pk-note { display: none; }
-}
 @media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }
 
 /* ── Ball flow: shop, pack opening, bag, collection, carousel, market ─────────────────── */
@@ -219,17 +204,18 @@
 .pk-packs button[aria-checked="true"] { outline: 3px solid currentColor; font-weight: 700; }
 .pk-cost b { white-space: nowrap; }
 .pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 40cqh; overflow: auto; box-sizing: border-box;
-  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(8px, 1.4cqw, 13px); z-index: 3; }
-.pk-honest { margin: 0; font-size: 0.9em; color: var(--pk-sky); text-align: center; }
+  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
+.pk-honest { margin: 0; font-size: max(11px, 0.9em); color: var(--pk-sky); text-align: center; }
 .pk-cards { display: flex; flex-wrap: wrap; gap: 0.8cqw; justify-content: center; }
 .pk-card { width: clamp(44px, 8.4cqw, 76px); min-height: 44px; aspect-ratio: 3 / 4; display: grid; place-items: center; align-content: center; gap: 2px; padding: 2px;
-  background: linear-gradient(135deg, #2a3160, #151a33); border: 2px solid var(--pk-paper); color: var(--pk-paper); box-shadow: 2px 2px 0 #000; font-size: 0.8em; }
+  background: linear-gradient(135deg, #2a3160, #151a33); border: 2px solid var(--pk-paper); color: var(--pk-paper); box-shadow: 2px 2px 0 #000; font-size: max(11px, 0.8em); }
 .pk-card[data-revealed="true"] { background: #151a33; animation: pk-flip 0.35s ease-out; }
 .pk-card[data-rarity="5"], .pk-card[data-rarity="6"] { border-color: var(--pk-gold); box-shadow: 0 0 0 2px #ff8c00, 2px 2px 0 #000; }
 .pk-card small { opacity: 0.85; }
 .pk-cardback { font-size: 2em; color: var(--pk-gold); }
 @keyframes pk-flip { from { transform: rotateY(90deg); } to { transform: rotateY(0); } }
 .pk-summary { text-align: center; }
+.pk-pack button:not(.pk-card):not(.pk-link) { min-height: 44px; padding: 0 1.2em; border: 2px solid var(--pk-paper); box-shadow: 2px 2px 0 #000; font-weight: 700; }
 .pk-summary h3 { margin: 0; color: var(--pk-gold); }
 .pk-summary p { margin: 0.3em 0; }
 .pk-explain { border: 2px solid var(--pk-gold); padding: 6px 10px; margin-bottom: 8px; }
@@ -255,19 +241,12 @@
 .pk-collection td:first-child { text-align: left; }
 .pk-collection td[data-owned="false"] { opacity: 0.4; }
 .pk-carousel { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1cqw;
-  width: min(60cqw, 460px); background: #0b0d1af0; border: 2px solid var(--pk-volt); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.4cqw; font-size: clamp(8px, 1.4cqw, 13px); z-index: 3; }
+  width: min(60cqw, 460px); background: #0b0d1af0; border: 2px solid var(--pk-volt); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.4cqw; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
 .pk-carousel > button { min-width: 44px; min-height: 44px; font-size: 1.6em; background: #222a55; color: var(--pk-paper); border: 2px solid var(--pk-paper); }
 .pk-carouselball { display: grid; justify-items: center; gap: 2px; text-align: center; }
 .pk-carouselactions { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: center; }
 .pk-carouselactions button { min-height: 44px; padding: 0 1em; border: 2px solid var(--pk-paper); background: #0b0d1a; color: var(--pk-paper); }
 .pk-carousel .pk-note { grid-column: 1 / -1; margin: 0; text-align: center; }
-@container (max-width: 560px) {
-  /* Clear of the SDK runtime toolbar, which covers the bottom ~18% of a phone-sized frame. */
-  .pk-pack { width: 94cqw; max-height: 60cqh; font-size: 7px; bottom: auto; top: 12cqh; }
-  .pk-carousel { width: 86cqw; font-size: 7px; bottom: auto; top: 22cqh; }
-  .pk-carousel .pk-note, .pk-honest { display: none; }
-  .pk-tiers { grid-template-columns: 1fr; }
-}
 
 /* Save code (round 6 B6): the SDK sandbox cannot persist, so progress travels as a code. */
 .pk-save { display: grid; gap: 6px; margin-top: 8px; }
@@ -555,4 +534,126 @@
   --pk-i-shirt: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ff5a6e' d='M2 0h2v1H2zM6 0h2v1H6zM0 1h10v1H0zM0 2h10v1H0zM0 3h10v1H0zM2 4h6v1H2zM2 5h6v1H2zM2 6h2v1H2zM5 6h3v1H5zM2 7h6v1H2zM2 8h6v1H2z'/%3E%3Cpath fill='%23f7f7f2' d='M4 0h2v1H4zM4 6h1v1H4z'/%3E%3C/svg%3E");
   --pk-i-tag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h6v1H1zM1 2h1v1H1zM3 2h5v1H3zM1 3h8v1H1zM1 4h9v1H1zM1 5h8v1H1zM1 6h7v1H1zM1 7h6v1H1z'/%3E%3C/svg%3E");
   --pk-i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h3v1H1zM0 2h1v1H0zM4 2h1v1H4zM0 3h1v1H0zM4 3h6v1H4zM0 4h1v1H0zM4 4h1v1H4zM7 4h1v1H7zM9 4h1v1H9zM1 5h3v1H1zM7 5h1v1H7zM9 5h1v1H9z'/%3E%3C/svg%3E");
+}
+
+/* ── Phone layouts (R6-B7) ─────────────────────────────────────────────────────────────────────────────
+   The frame (host.css) is 2:1 on landscape phones and 9:16 on portrait phones; the desktop 3:2 layout above is
+   unchanged. Geometry, resolved against the game root (.pk is the size container):
+     --pk-tb   the SDK toolbar band at the frame's bottom edge (it overlays the frame): no game UI goes there.
+     --pk-ct   top of the canvas box;  --pk-ch  its height.  The pitch (480 × 320 logical) is letterboxed
+     --pk-s    px per logical unit;    --pk-pl  pitch left;   inside it (object-fit: contain), so the goal and
+     --pk-pt   pitch top;              --pk-ph  pitch height.  the ball are always whole and on screen.
+   Text never goes below 11 CSS px in the game UI (HUD chips, pot banner, toasts, pack opening, carousel). */
+.pk { --pk-tb: 54px; }
+.pk > * {
+  --pk-ct: 0px; --pk-ch: 100cqh;
+  --pk-s: min(calc(100cqw / 480), calc(var(--pk-ch) / 320));
+  --pk-ph: calc(320 * var(--pk-s));
+  --pk-pl: calc((100cqw - 480 * var(--pk-s)) / 2);
+  --pk-pt: calc(var(--pk-ct) + (var(--pk-ch) - var(--pk-ph)) / 2);
+}
+/* The SDK toolbar is 36px tall, 14px from the bottom (6px when the page is ≤ 520px wide). */
+@container (max-width: 520px) { .pk > * { --pk-tb: 48px; } }
+.pk-canvas { top: var(--pk-ct); bottom: auto; height: var(--pk-ch); }
+.pk small { font-size: max(11px, 0.85em); }
+.pk .rf-frame-scrim { padding-bottom: max(calc(var(--pk-tb) + 4px), 12cqh); }
+.pk-coldopen .pk-attract-bottom { bottom: calc(var(--pk-tb) + 6px); }
+.pk-title { padding-bottom: max(14cqh, calc(var(--pk-tb) + 8px)); }
+.pk-attract { padding-bottom: max(13cqh, calc(var(--pk-tb) + 8px)); }
+@container (max-width: 560px) {
+  .pk-tiers { grid-template-columns: 1fr; }
+  .pk-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pk-mode small { display: none; }
+}
+
+/* Rotate card (layout.tsx): "Turn your phone sideways", a pixel phone that tips over, "Play in portrait anyway". */
+.pk-rotate { position: absolute; inset: 0; z-index: 6; display: grid; place-content: center; justify-items: center; gap: 12px; box-sizing: border-box;
+  padding: 24px 20px calc(var(--pk-tb, 48px) + 16px); background: repeating-linear-gradient(90deg, #0b0d1a 0 24px, #0e1122 24px 48px); color: var(--pk-paper); text-align: center; font-size: 14px; }
+.pk-rotate[hidden] { display: none; }
+.pk-rotate strong { font-size: 22px; line-height: 1.15; color: var(--pk-gold); letter-spacing: 0.04em; text-shadow: 3px 3px 0 #000; }
+.pk-rotate p { margin: 0; max-width: 26em; color: var(--pk-muted); }
+.pk-rotate button { min-height: 44px; padding: 0 16px; font-size: 14px; font-weight: 700; border: 2px solid var(--pk-paper); background: var(--pk-ink); color: var(--pk-paper); box-shadow: 2px 2px 0 #000; }
+.pk-rotate button:active { transform: translate(2px, 2px); box-shadow: none; }
+.pk-rotate-phone { width: 48px; height: 80px; image-rendering: pixelated; filter: drop-shadow(3px 3px 0 #000); animation: pk-tip 2.4s steps(1, end) infinite; }
+@keyframes pk-tip { 0%, 45% { transform: rotate(0); } 50%, 95% { transform: rotate(-90deg); } }
+.pk-reduce-motion .pk-rotate-phone { animation: none; transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .pk-rotate-phone { animation: none; transform: rotate(-90deg); } }
+
+/* Landscape phones (a frame under 520px tall): the canvas stops above the toolbar band; the HUD takes the
+   left letterbox bar and the sky, the actions the right bar; everything is px-sized with 11px text minimum. */
+@container (orientation: landscape) and (max-height: 519px) {
+  .pk > * { --pk-ch: calc(100cqh - var(--pk-tb)); }
+  .pk-hud { top: 6px; gap: 4px; font-size: 11px; max-width: max(26cqw, calc(var(--pk-pl) - 12px)); }
+  .pk-hud-left { left: 6px; }
+  .pk-hud-right { right: 6px; top: calc(var(--pk-pt) + 22 * var(--pk-s) + 6px); }
+  .pk-hud .pk-stat { white-space: normal; }
+  .pk-hud > * { text-overflow: clip; }
+  .pk-pot { top: 4px; font-size: 11px; padding: 0.2em 0.5em; column-gap: 0.4em; max-width: min(46cqw, calc(270 * var(--pk-s))); }
+  .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
+  .pk-actions { right: 6px; bottom: calc(var(--pk-tb) + 4px); gap: 4px; width: clamp(88px, calc(var(--pk-pl) - 12px), 140px); min-width: 0; }
+  .pk-actions button { font-size: 12px; min-height: 44px; padding: 0 0.5em; }
+  .pk-toast { box-sizing: border-box; left: 6px; bottom: calc(var(--pk-tb) + 4px); font-size: 11px; line-height: 1.25; padding: 0.35em 0.6em;
+    max-width: max(88px, calc(var(--pk-pl) + 104 * var(--pk-s) - 10px)); max-height: calc(100cqh - var(--pk-tb) - 84px); overflow: hidden; }
+  .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 108 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
+  /* Discovery toast: top right, under the kick chip, over the crowd right of the goal (the coaching toast has the left). */
+  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 96 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
+  .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
+  .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
+  .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
+  .pk-cards { gap: 6px; }
+  .pk-card { width: clamp(52px, 9cqw, 72px); }
+  .pk-carousel { top: auto; bottom: calc(var(--pk-tb) + 4px); width: min(calc(100cqw - 12px - clamp(88px, calc(var(--pk-pl) - 12px), 140px) - 12px), 460px);
+    left: calc(6px + min(calc(100cqw - 12px - clamp(88px, calc(var(--pk-pl) - 12px), 140px) - 12px), 460px) / 2); max-height: calc(100cqh - var(--pk-tb) - 12px); overflow: auto; padding: 6px 10px; gap: 6px; font-size: 12px; }
+  .pk-title { padding: 10px 16px calc(var(--pk-tb) + 8px); gap: 6px; font-size: 12px; }
+  .pk-attract { padding: 8px 16px calc(var(--pk-tb) + 6px); }
+  .pk-attract h1 { font-size: clamp(24px, 6cqw, 48px); }
+  .pk-attract-top { padding: 6px 14px 8px; }
+  .pk-attract:not(.pk-coldopen) .pk-attract-bottom { padding: 8px 14px; max-width: min(80cqw, 560px); }
+  .pk-title > .pk-primary, .pk-attract-bottom .pk-primary { min-height: 44px; font-size: 16px; }
+  .pk-modes { width: min(96cqw, 900px); }
+  .pk-skip { min-height: 40px; font-size: 12px; }
+  .pk-mode { min-height: 44px; padding: 0.4em 0.6em; }
+}
+/* Very short frames (a 3:2 frame on a 360px-wide page when a host has no host.css): tighter still. */
+@container (orientation: landscape) and (max-height: 300px) {
+  .pk-actions button { min-height: 38px; }
+  .pk-attract-top p, .pk-title .pk-rule, .pk-title .pk-note { display: none; }
+  .pk-attract h1 { font-size: 22px; }
+}
+
+/* Portrait phones ("Play in portrait anyway"): pot banner and HUD above the pitch, the pitch full width,
+   the actions in a row under it, the coaching toast below them, all above the toolbar band. */
+@container (orientation: portrait) {
+  .pk > * {
+    --pk-ch: calc(100cqw * 2 / 3);
+    --pk-ct: clamp(118px, calc((100cqh - var(--pk-tb) - 100cqw * 2 / 3) * 0.42), 200px);
+  }
+  .pk-pot { top: 6px; max-width: calc(100cqw - 12px); font-size: 12px; padding: 0.25em 0.5em; column-gap: 0.4em; }
+  .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
+  .pk-hud { top: 54px; gap: 4px; font-size: 12px; }
+  .pk-hud-left { left: 6px; max-width: calc(60cqw - 9px); }
+  .pk-hud-right { right: 6px; top: 54px; max-width: calc(40cqw - 9px); }
+  .pk-hud .pk-stat { white-space: normal; }
+  .pk-hud > * { text-overflow: clip; }
+  .pk-actions { left: 6px; right: 6px; top: calc(var(--pk-pt) + var(--pk-ph) + 8px); bottom: auto; width: auto; min-width: 0; flex-direction: row; gap: 6px; }
+  .pk-actions button { flex: 1 1 0; min-width: 0; min-height: 44px; font-size: 13px; padding: 0 0.4em; }
+  .pk-toast { box-sizing: border-box; left: 6px; right: 6px; bottom: auto; top: calc(var(--pk-pt) + var(--pk-ph) + 60px); max-width: none; font-size: 12px; line-height: 1.3;
+    max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - var(--pk-ph) - 66px); overflow: hidden; }
+  .pk-art-status, .pk-discover { left: 6px; top: calc(var(--pk-pt) + 28 * var(--pk-s)); max-width: calc(160 * var(--pk-s)); font-size: 11px; }
+  .pk-banner { top: calc(var(--pk-pt) + 60 * var(--pk-s)); width: max-content; max-width: calc(100cqw - 12px); }
+  .pk-banner strong { font-size: clamp(24px, 9cqw, 44px); }
+  .pk-reveal { top: calc(var(--pk-pt) + 20px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 28px); padding: 10px 12px; font-size: 13px; }
+  .pk-pack { top: 60px; bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - 66px); padding: 10px; gap: 8px; font-size: 13px; }
+  .pk-cards { gap: 6px; }
+  .pk-card { width: clamp(56px, 20cqw, 80px); }
+  .pk-carousel { top: calc(var(--pk-pt) + 12px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 20px); overflow: auto; padding: 8px 10px; gap: 6px; font-size: 13px; }
+  .pk-title { padding: 16px 12px calc(var(--pk-tb) + 10px); gap: 10px; font-size: 13px; }
+  .pk-attract { padding: 16px 12px calc(var(--pk-tb) + 10px); }
+  .pk-attract h1 { font-size: clamp(30px, 11cqw, 52px); }
+  .pk-attract-top { padding: 8px 12px 10px; }
+  .pk-attract:not(.pk-coldopen) .pk-attract-bottom { padding: 10px 12px; max-width: calc(100cqw - 24px); }
+  .pk-title > .pk-primary, .pk-attract-bottom .pk-primary { min-height: 48px; font-size: 18px; }
+  .pk-modes { width: calc(100cqw - 24px); }
+  .pk-coldopen .pk-attract-bottom { right: 12px; }
+  .pk-skip { min-height: 44px; font-size: 13px; }
 }

@@ -40,6 +40,7 @@ import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
+import { RotateOverlay } from "./layout.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
 import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
@@ -112,7 +113,6 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [skill, setSkill] = useState<SkillEntry[]>(() => SIM_SKILL.map((points, index) => ({ id: index + 1, name: RIVALS[index], score: points, mine: false })));
   const [artStatus, setArtStatus] = useState("Loading your Friend…");
   const [now, setNow] = useState(() => Date.now());
-  const [portrait, setPortrait] = useState(false);
   // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
   const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
   const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number } | null>(null);
@@ -228,11 +228,6 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // The on-chain inventory is the truth: records always match it exactly.
   useEffect(() => { if (snapshot) setBag(current => syncBag(current, snapshot.inventory, tier.id, Date.now())); }, [snapshot, tier.id]);
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, []);
-  useEffect(() => {
-    const query = window.matchMedia("(orientation: portrait) and (max-width: 700px)");
-    const update = () => setPortrait(query.matches); update(); query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
 
   // Session start: snapshot, Friend artwork, sound, motion preference.
   useEffect(() => {
@@ -1175,7 +1170,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>
     </div>}
 
-    {portrait && <div className="pk-rotate" role="status">Rotate your phone to landscape to play.</div>}
+    <RotateOverlay />
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
