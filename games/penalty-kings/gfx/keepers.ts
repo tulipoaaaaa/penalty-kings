@@ -22,7 +22,7 @@
  * detail · '7' accent · '8' shade · '9' extra.
  */
 import { ART_UNIT, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperFrame, type RigPose } from "@penalty-kings/engine";
-import { sprite, type Palette } from "./core.js";
+import { sprite, pixelStar, type Palette } from "./core.js";
 
 export type KeeperLook = RigPose | "idle" | "breathe" | "blink" | "land" | "cheer" | "taunt" | "sad";
 const PHYSICS_LOOKS: readonly KeeperLook[] = ["set", "launch", "stretch"];
@@ -957,7 +957,14 @@ export type KeeperFrameOptions = {
   mood?: "celebrate" | "sad";
   /** Seconds since the strike (drives colour cycles and trails) and reduced motion. */
   time?: number; reduced?: boolean;
+  /**
+   * A glove save's glint: seconds since the ball met the glove, and where (screen px). A pixel star
+   * flashes on the glove nearest that point for GLINT_SECONDS (a static star under reduced motion).
+   * Drawn on top of the glove only: it is not part of the sprite, the mask or the hitbox.
+   */
+  glint?: { t: number; x: number; y: number };
 };
+export const GLINT_SECONDS = 0.5;
 /**
  * Draws a diving keeper exactly where the physics has him: the pose's sprite, arms, gloves and
  * (when the dive leaves one) the trailing leg with its boot. While the ball is in flight nothing
@@ -1003,6 +1010,17 @@ export function drawKeeperFrame(context: CanvasRenderingContext2D, frame: Keeper
   for (const { hand } of hands) {
     context.fillStyle = "#111"; context.fillRect(hand.x - g / 2, hand.y - g / 2, g, g);
     context.fillStyle = design.glove; context.fillRect(hand.x - g / 2 + 1, hand.y - g / 2 + 1, g - 2, g - 2);
+  }
+  const glint = options.glint;
+  if (glint && glint.t >= 0 && glint.t < GLINT_SECONDS) {
+    // The glove nearest the contact point (hands are body-local: rotate them back to the screen).
+    const cos = Math.cos(art.rotate), sin = Math.sin(art.rotate);
+    let best = hands[0].hand, bestD = Infinity;
+    for (const { hand } of hands) { const d = Math.hypot(art.x + hand.x * cos - hand.y * sin - glint.x, art.y + hand.x * sin + hand.y * cos - glint.y); if (d < bestD) { bestD = d; best = hand; } }
+    const len = reduced ? 4 : Math.round(2 + 5 * Math.sin((glint.t / GLINT_SECONDS) * Math.PI));
+    context.rotate(-art.rotate);
+    const sx = Math.round(best.x * cos - best.y * sin - g / 4), sy = Math.round(best.x * sin + best.y * cos - g / 4);
+    pixelStar(context, sx, sy, len, "#ffffff");
   }
   context.restore();
 }

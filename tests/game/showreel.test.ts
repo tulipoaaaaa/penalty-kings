@@ -52,3 +52,17 @@ test("ReelPlayer drives the stage cut by cut, ends once (no loop), and reduced m
   assert.ok(calls.includes("taunt"), "reduced motion still introduces the keepers");
   assert.ok(findShot("mouse", "goal"), "engine finds a skill goal");
 });
+
+test("cut dissolve: every block covers at the start, clears by the end, and never re-covers", async () => {
+  const { wipeCovered, wipeThreshold, WIPE_BLOCK, WIPE_SECONDS } = await import("../../games/penalty-kings/gfx/reelplayer.ts");
+  const cols = Math.ceil(480 / WIPE_BLOCK), rows = Math.ceil(320 / WIPE_BLOCK);
+  assert.ok(WIPE_SECONDS > 0 && WIPE_SECONDS < 0.4, "a quick cut, well inside the shortest (2-beat) cut");
+  for (let by = 0; by < rows; by++) for (let bx = 0; bx < cols; bx++) {
+    const t = wipeThreshold(bx, by);
+    assert.ok(t >= 0 && t < 1, `threshold ${bx},${by}`);
+    assert.ok(wipeCovered(bx, by, 0), "all covered at k = 0");
+    assert.ok(!wipeCovered(bx, by, 1), "all clear at k = 1");
+    let was = true;
+    for (let k = 0; k <= 1; k += 0.05) { const now = wipeCovered(bx, by, k); assert.ok(was || !now, "a cleared block stays clear"); was = now; }
+  }
+});

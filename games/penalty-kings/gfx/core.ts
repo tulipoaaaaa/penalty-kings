@@ -133,6 +133,12 @@ export function drawSprite(context: CanvasRenderingContext2D, image: CanvasImage
   context.restore();
 }
 
+/** A 4-point pixel star (a plus of 1 px arms around a 2 px-wide core), `len` px per arm. */
+export function pixelStar(c: CanvasRenderingContext2D, x: number, y: number, len: number, colour: string) {
+  if (len < 1) return;
+  c.fillStyle = colour; c.fillRect(x - len, y, len * 2 + 1, 1); c.fillRect(x, y - len, 1, len * 2 + 1);
+  if (len > 2) { c.fillRect(x - 1, y - 1, 3, 3); c.globalAlpha *= 0.5; c.fillRect(x - 2, y - 2, 1, 1); c.fillRect(x + 2, y - 2, 1, 1); c.fillRect(x - 2, y + 2, 1, 1); c.fillRect(x + 2, y + 2, 1, 1); c.globalAlpha *= 2; }
+}
 /** Deterministic hash → [0, 1). */
 export function hash01(n: number) { let t = (n * 2654435761) >>> 0; t ^= t >>> 15; t = Math.imul(t, 2246822519) >>> 0; t ^= t >>> 13; return (t >>> 0) / 4294967296; }
 

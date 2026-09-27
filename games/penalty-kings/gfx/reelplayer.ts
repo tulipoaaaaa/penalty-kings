@@ -5,7 +5,7 @@
  * a calm slideshow (no shots, pushes or flashes).
  */
 import { KEEPERS, resolveShot, keeperById, type ShotResult } from "@penalty-kings/engine";
-import { W } from "./core.js";
+import { W, H } from "./core.js";
 import { revealPlan } from "../game/reveal.js";
 import { cutAt, type Cut } from "./showreel.js";
 import type { Stage } from "./stage.js";
@@ -27,6 +27,20 @@ export function findShot(keeper: string, want: ShotResult, bin = false, random: 
 
 /** Title baseline: below the pot banner (which covers canvas y 0–38 at the top centre). */
 const TITLE_Y = 84;
+
+/**
+ * Cut transition: a retro block dissolve. Each new cut opens behind a grid of WIPE_BLOCK px blocks
+ * that clear in a diagonal sweep broken up by a 4×4 ordered-dither pattern (no allocations, ≤ 600
+ * rects for WIPE_SECONDS). Off under reduced motion (the reel is a calm slideshow there).
+ */
+export const WIPE_BLOCK = 16, WIPE_SECONDS = 0.26;
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5] as const;
+const WIPE_COLS = Math.ceil(W / WIPE_BLOCK), WIPE_ROWS = Math.ceil(H / WIPE_BLOCK);
+/** When block (bx, by) clears, in 0..1 of the wipe: the diagonal sweep (60 %) plus the dither (40 %). */
+export const wipeThreshold = (bx: number, by: number) =>
+  0.6 * ((bx / (WIPE_COLS - 1) + by / (WIPE_ROWS - 1)) / 2) + 0.4 * (BAYER4[(by & 3) * 4 + (bx & 3)] / 16);
+/** True while block (bx, by) still covers the frame at wipe progress k (0 = all covered, 1 = clear). */
+export const wipeCovered = (bx: number, by: number, k: number) => k < 1 && wipeThreshold(bx, by) >= k;
 
 export class ReelPlayer {
   private index = -1;
@@ -83,24 +97,42 @@ export class ReelPlayer {
   /** Big type + caption in the band under the pot banner (y 80–106), never over the goal or the striker. */
   drawOverlay(c: CanvasRenderingContext2D) {
     const cut = this.current; if (!cut) return;
+    const reduced = this.stage.reduced, into = this.time - this.started;
+    // The block dissolve that opens each cut (never under reduced motion).
+    if (!reduced && into < WIPE_SECONDS) {
+      const k = into / WIPE_SECONDS;
+      c.fillStyle = "#0b0d1a";
+      for (let by = 0; by < WIPE_ROWS; by++) for (let bx = 0; bx < WIPE_COLS; bx++) if (wipeCovered(bx, by, k)) c.fillRect(bx * WIPE_BLOCK, by * WIPE_BLOCK, WIPE_BLOCK, WIPE_BLOCK);
+    }
     const p = this.progress, alpha = Math.min(1, p * 6, (1 - p) * 6);
     c.save(); c.globalAlpha = Math.max(0, alpha); c.textAlign = "center"; c.textBaseline = "middle";
     if (cut.title) {
-      const slam = this.stage.reduced ? 1 : 1 + Math.max(0, 0.35 - p * 2.5);
+      const slam = reduced ? 1 : 1 + Math.max(0, 0.35 - p * 2.5), accent = cut.kind === "reveal" ? "#ffd23f" : cut.kind === "friend" ? "#7fe8ff" : "#ffd23f";
       c.font = `${Math.round(22 * slam)}px PixelifySans, monospace`;
+      // A 1 px ink outline and a 2 px drop shadow keep the big type readable over any sky.
       c.fillStyle = "#0b0d1a"; c.fillText(cut.title, W / 2 + 2, TITLE_Y + 2);
+      for (const [ox, oy] of OUTLINE) c.fillText(cut.title, W / 2 + ox, TITLE_Y + oy);
       c.fillStyle = cut.kind === "reveal" ? "#ffd23f" : "#ffffff"; c.fillText(cut.title, W / 2, TITLE_Y);
+      // An accent rule under the title that snaps out from the centre (full width at once under reduced motion).
+      const full = Math.round(c.measureText(cut.title).width / slam), grow = reduced ? 1 : Math.min(1, p * 5), rule = Math.round(full * grow);
+      c.fillStyle = "#0b0d1a"; c.fillRect(Math.round(W / 2 - rule / 2) - 1, TITLE_Y + 9, rule + 2, 4);
+      c.fillStyle = accent; c.fillRect(Math.round(W / 2 - rule / 2), TITLE_Y + 10, rule, 2);
     }
     const caption = cut.kind === "friend" ? `${this.options.friendName} walks out` : cut.caption;
     if (caption) {
-      c.font = "10px PixelifySans, monospace";
-      const width = c.measureText(caption).width + 12;
-      c.fillStyle = "#0b0d1acc"; c.fillRect(Math.round(W / 2 - width / 2), TITLE_Y + 14, Math.round(width), 14);
-      c.fillStyle = "#ffffff"; c.fillText(caption, W / 2, TITLE_Y + 21);
+      c.font = "11px PixelifySans, monospace";
+      const width = Math.round(c.measureText(caption).width + 16), x = Math.round(W / 2 - width / 2), y = TITLE_Y + 15;
+      // A caption plate: ink body, a light top edge and two accent pips, so the line reads on any stadium.
+      c.fillStyle = "#0b0d1ae0"; c.fillRect(x, y, width, 15);
+      c.fillStyle = "#ffffff30"; c.fillRect(x, y, width, 1);
+      c.fillStyle = "#ffd23f"; c.fillRect(x + 3, y + 6, 2, 3); c.fillRect(x + width - 5, y + 6, 2, 3);
+      c.fillStyle = "#ffffff"; c.fillText(caption, W / 2, y + 8);
     }
     c.restore();
   }
 }
+
+const OUTLINE = [[-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 
 /** Every keeper id a reel uses must exist (guards typos in the schedule). */
 export const reelKeepersValid = (reel: readonly Cut[]) => reel.every(cut => KEEPERS.some(k => k.id === cut.keeper));
