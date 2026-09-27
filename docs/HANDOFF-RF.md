@@ -7,7 +7,7 @@
 - We deploy nothing. The $GBOOT/tokenomics work is kept as a tested, undeployed package ([GBOOT-UPGRADE.md](GBOOT-UPGRADE.md)).
 
 **Judged baseline:**
-- Commit `8a895fe`, the `judging-stable-1` tag (see [RELEASES.md](RELEASES.md)).
+- Commit `18b4bc8` (CI run 100 fully green, deployed to Pages), the `judging-stable-1` tag (see [RELEASES.md](RELEASES.md)). Earlier baseline: `8a895fe`.
 - The current head is on branch `claude/clever-mccarthy-ay7qv7`.
 - The public preview redeploys only after a fully green CI run.
 

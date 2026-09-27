@@ -4,7 +4,8 @@ The root preview (https://tulipoaaaaa.github.io/penalty-kings/) is the judged bu
 
 | Tag | Commit | Date (UTC) | Evidence |
 |---|---|---|---|
-| `judging-stable-1` | `8a895fe` | 2026-09-27 | Local full run green: typecheck, `friendsdk check` + `friendsdk test` (960/360), engine 28, verifier 6, game-logic 34, Foundry 121 (non-fork), test:game / test:flow (13 scenarios incl. speed) / test:modes / qa:90s (26–27 shots). The tag exists locally; the session's git proxy refused tag pushes, so create it on GitHub (Releases → Draft a new release → tag `judging-stable-1` → target commit `8a895fe`). |
+| `judging-stable-1` | `18b4bc8` | 2026-09-27 15:26 UTC | **GitHub CI run 100 fully green** (all jobs), deployed to Pages. Includes the freeze fix, free practice `/practice/`, phone layouts, the 0–15 s randomness waits, next goal, odds on every pack, Skill Zones, the daily check-in. The session's git proxy refuses tag pushes (`send-pack: unexpected disconnect`; branch pushes work), so create it on GitHub: Releases → Draft a new release → tag `judging-stable-1` → target `18b4bc8`. |
+| (previous baseline) | `8a895fe` | 2026-09-27 | The earlier judged baseline (local full run green; CI's real-gate step was then failing on a stale assertion, fixed in `74d7fad`). Revert target of last resort. |
 
 **Freeze plan:**
 - **Sep 29 12:00 UTC:** code freeze for the judged preview; bug fixes only after this.
