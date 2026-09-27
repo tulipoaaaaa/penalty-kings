@@ -284,8 +284,11 @@ Treasury runway is otherwise at the launch drop rate; the auto-scaled rate falls
 - **v1.1:**
   - on-chain KitShop: cosmetics burn $GBOOT, with unlocks recorded per friendId;
   - Cup automation, where a Merkle claim contract replaces manual weekly sends.
-- **v1.2:** `GBootFeeHook` automates the LP-fee burn/Cup split. The contract is written and
-  fork-tested, and is marked **NOT DEPLOYED — requires audit and Rare Friends review**.
+- **v1.2:** `contracts/src/GBootFeeHook.sol` automates the fee split. It suits a pool with a 0% LP
+  fee: an `afterSwap` return-delta hook takes 1% of each swap's unspecified currency, **burns RF**
+  with `RF.burn` and sends **$GBOOT to the Cup**, all inside the swap. It has no owner and no
+  parameters. It is tested against the real PoolManager on a mainnet fork (`ForkHookTest`) and
+  marked **NOT DEPLOYED — requires audit and Rare Friends review**.
 - **v2:**
   - **PvP keepers:** Friend owners stake $GBOOT to keep goal against strikers and earn from
     saves. This uses the same replay referee: seed from Dice, inputs recorded, server
