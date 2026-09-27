@@ -6,6 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { GBoot } from "../src/GBoot.sol";
 import { LiquidityLock, IPositionManager } from "../src/LiquidityLock.sol";
 import { PoolSwapper } from "../src/PoolSwapper.sol";
+import { SkillCup, ISkillGenerations, ISkillToken } from "../src/SkillCup.sol";
 import { PoolKey, IPoolManager, IPositionManagerFull, IPermit2 } from "../src/interfaces/IUniswapV4.sol";
 
 /// Mainnet-fork rehearsal of the $GBOOT/RF launch. Run with:
@@ -33,6 +34,23 @@ contract ForkLaunchTest is Test {
         bool gbootIs0 = address(gboot) < RF;
         key = PoolKey(gbootIs0 ? address(gboot) : RF, gbootIs0 ? RF : address(gboot), 10_000, 200, address(0));
         deal(RF, burner, 1_000_000e18);
+    }
+
+    /// The real Generations contract gates Skill Cup entries: the owner of hardwired #7730 can
+    /// enter, anyone else cannot.
+    function testSkillCupRealOwnershipGate() public {
+        address generations = 0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D;
+        SkillCup cup = new SkillCup(ISkillGenerations(generations), ISkillToken(address(gboot)), address(this), block.timestamp);
+        address owner = ISkillGenerations(generations).ownerOf(7730);
+        vm.prank(burner);
+        gboot.transfer(owner, 1_000e18);
+        vm.startPrank(owner);
+        gboot.approve(address(cup), type(uint256).max);
+        assertEq(cup.enter(7730), 1);
+        vm.stopPrank();
+        vm.prank(burner);
+        vm.expectRevert(SkillCup.NotFriendOwner.selector);
+        cup.enter(7730);
     }
 
     function _plan() internal view returns (uint160 sqrtStart, int24 lower, int24 upper, bool gbootIs0) {

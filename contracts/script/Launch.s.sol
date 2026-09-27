@@ -7,6 +7,8 @@ import { GBoot } from "../src/GBoot.sol";
 import { KitShop, IGBoot } from "../src/KitShop.sol";
 import { LiquidityLock, IPositionManager } from "../src/LiquidityLock.sol";
 import { PoolSwapper } from "../src/PoolSwapper.sol";
+import { SkillCup, ISkillGenerations, ISkillToken } from "../src/SkillCup.sol";
+import { Wildcards, IWildcardGenerations, IWildcardToken, IWildcardEntropy } from "../src/Wildcards.sol";
 import { PoolKey, IPoolManager, IPositionManagerFull, IPermit2 } from "../src/interfaces/IUniswapV4.sol";
 
 /// $GBOOT launch: token, KitShop, LiquidityLock, PoolSwapper, pool init and locked liquidity.
@@ -23,6 +25,9 @@ contract Launch is Script {
     address constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
     address constant POSITION_MANAGER = 0x58daec3116aae6D93017bAAea7749052E8a04fA7;
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address constant GENERATIONS = 0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D;
+    address constant DICE_ENTROPY = 0xd8A0680e7699526B57140ED4EAfdCc7219Dc0A0c;
+    address constant DICE_PROVIDER = 0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6;
     uint256 constant POOL_GBOOT = 600_000_000e18;
     IPositionManagerFull constant PM = IPositionManagerFull(POSITION_MANAGER);
 
@@ -30,6 +35,8 @@ contract Launch is Script {
     KitShop internal shop;
     LiquidityLock internal lock;
     PoolSwapper internal swapper;
+    SkillCup internal skillCup;
+    Wildcards internal wildcards;
     PoolKey internal key;
     string internal prefix;
     uint256 internal firstId;
@@ -47,6 +54,8 @@ contract Launch is Script {
         console2.log("KitShop", address(shop));
         console2.log("LiquidityLock", address(lock));
         console2.log("PoolSwapper", address(swapper));
+        console2.log("SkillCup", address(skillCup));
+        console2.log("Wildcards", address(wildcards));
         console2.log("positionA", firstId);
         console2.log("unlockTime", lock.unlockTime());
     }
@@ -63,6 +72,9 @@ contract Launch is Script {
         shop = new KitShop(IGBoot(address(gboot)), prices);
         lock = new LiquidityLock(IPositionManager(POSITION_MANAGER), burner, block.timestamp + vm.envOr("UNLOCK_DAYS", uint256(180)) * 1 days);
         swapper = new PoolSwapper(IPoolManager(POOL_MANAGER));
+        // The pot for Skill Cup entries and Wildcards is the disclosed game treasury (the burner).
+        skillCup = new SkillCup(ISkillGenerations(GENERATIONS), ISkillToken(address(gboot)), burner, block.timestamp);
+        wildcards = new Wildcards(IWildcardGenerations(GENERATIONS), IWildcardToken(address(gboot)), IWildcardEntropy(DICE_ENTROPY), DICE_PROVIDER, burner);
     }
 
     function _env(string memory name) internal view returns (uint256) {
