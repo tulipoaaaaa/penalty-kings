@@ -30,7 +30,7 @@ import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type Dail
 import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
 import { revealPlan } from "./game/reveal.js";
 import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/randomness.js";
-import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence } from "./game/suspense.js";
+import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, kickSetup, type KeyAim } from "./game/input.js";
@@ -43,7 +43,7 @@ import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
-import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
+import { Shop, PackOpening, Bag, BallCarousel, MarketPreview, type PackPhase } from "./ballui.js";
 import { RotateOverlay } from "./layout.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
@@ -68,6 +68,7 @@ type Session = {
   earned: { rf: bigint; gboot: number; race: number };
 };
 type SkillEntry = { id: number; name: string; score: number; mine: boolean };
+type PackState = { rarities: number[]; revealed: boolean[]; gboot: number; sealed?: { count: number; expectedMs: number }; phase?: PackPhase };
 
 const RULE = "Your kick never changes what you win. Ball rarity is decided by on-chain randomness. Skill is for glory, stars, streaks and the Skill Cup.";
 const RIVALS = ["Rival Friend A", "Rival Friend B", "Rival Friend C", "Rival Friend D", "Rival Friend E", "Rival Friend F", "Rival Friend G", "Rival Friend H", "Rival Friend I", "Rival Friend J", "Rival Friend K"];
@@ -123,8 +124,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [now, setNow] = useState(() => Date.now());
   // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
   const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
-  /** The open pack; `sealed` while its roll is on the way (FD-3b: the sealed pack shows on the Stage). */
-  const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number; sealed?: { count: number; expectedMs: number } } | null>(null);
+  /**
+   * The open pack; `sealed` while its roll is on the way (FD-3b: the sealed pack shows on the Stage).
+   * B5 `phase`: "tear" (the pack tears on the Stage) → "flip" (cards flip, the Stage owns the reveal and the DOM
+   * shows a collapsed card strip) → "summary". BQ-X9: `packRef` is the source of truth that handlers read, so no
+   * side effect (sound, Stage reveal) ever runs inside a state updater.
+   */
+  const [pack, setPackState] = useState<PackState | null>(null);
+  const packRef = useRef<PackState | null>(null);
+  const setPack = (next: PackState | null) => { packRef.current = next; setPackState(next); };
   /** FD-3b: the a11y/status line of a wait for randomness (the Stage draws the wait itself). */
   const [waitNote, setWaitNote] = useState<string | null>(null);
   /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
@@ -1075,7 +1083,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       } finally {
         if (packRoll.current === controller) packRoll.current = null;
         stage.current?.endWait();
-        if (version === epoch.current) setPack(current => (current?.sealed ? null : current));
+        if (version === epoch.current && packRef.current?.sealed) setPack(null);
       }
       if (version !== epoch.current) return;
       const left = controller.signal.aborted; // left while sealed: the balls go to the Bag without the ceremony
@@ -1090,7 +1098,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
       setBag(list => addPulls(list, rarities, tier.id, Date.now()));
       if (left) { setMessage(`${rarities.length} ball${rarities.length === 1 ? "" : "s"} from your pack went to your Bag.`); return; }
-      setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
+      setPack({ rarities, revealed: rarities.map(() => false), gboot: drops, phase: "tear" });
       setMenu(null); setScreen("play"); stage.current?.say("pack");
       runPackSequence(rarities, performance.now() - started);
     });
@@ -1102,10 +1110,24 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
    */
   function runPackSequence(rarities: readonly number[], waitedMs: number) {
     clearPackTimers();
-    const plan = packRevealSequence(rarities, waitedMs), epochAt = epoch.current;
-    const later = (ms: number, run: () => void) => packTimers.current.push(window.setTimeout(() => { if (epoch.current === epochAt) run(); }, ms));
-    for (const step of plan.steps) later(step.at, () => (step.best ? flipCard(step.index) : flipCard(step.index, true)));
-    if (plan.stingAt !== null) later(plan.stingAt, () => { crowd.current?.sting(plan.stingLevel); stage.current?.crowd.react("tense"); });
+    const plan = packRevealSequence(rarities, waitedMs);
+    // B5: the pack tears on the Stage (fixed 0.8 s), each card flips there too, the best gets the full reveal, and the
+    // summary replaces the card strip once that reveal is done (≤ 6 s in all; "Reveal all" skips to the best).
+    stage.current?.showPackTear(rarities.length);
+    packLater(plan.tearMs, () => { const current = packRef.current; if (current && !current.sealed && current.phase === "tear") setPack({ ...current, phase: "flip" }); });
+    for (const step of plan.steps) packLater(step.at, () => (step.best ? flipCard(step.index) : flipCard(step.index, true)));
+    if (plan.stingAt !== null) packLater(plan.stingAt, () => { crowd.current?.sting(plan.stingLevel); stage.current?.crowd.react("tense"); });
+    packLater(plan.summaryAt, showPackSummary);
+  }
+  function packLater(ms: number, run: () => void) {
+    const epochAt = epoch.current;
+    packTimers.current.push(window.setTimeout(() => { if (epoch.current === epochAt) run(); }, ms));
+  }
+  /** The summary (spent / pulled / net) replaces the card strip: every card is face-up by then. */
+  function showPackSummary() {
+    const current = packRef.current;
+    if (!current || current.sealed || current.phase === "summary") return;
+    setPack({ ...current, revealed: current.revealed.map(() => true), phase: "summary" });
   }
   /**
    * BQ-P0-1: leave the pack (Change mode, back to the modes screen). Its reveal timers stop, a sealed pack's
@@ -1122,16 +1144,23 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
   function flipCard(index: number, quiet = false) {
-    setPack(current => {
-      if (!current || current.sealed || current.revealed[index]) return current;
-      if (quiet) sound.current?.play("reveal-common"); else stage.current?.showReveal(revealPlan(current.rarities[index] + 1));
-      return { ...current, revealed: current.revealed.map((value, i) => value || i === index) };
-    });
+    // BQ-X9: read the pack, update it, THEN play the sound / start the Stage reveal (never inside a state updater,
+    // which React may run twice: StrictMode, concurrent re-renders).
+    const current = packRef.current;
+    if (!current || current.sealed || current.revealed[index]) return;
+    setPack({ ...current, revealed: current.revealed.map((value, i) => value || i === index), phase: current.phase === "tear" ? "flip" : current.phase });
+    const plan = revealPlan(current.rarities[index] + 1);
+    if (quiet) { sound.current?.play("reveal-common"); stage.current?.flipBall(plan); } else stage.current?.showReveal(plan);
   }
-  /** Reveal all: flip every card; the best ball gets its reveal sequence (a Golden Boot keeps its full-screen moment). */
+  /** Reveal all: flip every card; the best ball gets its reveal sequence (a Golden Boot keeps its full-screen moment); the summary follows once it has landed. */
   function revealAll() {
     clearPackTimers();
-    setPack(current => { if (!current || current.sealed) return current; const best = Math.max(...current.rarities); stage.current?.showReveal(revealPlan(best + 1)); return { ...current, revealed: current.revealed.map(() => true) }; });
+    const current = packRef.current;
+    if (!current || current.sealed) return;
+    const best = Math.max(...current.rarities);
+    setPack({ ...current, revealed: current.revealed.map(() => true), phase: current.phase === "summary" ? "summary" : "flip" });
+    stage.current?.showReveal(revealPlan(best + 1));
+    packLater(REVEAL_LANDED_MS, showPackSummary);
   }
 
   /** FD-3b: a beat inside a wait for randomness (the Stage draws the wait; the shell plays audio and the Director). */
@@ -1350,7 +1379,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {banner && <div className={`pk-banner pk-${banner.tone}`} role="status"><strong>{banner.text}</strong><span>{banner.sub}</span></div>}
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
-      {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
+      {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} phase={pack.phase ?? "summary"} onOdds={() => setMenu("odds")} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
       {pack?.sealed && <p className="pk-wait" role="status" aria-live="polite" data-testid="pack-sealed">{pack.sealed.count} ball{pack.sealed.count === 1 ? "" : "s"} sealed: the rarity roll is on its way{simulated ? " (the preview's simulated draw)" : " (on-chain randomness)"}. Nothing is decided by waiting or tapping.</p>}
       {waitNote && !pack && <p className="pk-wait pk-wait-sr" role="status" aria-live="polite" data-testid="randomness-wait">{waitNote}</p>}
       {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={kickWith} onClose={closeCarousel} />}

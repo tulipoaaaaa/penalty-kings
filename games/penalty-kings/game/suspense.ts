@@ -99,26 +99,46 @@ export type PackStep = Readonly<{
   /** The best ball: a pause and a building sting before it, then the Stage's full reveal (revealPlan). */
   best: boolean;
 }>;
-export type PackSequence = Readonly<{ steps: readonly PackStep[]; stingAt: number | null; stingMs: number; stingLevel: number; total: number }>;
+export type PackSequence = Readonly<{
+  /** B5: the sealed pack tears on the Stage first (fixed length, the same for every outcome). */
+  tearMs: number;
+  steps: readonly PackStep[]; stingAt: number | null; stingMs: number; stingLevel: number;
+  /** When the summary replaces the card strip: the best ball's Stage reveal has finished, or the budget ran out. */
+  summaryAt: number;
+  /** = summaryAt: the whole ceremony, never over PACK_BUDGET_MS. */
+  total: number;
+}>;
+
+/** B5: the sealed-pack tear. Fixed, so it can never hint at the outcome. */
+export const PACK_TEAR_MS = 800;
+/** B5: the whole ceremony (tear → flips → best reveal → summary) fits in 6 s; "Reveal all" skips it. */
+export const PACK_BUDGET_MS = 6000;
+/** The best ball's Stage reveal has landed once its banner has slammed in (revealPlan: banner at 1.15 s + a 0.35 s slam). */
+export const REVEAL_LANDED_MS = 1500;
+/** The Stage's full reveal length for a settled rarity (game/reveal.ts revealPlan: 3.8 s for a Golden Boot, else 2.4 s). */
+const revealMs = (rarity: number) => (rarity === 6 ? 3800 : 2400);
 
 /**
- * Lowest to highest (ties in card order), a pause with a building sting, then the best ball. The sting's
+ * The tear, then lowest to highest (ties in card order), a pause with a building sting, then the best ball. The sting's
  * strength rises with the TRUE best rarity (like revealPlan's tier) and never shows another rarity.
  * `waitedMs` (how long the roll took) only paces the ceremony: a long wait earns a slightly longer build.
+ * B5: big packs flip faster, so the best ball's reveal always lands inside PACK_BUDGET_MS.
  */
 export function packRevealSequence(rarities: readonly number[], waitedMs = 0): PackSequence {
-  if (!rarities.length) return { steps: [], stingAt: null, stingMs: 0, stingLevel: 0, total: 0 };
+  if (!rarities.length) return { tearMs: 0, steps: [], stingAt: null, stingMs: 0, stingLevel: 0, summaryAt: 0, total: 0 };
   for (const rarity of rarities) if (!Number.isInteger(rarity) || rarity < 0 || rarity > 6) throw new Error(`invalid settled rarity ${rarity}`);
   const long = (suspenseBeats(waitedMs) as readonly string[]).includes("drumroll");
-  const gap = long ? 600 : 450, stingMs = long ? 1100 : 750;
+  let gap = long ? 600 : 450, stingMs = long ? 1100 : 750;
+  const start = PACK_TEAR_MS + 150, room = PACK_BUDGET_MS - start - REVEAL_LANDED_MS, need = (rarities.length - 1) * gap + stingMs;
+  if (need > room) { const k = room / need; gap = Math.floor(gap * k); stingMs = Math.floor(stingMs * k); }
   const order = rarities.map((shows, index) => ({ index, shows })).sort((a, b) => a.shows - b.shows || a.index - b.index);
   const steps: PackStep[] = [];
-  let at = 300;
+  let at = start;
   order.forEach((card, i) => {
     const best = i === order.length - 1;
     if (best) { steps.push({ ...card, at: at + stingMs, best }); }
     else { steps.push({ ...card, at, best }); at += gap; }
   });
-  const stingAt = at;
-  return { steps, stingAt, stingMs, stingLevel: order[order.length - 1].shows, total: stingAt + stingMs };
+  const stingAt = at, top = order[order.length - 1].shows, summaryAt = Math.min(stingAt + stingMs + revealMs(top), PACK_BUDGET_MS);
+  return { tearMs: PACK_TEAR_MS, steps, stingAt, stingMs, stingLevel: top, summaryAt, total: summaryAt };
 }

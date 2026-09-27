@@ -335,7 +335,8 @@ async function packWait(ms: number, count: number) {
     const rarities = (await packDraws(beacon, commitment, count)).map(draw => Math.floor(draw * 7));
     const plan = packRevealSequence(rarities, performance.now() - started);
     log(`pack: beacon #${beacon.round} → rarities ${rarities.map(r => RARITY_NAMES[r].replace(" Ball", "")).join(", ")}; order ${plan.steps.map(step => step.index).join("→")}, sting at ${plan.stingAt} ms (level ${plan.stingLevel})`);
-    for (const step of plan.steps) packTimers.push(window.setTimeout(() => { if (step.best) stage.showReveal(revealPlan(step.shows + 1)); else log(`pack: card ${step.index} flips: ${RARITY_NAMES[step.shows]}`); }, step.at));
+    stage.showPackTear(count); // B5: the fixed 0.8 s tear, then a Stage flip per lower ball and the best ball's full reveal
+    for (const step of plan.steps) packTimers.push(window.setTimeout(() => { if (step.best) stage.showReveal(revealPlan(step.shows + 1)); else { stage.flipBall(revealPlan(step.shows + 1)); log(`pack: card ${step.index} flips: ${RARITY_NAMES[step.shows]}`); } }, step.at));
     if (plan.stingAt !== null) packTimers.push(window.setTimeout(() => { stage.crowd.react("tense"); log(`pack: sting (level ${plan.stingLevel}) before the best ball`); }, plan.stingAt));
   } catch (error) { if (!isAbort(error)) log(`pack wait failed: ${(error as Error).message}`); else { stage.endWait(); log("pack wait cancelled"); } }
 }

@@ -203,7 +203,7 @@
 /* Keep SDK menus above the runtime toolbar (it overlays the frame's bottom edge). */
 .pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
 
-@media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball, .pk-card { animation: none !important; } }
 
 /* ── Ball flow: shop, pack opening, bag, collection, carousel, market ─────────────────── */
 .pk-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
@@ -214,8 +214,23 @@
 .pk-packs button { min-height: 44px; min-width: 72px; }
 .pk-packs button[aria-checked="true"] { outline: 3px solid currentColor; font-weight: 700; }
 .pk-cost b { white-space: nowrap; }
-.pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 40cqh; overflow: auto; box-sizing: border-box;
-  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
+.pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 60cqh; overflow: hidden; box-sizing: border-box;
+  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: flex; flex-direction: column; gap: 0.8cqh; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
+/* B5 / BQ-X3: the odds + honesty strip is pinned; only the body (cards, Reveal all, summary) scrolls. */
+.pk-pack-strip { flex: none; display: grid; gap: 0.4cqh; justify-items: center; padding-bottom: 0.6cqh; border-bottom: 2px solid var(--pk-line); }
+.pk-pack-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; display: grid; gap: 0.8cqh; justify-items: center; }
+.pk-oddsline .pk-fullodds { min-height: 24px; padding: 0 4px; border: 0; background: none; box-shadow: none; color: var(--pk-sky); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+/* B5 / BQ-X2: while the Stage reveals (tear → flips → best reveal) the panel is a compact strip UNDER the reveal:
+   the Stage draws the ball at logical y 112 and its rarity banner down to y 186, so the strip starts at y 192
+   (resolved with the pitch geometry below) and stops above the toolbar band. Cards shrink to 44 px tiles. */
+.pk-pack[data-phase="stage"] { top: calc(var(--pk-pt) + 192 * var(--pk-s)); bottom: auto; width: min(60cqw, 640px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 192 * var(--pk-s) - 4px);
+  background: #0b0d1acc; padding: 4px 8px; gap: 4px; }
+.pk-pack[data-phase="stage"] .pk-pack-strip { gap: 2px; padding-bottom: 4px; }
+.pk-pack[data-phase="stage"] .pk-pack-body { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.pk-pack[data-phase="stage"] .pk-cards { gap: 4px; }
+.pk-pack[data-phase="stage"] .pk-card { width: 44px; height: 44px; min-height: 44px; aspect-ratio: auto; padding: 0; }
+.pk-pack[data-phase="stage"] .pk-card :is(strong, small) { display: none; }
+.pk-pack[data-phase="stage"] .pk-cardback { font-size: 1.6em; }
 .pk-honest { margin: 0; font-size: max(11px, 0.9em); color: var(--pk-sky); text-align: center; }
 .pk-oddsline { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; font-size: max(11px, 0.85em); color: var(--pk-muted); }
 .pk-oddsline b { color: var(--pk-paper); }
@@ -621,6 +636,11 @@
   .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
+  /* B5: the reveal strip runs from the left edge to the actions bar (the right letterbox), under the reveal banner;
+     the odds keep the chip and the % (the names stay for screen readers; "Full odds" is one tap). */
+  .pk-pack[data-phase="stage"] { left: 6px; transform: none; width: calc(100cqw - 24px - clamp(88px, calc(var(--pk-pl) - 12px), 140px)); font-size: 11px; padding: 3px 6px; }
+  .pk-pack[data-phase="stage"] .pk-oname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-pack[data-phase="stage"] .pk-oddsline { gap: 0 8px; }
   .pk-cards { gap: 6px; }
   .pk-card { width: clamp(52px, 9cqw, 72px); }
   .pk-carousel { top: auto; bottom: calc(var(--pk-tb) + 4px); width: min(calc(100cqw - 12px - clamp(88px, calc(var(--pk-pl) - 12px), 140px) - 12px), 460px);
@@ -667,6 +687,10 @@
   .pk-banner strong { font-size: clamp(24px, 9cqw, 44px); }
   .pk-reveal { top: calc(var(--pk-pt) + 20px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 28px); padding: 10px 12px; font-size: 13px; }
   .pk-pack { top: 60px; bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - 66px); padding: 10px; gap: 8px; font-size: 13px; }
+  /* B5: while the Stage reveals, the strip sits under the pitch and the actions row (the pitch stays whole). */
+  .pk-pack[data-phase="stage"] { top: calc(var(--pk-pt) + var(--pk-ph) + 60px); width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - var(--pk-ph) - 64px); font-size: 11px; padding: 4px 6px; }
+  .pk-pack[data-phase="stage"] .pk-oname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-pack[data-phase="stage"] .pk-oddsline { gap: 0 8px; }
   .pk-cards { gap: 6px; }
   .pk-card { width: clamp(56px, 20cqw, 80px); }
   .pk-carousel { top: calc(var(--pk-pt) + 12px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 20px); overflow: auto; padding: 8px 10px; gap: 6px; font-size: 13px; }

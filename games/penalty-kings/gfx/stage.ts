@@ -5,7 +5,7 @@
  */
 import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, glyphCols, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, GLINT_SECONDS, type KeeperPose } from "./keepers.js";
@@ -15,8 +15,8 @@ import { freshCommentary, drawCommentator, type CommentaryContext } from "./comm
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
 import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, FRIEND_CELL, type KickView, type KickPose } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
-import { waitCue, WAIT_EVENTS, type WaitCue } from "../game/suspense.js";
-import { drawBallWarmup, drawPenaltyWait, drawSealedPack } from "./waits.js";
+import { waitCue, WAIT_EVENTS, PACK_TEAR_MS, type WaitCue } from "../game/suspense.js";
+import { drawBallWarmup, drawPenaltyWait, drawSealedPack, drawPackTear } from "./waits.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
@@ -28,6 +28,8 @@ export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" 
 /** FD-3b: a beat inside a wait for randomness (the shell plays the crowd drumroll and a Director moment). */
 export type WaitBeatEvent = Readonly<{ kind: "penalty" | "pack"; beat: "drumroll" | "moment" | "hush"; level: number }>;
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
+/** B5 pack reveal cues (the pack tearing; one per TRUE rarity on a card flip). No audio yet: the shell ignores names it does not know. */
+export type PackSfx = "pack-tear" | "rarity-0" | "rarity-1" | "rarity-2" | "rarity-3" | "rarity-4" | "rarity-5" | "rarity-6";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
 /** Penalty: the run-up starts 3 m behind and 1.3 m left of the plant (gfx/kick.ts); the Friend plants just left of the ball. */
@@ -155,6 +157,10 @@ export class Stage {
   /** Logical y of the commentator strip; the shell lowers it below the DOM pot banner when they would overlap (BQ-P1-11). */
   commentaryTop = 26;
   private reveal: { rarity: number; t: number; plan: RevealPlan } | null = null;
+  /** B5: the sealed pack tearing open (fixed length and colours: it never depends on the outcome). */
+  private packTear: { t: number; count: number; burst: boolean } | null = null;
+  /** B5: one lower ball's card flip on the Stage (its TRUE settled rarity, from revealPlan). */
+  private flip: { t: number; plan: RevealPlan } | null = null;
   private scoreFlip = { from: 0, t: 1 };
   private reaction: "miss" | "save" | "post" = "miss";
   /** Reused glove-glint point (no per-frame allocation). */
@@ -190,7 +196,7 @@ export class Stage {
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; this.waiting = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; this.waiting = null; this.packTear = null; this.flip = null; }
 
   // ── Waits for randomness (FD-3b) ───────────────────────────────────────────
   /** Start a wait: `expectedMs` paces it (0 = instant: nothing shows unless it runs late). */
@@ -375,11 +381,16 @@ export class Stage {
   walkout(line: CommentaryContext = "walkout") { this.stats.walkouts++; this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say(line); }
   /** ETHICS: the reveal is driven ONLY by a RevealPlan built from the settled outcome (game/reveal.ts). */
   showReveal(plan: RevealPlan) {
+    this.packTear = null; this.flip = null;
     this.reveal = { rarity: plan.rarity, t: 0, plan }; this.rarity = plan.rarity; this.stats.reveals++;
     this.onEvent("reveal", plan); this.sfx(plan.fullScreen ? "reveal-top" : "reveal");
     if (plan.rarity >= 5) this.say(plan.fullScreen ? "rarity-top" : "rarity-high");
     if (plan.fullScreen) { this.crowd.react("cheer"); this.sfx("roar"); }
   }
+  /** B5: the sealed pack tears open (PACK_TEAR_MS). Same art, length and colours for every pack: it shows nothing of the outcome. */
+  showPackTear(count: number) { this.reveal = null; this.flip = null; this.packTear = { t: 0, count, burst: false }; this.sfx("pack-tear"); }
+  /** B5: a lower ball's card flips on the Stage: a quick pop with a glow in its TRUE rarity's colour (ETHICS: only `plan.rarity` is drawn). */
+  flipBall(plan: RevealPlan) { this.packTear = null; this.flip = { t: 0, plan }; this.sfx(`rarity-${plan.rarity}` as PackSfx); }
   /** The Mexican wave; its line only when the box is free (a goal's result line is never cut short). */
   wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; if (!this.said || this.said.t > 1.2) this.say("wave"); }
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
@@ -390,7 +401,7 @@ export class Stage {
   kickPose(t: number): KickPose { return kickPose(this.kickView(), t); }
   private stepDust(t: number) { const pose = this.kickPose(t); this.dust(pose.x, pose.y); }
   private dust(x: number, y: number) { this.particles.emit("dust", x, y, 5, { color: ["#c8b99a", "#a89878"], speed: 25, spread: 1.6, life: 0.5, gravity: -10 }); }
-  private sfx(name: Sfx) { this.stats.sfx++; this.onEvent("sfx", name); }
+  private sfx(name: Sfx | PackSfx) { this.stats.sfx++; this.onEvent("sfx", name); }
 
   // ── Update ────────────────────────────────────────────────────────────────
   update(realDt: number) {
@@ -423,6 +434,12 @@ export class Stage {
     if (this.fanCatch) { this.fanCatch.t += dt; if (this.fanCatch.t > 2) this.fanCatch = null; }
     if (this.ballKid) { this.ballKid.t += dt; if (this.ballKid.t > 2.4) this.ballKid = null; }
     if (this.reveal) { this.reveal.t += dt; if (this.reveal.t > this.reveal.plan.duration) { this.reveal = null; this.onEvent("reveal-done"); } }
+    if (this.packTear) {
+      this.packTear.t += dt;
+      if (!this.packTear.burst && this.packTear.t >= TEAR_OPEN) { this.packTear.burst = true; if (!this.reduced) this.particles.emit("sparkle", W / 2, PACK_Y - 36, 26, { color: ["#ffd23f", "#ffffff", "#ff8c00"], speed: 110, spread: Math.PI * 2, gravity: 60, life: 0.9 }); }
+      if (this.packTear.t > TEAR_SECONDS + 0.35) this.packTear = null; // the halves finish falling away under the first flip
+    }
+    if (this.flip) { this.flip.t += dt; if (this.flip.t > FLIP_SECONDS) this.flip = null; }
     if (this.mode === "celebrate" && this.modeTime > 2.6) { this.mode = "idle"; this.shot = null; } // "done" was already sent
     if (this.mode === "react" && this.modeTime > 1.6) { this.mode = "idle"; this.onEvent("done"); }
     if (this.mode === "walkout" && this.modeTime > 3) { this.mode = "idle"; this.onEvent("walkout-done"); }
@@ -502,6 +519,9 @@ export class Stage {
       if (this.waiting.kind === "pack" && cue.visible) drawSealedPack(c, cue, this.time, this.waiting.count, this.reduced, RARITY_FX[7] ?? RARITY_FX[0]);
       else if (this.waiting.kind === "penalty") drawPenaltyWait(c, cue, this.time, this.waiting.locked);
     }
+    if (this.packTear) drawPackTear(c, this.packTear.t, this.packTear.count, this.time, this.reduced, RARITY_FX[7] ?? RARITY_FX[0]);
+    if (this.flip) this.drawFlip(c);
+    if ((this.packTear || this.flip) && !this.reveal) this.particles.draw(c); // the tear's sparkles over its dim layer
     if (this.reveal) this.drawReveal(c);
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${this.flash})`; c.fillRect(0, 0, W, H); }
     if (this.rarity === 6 && this.ballVisible && !this.reduced) { const glow = 0.25 + 0.15 * Math.sin(this.time * 6); c.strokeStyle = `rgba(255,140,0,${glow})`; c.lineWidth = 6; c.strokeRect(3, 3, W - 6, H - 6); }
@@ -857,19 +877,22 @@ export class Stage {
     c.fillStyle = `rgba(0,0,0,${Math.min(0.7, t * 2)})`; c.fillRect(0, 0, W, H);
     // Light cone.
     const cone = c.createLinearGradient(0, 0, 0, H); cone.addColorStop(0, fx.trail[0] + "aa"); cone.addColorStop(1, fx.trail[0] + "00");
-    c.fillStyle = cone; c.beginPath(); c.moveTo(W / 2 - 20, 0); c.lineTo(W / 2 + 20, 0); c.lineTo(W / 2 + 70, 200); c.lineTo(W / 2 - 70, 200); c.fill();
-    if (top && !this.reduced) {
-      c.save(); c.translate(W / 2, 140); c.rotate(t * 0.6);
-      for (let i = 0; i < 12; i++) { c.rotate(Math.PI / 6); c.fillStyle = i % 2 ? "#ff8c0055" : "#ffd23f44"; c.beginPath(); c.moveTo(0, 0); c.lineTo(-18, -300); c.lineTo(18, -300); c.fill(); }
-      c.restore();
-      if (Math.random() < 0.8) this.particles.emit("fire", W / 2 + (Math.random() - 0.5) * 40, 150, 3, { color: ["#ff8c00", "#ff3b1f", "#ffd23f"], speed: 40, gravity: -60, life: 0.8, size: 2 });
+    c.fillStyle = cone; c.beginPath(); c.moveTo(W / 2 - 20, 0); c.lineTo(W / 2 + 20, 0); c.lineTo(W / 2 + 70, REVEAL_Y + 60); c.lineTo(W / 2 - 70, REVEAL_Y + 60); c.fill();
+    // B5: light rays for Gold and up (they used to be the Golden Boot's only). Reduced motion: a still glow, no turning rays.
+    if (r.rarity >= 5) {
+      if (!this.reduced) {
+        c.save(); c.translate(W / 2, REVEAL_Y); c.rotate(t * (top ? 0.6 : 0.35));
+        for (let i = 0; i < 12; i++) { c.rotate(Math.PI / 6); c.fillStyle = i % 2 ? "#ff8c0055" : "#ffd23f44"; c.beginPath(); c.moveTo(0, 0); c.lineTo(-18, -300); c.lineTo(18, -300); c.fill(); }
+        c.restore();
+      } else drawRarityGlow(c, W / 2, REVEAL_Y, 70, fx.trail[0], 0.55);
+      if (top && !this.reduced && Math.random() < 0.8) this.particles.emit("fire", W / 2 + (Math.random() - 0.5) * 40, REVEAL_Y + 10, 3, { color: ["#ff8c00", "#ff3b1f", "#ffd23f"], speed: 40, gravity: -60, life: 0.8, size: 2 });
     }
     const spinDown = Math.max(0, 1 - t / 1.2), spin = (1 - spinDown * spinDown) * 20 + t * 0.5;
-    drawBall(c, W / 2, 140, 14, fx, this.reduced ? 0 : spin, 0, top);
+    drawBall(c, W / 2, REVEAL_Y, 14, fx, this.reduced ? 0 : spin, 0, top);
     if (t > 1.1) {
-      const slam = ease.outBack(clamp01((t - 1.1) / 0.35));
-      if (t < 1.2 && !this.reduced) { this.camera.addTrauma(0.15 * (1 + fx.tier)); this.particles.emit(fx.tier >= 4 ? "sparkle" : "confetti", W / 2, 140, 12 + fx.tier * 14, { color: fx.trail.concat(["#ffffff"]), speed: 90 + fx.tier * 20, spread: Math.PI * 2, gravity: 40, life: 1.4 }); }
-      c.save(); c.translate(W / 2, 200); c.scale(slam, slam);
+      const slam = this.reduced ? 1 : ease.outBack(clamp01((t - 1.1) / 0.35));
+      if (t < 1.2 && !this.reduced) { this.camera.addTrauma(0.15 * (1 + fx.tier)); this.particles.emit(fx.tier >= 4 ? "sparkle" : "confetti", W / 2, REVEAL_Y, 12 + fx.tier * 14, { color: fx.trail.concat(["#ffffff"]), speed: 90 + fx.tier * 20, spread: Math.PI * 2, gravity: 40, life: 1.4 }); }
+      c.save(); c.translate(W / 2, REVEAL_Y + 58); c.scale(slam, slam);
       c.fillStyle = fx.accent; c.fillRect(-120, -16, 240, 32); c.fillStyle = "#0b0d1a"; c.fillRect(-117, -13, 234, 26);
       c.fillStyle = fx.base === "#ffffff" ? fx.accent : fx.base; c.font = "bold 14px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
       c.fillText(RARITY_NAMES[r.rarity].toUpperCase(), 0, 0); c.textAlign = "left"; c.textBaseline = "alphabetic"; c.restore();
@@ -883,6 +906,32 @@ export class Stage {
     }
     this.particles.draw(c);
   }
+
+  /** B5: a lower ball's card flip (up to FLIP_SECONDS; the next flip or the best reveal replaces it): the ball turns face-up with a glow sized and coloured by its TRUE rarity tier. */
+  private drawFlip(c: CanvasRenderingContext2D) {
+    const f = this.flip!, t = f.t, fx = RARITY_FX[f.plan.rarity], tier = f.plan.tier;
+    const fade = 1 - clamp01((t - FLIP_SECONDS + 0.12) / 0.12);
+    c.globalAlpha = fade;
+    c.fillStyle = "rgba(0,0,0,0.45)"; c.fillRect(0, 0, W, H);
+    drawRarityGlow(c, W / 2, REVEAL_Y, 20 + tier * 6, fx.trail[0], 0.35 + tier * 0.08);
+    if (tier >= 5) drawRarityGlow(c, W / 2, REVEAL_Y, 64, "#ffd23f", 0.3);
+    const turn = this.reduced ? 1 : Math.abs(Math.cos(Math.PI / 2 * (1 - clamp01(t / 0.16)))), pop = this.reduced ? 1 : 1 + 0.25 * Math.sin(Math.PI * clamp01(t / 0.3));
+    c.save(); c.translate(W / 2, REVEAL_Y); c.scale(Math.max(0.08, turn) * pop, pop);
+    drawBall(c, 0, 0, 11, fx, 0, 0, tier === 6);
+    c.restore();
+    const name = RARITY_NAMES[f.plan.rarity].replace(" Ball", "").toUpperCase(), cols = glyphCols(name) * 2;
+    glyphText(c, name, Math.round(W / 2 - cols / 2) + 1, REVEAL_Y + 21, 2, "#0b0d1a");
+    glyphText(c, name, Math.round(W / 2 - cols / 2), REVEAL_Y + 20, 2, fx.base === "#ffffff" ? fx.accent : fx.base);
+    c.globalAlpha = 1;
+  }
+}
+
+/** B5: where the pack tears and the reveal ball sits (logical y). High enough that the collapsed DOM card strip (from y ≈ 192 down) never covers the ball or its banner. */
+const REVEAL_Y = 112, PACK_Y = 142, FLIP_SECONDS = 0.7, TEAR_SECONDS = PACK_TEAR_MS / 1000, TEAR_OPEN = 0.45;
+function drawRarityGlow(c: CanvasRenderingContext2D, x: number, y: number, radius: number, colour: string, alpha: number) {
+  const g = c.createRadialGradient(x, y, 2, x, y, radius);
+  g.addColorStop(0, colour + Math.round(0xff * Math.min(1, alpha)).toString(16).padStart(2, "0")); g.addColorStop(1, colour + "00");
+  c.fillStyle = g; c.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
 export { CELEBRATIONS, RARITY_NAMES, STRIKER, KICK_SPOT };

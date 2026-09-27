@@ -17,10 +17,14 @@ const PACKS = [1n, 2n, 5n, 10n] as const;
 export const SCUFFED_LINE = "0 RF, but still drops $GBOOT and counts for your collection";
 
 /** The odds printed on every pack (D21): each rarity and its exact chance, straight from the game definition. */
-export function OddsLine({ definition }: { definition: ChanceGameDefinition }) {
+export function OddsLine({ definition, onFull }: { definition: ChanceGameDefinition; onFull?: () => void }) {
   return <p className="pk-oddsline" data-testid="odds-line"><b>Odds per ball:</b> {definition.outcomes.map((item, index) =>
-    <span key={item.name}><RarityChip rarity={index} />{RARITY_NAMES[index].replace(" Ball", "")} {item.chanceBps / 100}%</span>)}</p>;
+    <span key={item.name}><RarityChip rarity={index} /><span className="pk-oname">{RARITY_NAMES[index].replace(" Ball", "")} </span>{item.chanceBps / 100}%</span>)}
+    {onFull && <button type="button" className="pk-link pk-fullodds" onClick={onFull} data-testid="full-odds">Full odds ›</button>}</p>;
 }
+
+/** B5: the pack while the Stage reveals it ("stage": a compact card strip under the reveal) and after ("summary"). */
+export type PackPhase = "tear" | "flip" | "summary";
 
 /** a) SHOP: stadium tier + pack size; total cost, max prize and odds before confirming. */
 export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false }: {
@@ -67,24 +71,29 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
 }
 
 /** b) PACK OPENING: face-down cards, tap to flip (each flip plays the true reveal), or reveal all; then a TRUE summary. */
-export function PackOpening({ rarities, revealed, definition, simulated, gboot, onFlip, onRevealAll, onDone }: {
+export function PackOpening({ rarities, revealed, definition, simulated, gboot, phase, onOdds, onFlip, onRevealAll, onDone }: {
   rarities: readonly number[]; revealed: readonly boolean[]; definition: ChanceGameDefinition; simulated: boolean; gboot: number;
-  onFlip: (index: number) => void; onRevealAll: () => void; onDone: () => void;
+  phase: PackPhase; onOdds: () => void; onFlip: (index: number) => void; onRevealAll: () => void; onDone: () => void;
 }) {
-  const done = revealed.every(Boolean);
+  const done = revealed.every(Boolean), summaryShown = done && phase === "summary";
   const rewardOf = (rarity: number) => definition.outcomes[rarity].reward;
   const summary = packSummary(rarities, definition.price, rewardOf);
   const scuffed = rarities.filter(rarity => rarity === 0).length;
   const tag = simulated ? " (sim)" : "";
-  return <div className="pk-pack" role="dialog" aria-label="Pack opening" data-testid="pack">
-    <OddsLine definition={definition} />
-    <p className="pk-honest">Rarity decided by {simulated ? "the preview's simulated draw (on-chain randomness when live)" : "on-chain randomness (Dice)"} when the pack was opened. Tapping order and speed change nothing.</p>
+  // B5 (BQ-X2): while the Stage reveals, the panel is a compact strip under the reveal's banner, so the canvas owns the moment.
+  // BQ-X3: the odds + honesty strip sits OUTSIDE the scroll area, so the summary can never scroll it away.
+  return <div className="pk-pack" data-phase={summaryShown ? "summary" : "stage"} role="dialog" aria-label="Pack opening" data-testid="pack">
+    <div className="pk-pack-strip">
+      <OddsLine definition={definition} onFull={onOdds} />
+      <p className="pk-honest">Rarity decided by {simulated ? "the preview's simulated draw (on-chain randomness when live)" : "on-chain randomness (Dice)"} when the pack was opened. Tapping order and speed change nothing.</p>
+    </div>
+    <div className="pk-pack-body">
     <div className="pk-cards">{rarities.map((rarity, index) => <button key={index} type="button" className="pk-card" data-revealed={revealed[index]} data-rarity={revealed[index] ? rarity : undefined} disabled={revealed[index]} onClick={() => onFlip(index)} aria-label={revealed[index] ? RARITY_NAMES[rarity] : `Ball ${index + 1}: tap to reveal`}
       style={revealed[index] ? { backgroundImage: ballGlow(rarity) } : { backgroundImage: "repeating-linear-gradient(45deg, #ffffff0d 0 4px, transparent 4px 8px), linear-gradient(135deg, #2a3160, #151a33)" }}>
-      {revealed[index] ? <><BallSpin rarity={rarity} size={36} /><strong>{RARITY_NAMES[rarity].replace(" Ball", "")}</strong><small>{rf(rewardOf(rarity))}</small></> : <span className="pk-cardback">?</span>}
+      {revealed[index] ? <><BallSpin rarity={rarity} size={summaryShown ? 36 : 24} /><strong>{RARITY_NAMES[rarity].replace(" Ball", "")}</strong><small>{rf(rewardOf(rarity))}</small></> : <span className="pk-cardback">?</span>}
     </button>)}</div>
     {!done && <button type="button" className="pk-primary" onClick={onRevealAll} data-testid="reveal-all">Reveal all</button>}
-    {done && <div className="pk-summary" data-testid="pack-summary">
+    {summaryShown && <div className="pk-summary" data-testid="pack-summary">
       <h3>Pack summary</h3>
       <p>Spent <b>{rf(summary.spent)}</b>{tag} on {summary.count} ball{summary.count === 1 ? "" : "s"}. Together they are worth <b>{rf(summary.pulled)}</b>{tag}{summary.pulled > 0n ? ": they are yours, and you can cash any of them back into RF from your Bag at any time." : "."}</p>
       <p>Difference: <b className={summary.net < 0n ? "pk-loss" : "pk-gain"}>{summary.net < 0n ? "−" : "+"}{rf(summary.net < 0n ? -summary.net : summary.net)}</b>{tag}. {summary.net < 0n ? "Most packs return less than they cost; a few return much more." : summary.net > 0n ? "This pack is worth more than it cost; most packs return less." : "This pack is worth exactly what it cost."}</p>
@@ -92,6 +101,7 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
       {scuffed > 0 && <p data-testid="scuffed-note"><b>{scuffed} {RARITY_NAMES[0]}{scuffed === 1 ? "" : "s"}:</b> {SCUFFED_LINE}.</p>}
       <button type="button" className="pk-primary" onClick={onDone} autoFocus data-testid="to-bag">Go to my Bag</button>
     </div>}
+    </div>
   </div>;
 }
 
