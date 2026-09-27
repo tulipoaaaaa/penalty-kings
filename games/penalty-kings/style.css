@@ -1,6 +1,15 @@
 /* Penalty Kings — pixel UI kit inside the SDK sandbox. Scales with the frame (container units). */
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* B4 legible numbers: Pixelify draws 5≈S, 2≈Z/8, 8≈B, 0≈O and has no tabular figures ("20 RF" read as "80 RF").
+   Digits and number punctuation (0-9 + , - . % × −) come from Departure Mono (SIL OFL 1.1, Helena Zhang, v1.500;
+   assets/DepartureMono-OFL.txt), a monospaced pixel face, so digits are tabular. These faces are declared AFTER the
+   Pixelify ones: the browser checks them first for their unicode-range, and letters stay Pixelify.
+   The file is a 1.6 KB subset (digits, number punctuation, A–Z for headings). */
+@font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
+@font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
+/* Headings: Pixelify's bold uppercase C closes into O ("OUPS", "SOOUTING 8OOK"), so headings use the same clear face. */
+@font-face { font-family: PKHead; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
 
 .pk {
   --pk-ink: #0b0d1a; --pk-panel: #151a33; --pk-line: #2a3160; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2; --pk-sky: #7fd3ff;
@@ -286,7 +295,7 @@
   background: repeating-linear-gradient(90deg, var(--pk-head) 0 16px, var(--pk-head2) 16px 32px); box-shadow: inset 0 -2px 0 var(--pk-accent); }
 .pk .rf-frame-menu-heading::before { content: ""; flex: none; width: 28px; height: 28px; border: 2px solid var(--pk-paper); box-shadow: 2px 2px 0 #000;
   background: var(--pk-ink) var(--pk-icon, var(--pk-i-ball)) center / 20px 20px no-repeat; image-rendering: pixelated; }
-.pk .rf-frame-menu-heading h2 { flex: 1; min-width: 0; margin: 0; font: 700 17px/1.1 PixelifySans, ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+.pk .rf-frame-menu-heading h2 { flex: 1; min-width: 0; margin: 0; font: 400 17px/1.1 PKHead, PixelifySans, ui-monospace, monospace; letter-spacing: 0.02em; text-transform: uppercase;
   color: var(--pk-paper); text-shadow: 2px 2px 0 #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk .rf-frame-menu-heading button { flex: none; width: 36px; height: 36px; min-height: 0; padding: 0 0 2px; border: 2px solid var(--pk-paper); border-radius: 0; background: var(--pk-ink);
   color: var(--pk-paper); font: 700 20px/1 PixelifySans, ui-monospace, monospace; box-shadow: 2px 2px 0 #000; }
@@ -314,7 +323,7 @@
 .pk .rf-frame-menu-body::-webkit-scrollbar-thumb { background: var(--pk-line); border: 2px solid var(--pk-ink); }
 .pk .rf-frame-menu-body p { margin: 0 0 8px; }
 .pk .rf-frame-menu-body b { color: var(--pk-volt); }
-.pk .rf-frame-menu-body h3 { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font: 700 14px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 0.05em; text-transform: uppercase; }
+.pk .rf-frame-menu-body h3 { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font: 400 14px/1.2 PKHead, PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 0.02em; text-transform: uppercase; }
 .pk .rf-frame-menu-body h3::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--pk-accent); box-shadow: 2px 2px 0 #000; }
 .pk .rf-frame-menu-body > h3:first-child, .pk .rf-frame-menu-body > * > h3:first-child { margin-top: 0; }
 .pk .rf-frame-menu-body h3 small { font-size: 12px; font-weight: 400; color: var(--pk-muted); text-transform: none; letter-spacing: 0; opacity: 1; }

@@ -5,7 +5,7 @@
  */
 import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, GLINT_SECONDS, type KeeperPose } from "./keepers.js";
@@ -796,19 +796,16 @@ export class Stage {
   private drawScoreboard(c: CanvasRenderingContext2D) {
     const x = W - 92, y = 2, board = this.stadium === "park" ? "#6d4c41" : this.stadium === "pro" ? "#0b0d1a" : "#3d2600";
     c.fillStyle = "#0b0d1a"; c.fillRect(x - 1, y - 1, 90, 20); c.fillStyle = board; c.fillRect(x, y, 88, 18);
-    c.fillStyle = this.stadium === "pro" ? "#ccff00" : this.stadium === "champions" ? "#ffd23f" : "#f7f7f2";
-    c.font = "8px PixelifySans, monospace"; c.textBaseline = "top";
-    c.fillText("SCORE", x + 4, y + 5);
-    const text = String(this.score).padStart(5, "0"), old = String(this.scoreFlip.from).padStart(5, "0");
+    // B4: crisp 4×5 bitmap glyphs (GLYPHS) instead of 8px fillText, which blurred into "SOORE" and S-shaped fives.
+    glyphText(c, "SCORE", x + 3, y + 7, 1, this.stadium === "pro" ? "#ccff00" : this.stadium === "champions" ? "#ffd23f" : "#f7f7f2");
+    const text = String(this.score).padStart(5, "0"), old = String(this.scoreFlip.from).padStart(5, "0"), digit = this.stadium === "pro" ? "#ccff00" : "#ffffff";
     for (let i = 0; i < 5; i++) {
-      const dx = x + 38 + i * 9, flipping = text[i] !== old[i] && this.scoreFlip.t < 1;
-      c.fillStyle = "#00000055"; c.fillRect(dx - 1, y + 3, 8, 12);
-      c.fillStyle = this.stadium === "pro" ? "#ccff00" : "#ffffff";
-      if (flipping) { const k = Math.abs(Math.cos(this.scoreFlip.t * Math.PI)); c.save(); c.translate(dx + 3, y + 9); c.scale(1, Math.max(0.1, k)); c.fillText(this.scoreFlip.t < 0.5 ? old[i] : text[i], -2, -4); c.restore(); }
-      else c.fillText(text[i], dx + 1, y + 5);
+      const dx = x + 31 + i * 11, flipping = text[i] !== old[i] && this.scoreFlip.t < 1;
+      c.fillStyle = "#00000055"; c.fillRect(dx, y + 3, 10, 12);
+      if (flipping) { const k = Math.abs(Math.cos(this.scoreFlip.t * Math.PI)); c.save(); c.translate(dx + 5, y + 9); c.scale(1, Math.max(0.1, k)); glyphText(c, this.scoreFlip.t < 0.5 ? old[i] : text[i], -4, -5, 2, digit); c.restore(); }
+      else glyphText(c, text[i], dx + 1, y + 4, 2, digit);
     }
-    if (this.streak >= 2) { c.fillStyle = "#ff8c00"; c.fillText(`${this.streak} IN A ROW`, x + 4, y + 21); }
-    c.textBaseline = "alphabetic";
+    if (this.streak >= 2) { const label = `${this.streak} IN A ROW`; glyphText(c, label, x + 4, y + 22, 1, "#0b0d1a"); glyphText(c, label, x + 3, y + 21, 1, "#ff8c00"); }
   }
 
   private drawCommentary(c: CanvasRenderingContext2D) {

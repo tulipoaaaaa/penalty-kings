@@ -88,6 +88,6 @@ site/ (built)                   the public static preview: Park /, Pro /pro/, Ch
 
 - **Game art:** all original and drawn in code (pitch, three stadiums, crowd props, 12 keepers, ball sprites, UI icons). No real clubs, crests, players or brands.
 - **Friends:** canonical Rare Friends Generations sprites, loaded with the SDK sprite reader and never altered. The SDK NOTICE (`node_modules/@rarefriends/friendsdk/NOTICE.md`) allows using SDK-supplied Rare Friends artwork in games, including crowds and animations.
-- **Font:** Pixelify Sans, SIL Open Font License 1.1 (`games/penalty-kings/assets/PixelifySans-OFL.txt`).
+- **Font:** Pixelify Sans, SIL Open Font License 1.1 (`games/penalty-kings/assets/PixelifySans-OFL.txt`). Digits and headings: a subset of Departure Mono by Helena Zhang, SIL Open Font License 1.1 (`games/penalty-kings/assets/DepartureMono-OFL.txt`).
 - **Audio:** UI sounds come from the FriendSDK sound kit (the SDK NOTICE applies). Crowd, kick, music and ambience are synthesised in code.
 - **Source:** Apache-2.0. The official FriendSDK v0.1.2 archive is vendored in `vendor/`, with its sha256 in `ADDRESSES.md`.

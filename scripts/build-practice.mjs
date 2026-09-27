@@ -16,6 +16,8 @@ export async function buildPractice(outdir, { mainGame = "../" } = {}) {
   await copyFile("site-src/practice/practice.css", `${outdir}/practice.css`);
   for (const weight of ["400", "700"]) await copyFile(`games/penalty-kings/assets/pixelify-sans-latin-${weight}-normal.woff2`, `${outdir}/assets/pixelify-sans-latin-${weight}-normal.woff2`);
   await copyFile("games/penalty-kings/assets/PixelifySans-OFL.txt", `${outdir}/assets/PixelifySans-OFL.txt`);
+  await copyFile("games/penalty-kings/assets/departure-mono-pk-subset.woff2", `${outdir}/assets/departure-mono-pk-subset.woff2`);
+  await copyFile("games/penalty-kings/assets/DepartureMono-OFL.txt", `${outdir}/assets/DepartureMono-OFL.txt`);
   const csp = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'";
   const results = Array.from({ length: 5 }, (_, i) => `<li>${i + 1}</li>`).join("");
   await writeFile(`${outdir}/index.html`, `<!doctype html>
