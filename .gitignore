@@ -1,0 +1,12 @@
+node_modules/
+.friendsdk/
+site/
+artifacts/
+.build/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+.env
+.env.*
+*.key
+.wrangler/

@@ -1,0 +1,9 @@
+{
+  "name": "@penalty-kings/engine",
+  "version": "0.1.0",
+  "description": "Deterministic Penalty Kings shot physics and keeper AI, shared by the game and the Skill Cup verifier.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src"]
+}
