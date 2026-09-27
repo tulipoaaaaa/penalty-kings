@@ -53,9 +53,11 @@ for (const [index, receipt] of run.receipts.entries()) {
 }
 const grab = name => output.match(new RegExp(`${name}\\s+(0x[0-9a-fA-F]{40})`))?.[1];
 const live = { chainId: 4663, gboot: grab("GBOOT"), kitShop: grab("KitShop"), liquidityLock: grab("LiquidityLock"), poolSwapper: grab("PoolSwapper"), skillCup: grab("SkillCup"), wildcards: grab("Wildcards"),
+  bootroom: grab("Bootroom"), dropVault: grab("DropVault"), cupsVault: grab("CupsVault"), bountyVault: grab("BountyVault"), friendsAirdrop: grab("FriendsAirdrop"), edgeSplitter: grab("EdgeSplitter"),
+  rf: "0x0779369854d3EcdEA927206718FFD7730C67B71f",
   positionA: output.match(/positionA\s+(\d+)/)?.[1], unlockTime: output.match(/unlockTime\s+(\d+)/)?.[1], launchBlock: BigInt(run.receipts[0].blockNumber).toString() };
 for (const [key, value] of Object.entries(live)) if (!value) throw new Error(`FREEZE: could not read ${key} from the broadcast output`);
-for (const key of ["gboot", "kitShop", "liquidityLock", "poolSwapper", "skillCup", "wildcards"]) {
+for (const key of ["gboot", "kitShop", "liquidityLock", "poolSwapper", "skillCup", "wildcards", "bootroom", "dropVault", "cupsVault", "bountyVault", "friendsAirdrop", "edgeSplitter"]) {
   const code = await client.getCode({ address: live[key] });
   if (!code || code === "0x") throw new Error(`FREEZE: no code at ${key} ${live[key]}`);
 }

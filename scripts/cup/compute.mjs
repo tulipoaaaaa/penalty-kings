@@ -1,32 +1,66 @@
 // Pure weekly computation (no network): $GBOOT drops and the Golden Boot race from on-chain events.
 // Inputs are decoded events; scripts/cup/weekly.mjs fetches them, tests feed synthetic ones.
+// Tokenomics v2: Bootroom boosts (race points × boostBps, drops × dropBps), the drop vault's halving
+// weekly cap (EmissionVault.capOf) and the EdgeSplitter 40/30/30 split (scripts/lib/tokenomics.mjs).
+import { VAULTS, capOfWei, splitEdgeWei, dropBpsOf, BOOTROOM, DROP_SHARE } from "../lib/tokenomics.mjs";
+
 export const DROP_MULT = [1, 1.5, 2, 3, 5, 8, 15];
 export const RACE_POINTS = [0, 0, 0, 0, 0, 1, 2];
 export const WEIGHT = { park: 1, pro: 100, champions: 1000 };
+/** Launch schedule per ball at ×1 (games/penalty-kings/economy.ts TIERS baseDrop). */
+export const SCHEDULE = { park: 0.93, pro: 93, champions: 930 };
+export const PRICE = { park: 10, pro: 1000, champions: 10000 };
 /** Wildcard draws count at the Park weight: a Wildcard costs about one Park ball (docs/ECONOMY.md). */
 export const WILDCARD_WEIGHT = 1;
 export const CURVE = [25, 18, 13, 10, 8, 7, 6, 5, 4, 4];
+const BPS = BOOTROOM.BPS;
+
+/** Drop base per stadium for a week: min(schedule, 2% × ball price ÷ TWAP ÷ 2.15). No TWAP → schedule. */
+export function baseFor(twap) {
+  if (!(twap > 0)) return { ...SCHEDULE };
+  return Object.fromEntries(Object.entries(SCHEDULE).map(([tier, s]) => [tier, Math.min(s, Math.floor(((DROP_SHARE * PRICE[tier]) / twap / 2.15) * 1e4) / 1e4)]));
+}
+
+/** The drop vault's budget for vault week `week`, minus what was already released that week (whole $GBOOT). */
+export function dropBudget(week, releasedWei = 0n) {
+  const cap = capOfWei(VAULTS.drops, week);
+  const left = cap > releasedWei ? cap - releasedWei : 0n;
+  return { capWei: cap, leftWei: left, left: Number(left / 10n ** 12n) / 1e6 };
+}
+
+/** EdgeSplitter.split on `rfWei`: 40% burned, 30% buy-and-burn $GBOOT, 30% to the Cup. */
+export const edgeSplit = rfWei => splitEdgeWei(BigInt(rfWei));
 
 /**
- * @param {{ settled: { tier: string, friendId: string, outcomeId: number }[], wildcards: { friendId: string, points: number }[],
- *           base: Record<string, number>, potRf?: number }} input
+ * @param {{ settled: { tier: string, friendId: string, outcomeId: number }[], wildcards?: { friendId: string, points: number }[],
+ *           base: Record<string, number>, potRf?: number, boosts?: Record<string, number>, budget?: number }} input
+ * boosts: Bootroom.boostBps per friendId (missing → ×1). budget: most $GBOOT the drop vault may pay this week;
+ * when the boosted drops exceed it, every Friend's drops are scaled down by the same factor.
  */
-export function computeWeek({ settled, wildcards = [], base, potRf = 0 }) {
+export function computeWeek({ settled, wildcards = [], base, potRf = 0, boosts = {}, budget = Infinity }) {
   const friends = new Map();
-  const row = id => { if (!friends.has(id)) friends.set(id, { friendId: id, balls: 0, drops: 0, race: 0, wildcardPoints: 0 }); return friends.get(id); };
+  const row = id => { if (!friends.has(id)) friends.set(id, { friendId: id, balls: 0, rawDrops: 0, rawRace: 0, wildcardPoints: 0 }); return friends.get(id); };
   for (const event of settled) {
     const index = event.outcomeId - 1;
     if (!(index >= 0 && index < 7) || !(event.tier in WEIGHT)) throw new Error(`bad settle event ${JSON.stringify(event)}`);
     const r = row(event.friendId);
-    r.balls += 1; r.drops += base[event.tier] * DROP_MULT[index]; r.race += RACE_POINTS[index] * WEIGHT[event.tier];
+    r.balls += 1; r.rawDrops += base[event.tier] * DROP_MULT[index]; r.rawRace += RACE_POINTS[index] * WEIGHT[event.tier];
   }
   for (const draw of wildcards) {
     if (![0, 1, 2].includes(draw.points)) throw new Error(`bad wildcard event ${JSON.stringify(draw)}`);
     const r = row(draw.friendId);
-    r.wildcardPoints += draw.points * WILDCARD_WEIGHT; r.race += draw.points * WILDCARD_WEIGHT;
+    r.wildcardPoints += draw.points * WILDCARD_WEIGHT; r.rawRace += draw.points * WILDCARD_WEIGHT;
   }
-  const rows = [...friends.values()].map(r => ({ ...r, drops: Math.floor(r.drops) }));
+  let rows = [...friends.values()].map(r => {
+    const boostBps = boosts[r.friendId] ?? BPS;
+    if (!(boostBps >= BPS && boostBps <= 2 * BPS)) throw new Error(`boost out of range for #${r.friendId}: ${boostBps}`);
+    const dropBps = dropBpsOf(boostBps);
+    return { ...r, boostBps, dropBps, drops: (r.rawDrops * dropBps) / BPS, race: (r.rawRace * boostBps) / BPS };
+  });
+  const wanted = rows.reduce((s, r) => s + r.drops, 0);
+  const scale = wanted > budget ? budget / wanted : 1;
+  rows = rows.map(r => ({ ...r, drops: Math.floor(r.drops * scale) }));
   const race = rows.filter(r => r.race > 0).sort((a, b) => b.race - a.race || Number(BigInt(a.friendId) - BigInt(b.friendId))).slice(0, 10);
-  const cup = race.map((r, index) => ({ rank: index + 1, friendId: r.friendId, points: r.race, shareBps: CURVE[index] * 100, rf: Math.floor((potRf * CURVE[index]) / 100) }));
-  return { rows: rows.sort((a, b) => b.drops - a.drops), cup };
+  const cup = race.map((r, index) => ({ rank: index + 1, friendId: r.friendId, points: r.race, boostBps: r.boostBps, shareBps: CURVE[index] * 100, rf: Math.floor((potRf * CURVE[index]) / 100) }));
+  return { rows: rows.sort((a, b) => b.drops - a.drops), cup, scale, wanted };
 }
