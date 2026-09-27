@@ -91,3 +91,9 @@ site/ (built)                   the public static preview: Park /, Pro /pro/, Ch
 - **Font:** Pixelify Sans, SIL Open Font License 1.1 (`games/penalty-kings/assets/PixelifySans-OFL.txt`). Digits and headings: a subset of Departure Mono by Helena Zhang, SIL Open Font License 1.1 (`games/penalty-kings/assets/DepartureMono-OFL.txt`).
 - **Audio:** UI sounds come from the FriendSDK sound kit (the SDK NOTICE applies). Crowd, kick, music and ambience are synthesised in code.
 - **Source:** Apache-2.0. The official FriendSDK v0.1.2 archive is vendored in `vendor/`, with its sha256 in `ADDRESSES.md`.
+
+## 6. Hosting notes (GitHub Pages)
+
+`npm run build:site` writes `site/`; the Pages workflow publishes it after `npm run check:no-dev`, which fails on dev-only code, the game's QA hooks, a broken internal link or a stadium without its own `runtime.js`.
+
+- **One `runtime.js` per stadium, by design.** The SDK build bakes that tier's ChanceGame (name, price, odds) into `runtime.js` (and `game.js`), so `site/`, `site/pro/` and `site/champions/` each carry a different ~590 KB `runtime.js`. One shared copy would sell every stadium at one price, so they are not deduplicated; `check:no-dev` checks each carries its own tier's price. Only the small files are byte-identical across tiers (fonts, `game.css`, `runtime.css`: about 88 KB per extra tier).

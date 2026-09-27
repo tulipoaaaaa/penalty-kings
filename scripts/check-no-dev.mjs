@@ -5,6 +5,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { brokenLinks } from "./lib/site-links.mjs";
 import { exposedQaHooks } from "./lib/qa-hooks.mjs";
+import { TIERS, tierDir } from "./lib/stadium-nav.mjs";
 
 const MARKERS = ["isPenaltyKingsDevWallet", "DEV mock wallet", "DEV SHOWROOM", "dev/showroom", "mock-wallet"];
 if (!existsSync("site")) { console.error("site/ missing: run npm run build:site first"); process.exit(1); }
@@ -23,5 +24,14 @@ const walk = dir => {
 walk("site");
 // BQ-P2 (/live/ 404): every internal link of every page resolves to a file in site/.
 for (const link of brokenLinks("site")) hits.push(`broken internal link: ${link}`);
+// BQ-P2 (runtime.js dedupe): each stadium page has its own runtime.js because the SDK build bakes that tier's
+// ChanceGame (name, price, odds) into it; one shared copy would sell every stadium at one price. So each
+// runtime.js must carry its own tier's price (docs/HANDOFF-RF.md, "Hosting notes").
+for (const [tier] of TIERS) for (const live of [false, true]) {
+  const runtime = join("site", tierDir(tier, live), "runtime.js");
+  if (!existsSync(runtime)) { if (!live) hits.push(`${runtime}: missing`); continue; }
+  const { price } = JSON.parse(readFileSync(`games/penalty-kings/tiers/${tier}.json`, "utf8"));
+  if (!readFileSync(runtime, "utf8").includes(`consumable:"Ball",price:"${price}"`)) hits.push(`${runtime}: does not carry the ${tier} ChanceGame (price ${price})`);
+}
 if (hits.length) { console.error(`NOT PUBLISHABLE: site/\n${hits.join("\n")}`); process.exit(1); }
 console.log("PASS check-no-dev: site/ contains no dev-only code or QA hooks, and every internal link resolves");
