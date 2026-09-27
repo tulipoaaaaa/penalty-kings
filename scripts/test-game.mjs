@@ -4,6 +4,9 @@
 // Usage: node scripts/test-game.mjs [--width 360] [--screenshot path]
 import assert from "node:assert/strict";
 import { testGame } from "@rarefriends/friendsdk/testing";
+import { installPriceFixture } from "./lib/price-fixture.mjs";
+
+installPriceFixture(); // answers the live RF/USD pool reads with recorded values (the SDK fixture rejects unknown reads)
 
 const args = process.argv.slice(2);
 const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
@@ -58,6 +61,21 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     await game.getByTestId("pot").waitFor();
     assert.equal(await game.getByTestId("pot").getAttribute("data-tag"), "SIMULATED", "pot banner is tagged SIMULATED in the preview");
+    // USD is converted with the live RF price (recorded pool reads in the test fixture), not a constant.
+    await game.getByTestId("pot-usd").filter({ hasText: /^≈ \$[\d,.]+$/ }).waitFor({ timeout: 10_000 });
+    console.log(`pot banner at ${width}px: ${(await game.getByTestId("pot").innerText()).replace(/\s+/g, " ")}`);
+    // Nothing in the pot banner is clipped or ellipsised.
+    const clipped = await game.getByTestId("pot").evaluate(pot => {
+      const box = pot.getBoundingClientRect(), bad = [];
+      if (pot.scrollWidth > pot.clientWidth + 1 || pot.scrollHeight > pot.clientHeight + 1) bad.push("banner overflows");
+      for (const child of pot.children) {
+        if (!child.offsetParent) continue;
+        const r = child.getBoundingClientRect();
+        if (child.scrollWidth > child.clientWidth + 1 || r.left < box.left - 1 || r.right > box.right + 1 || r.bottom > box.bottom + 1) bad.push(`clipped: ${child.textContent}`);
+      }
+      return bad;
+    });
+    assert.deepEqual(clipped, [], "pot banner is not truncated");
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");
     for (let kick = 1; kick <= 3; kick++) {
       await page.waitForTimeout(400);

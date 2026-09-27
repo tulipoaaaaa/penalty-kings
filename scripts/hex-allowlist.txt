@@ -2,3 +2,6 @@
 # RF/WETH Uniswap v4 pool id (rarefriends.com/docs/contracts)
 0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240
 0xd6a6a8b911e7a7eba8b5e5771a4ad17ed3fe3af785a1b7e16e0640e86acc78d0
+# WETH/USDG Uniswap v4 pool id (deepest WETH/USDG pool, docs/ADDRESSES.md) and its Initialize transaction
+0xfcfae8fa0bd6da961bcf5d990f27690932deac4f093e99bf3e871691c6586593
+0x36515a2d044af31b35d06b06fdb1ed0ca307117083a530d5331d1f6ded62ea43

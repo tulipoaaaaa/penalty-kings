@@ -109,18 +109,32 @@ test("ETHICS: the paid ball reveal is derived only from the settled outcome — 
   assert.doesNotMatch(stage, /Math\.random\(\)[^\n]*reveal\.rarity|reveal\.rarity\s*=/, "the shown rarity is never randomised or reassigned");
 });
 
-test("PRIZES: simulated figures are tagged, live figures come from reads and never go stale", () => {
+test("PRIZES: simulated amounts are tagged, USD uses the live price, failed or stale reads show a dash", () => {
   const now = Date.UTC(2026, 8, 28, 12);
-  const sim = potBanner({ kind: "simulated", potRF: 500000, topPrizeRF: 100, freeStakeRF: 2000 }, now);
-  assert.equal(sim.tag, "SIMULATED"); assert.match(sim.usd, /^≈ \$[\d,.]+ \(illustrative\)$/); assert.match(sim.text, /500,000 RF/);
-  const live = { kind: "live" as const, potRF: 1234, topPrizeRF: 100, freeStakeRF: 5000, usdPerRF: 0.0016, readAt: now - 5000 };
+  const price = { usdPerRf: 0.0016, fetchedAt: now - 12_000, status: "live" as const };
+  const failed = { usdPerRf: null, fetchedAt: now - 1000, status: "error" as const };
+  const sim = potBanner({ kind: "simulated", potRF: 500000, topPrizeRF: 100, freeStakeRF: 2000, price }, now);
+  assert.equal(sim.tag, "SIMULATED"); assert.equal(sim.usd, "≈ $800", "preview converts with the real price"); assert.match(sim.text, /500,000 RF/);
+  assert.equal(sim.priceNote, "live · 12s ago"); assert.doesNotMatch(sim.text, /illustrative/);
+  assert.equal(potBanner({ kind: "simulated", potRF: 500000, topPrizeRF: 100, freeStakeRF: 2000, price: failed }, now).usd, "—", "no price → dash, never a constant");
+  assert.equal(potBanner({ kind: "simulated", potRF: 500000, topPrizeRF: 100, freeStakeRF: 2000 }, now).usd, "—", "no price read yet → dash");
+  const live = { kind: "live" as const, potRF: 1234, topPrizeRF: 100, freeStakeRF: 5000, readAt: now - 5000, price };
   assert.match(prizeLine(live, "potRF", now).note, /updated 5s ago/);
-  assert.match(prizeLine(live, "potRF", now).usd, /^≈ \$/);
+  assert.equal(prizeLine(live, "potRF", now).usd, "≈ $1.97");
   assert.equal(prizeLine(live, "potRF", now + PRICE_MAX_AGE_MS).value, "—", "stale read shows a dash");
   assert.equal(prizeLine({ ...live, potRF: null }, "potRF", now).value, "—", "failed read shows a dash");
-  assert.equal(prizeLine({ ...live, usdPerRF: null }, "potRF", now).usd, "—");
-  for (const slide of jumbotronSlides({ kind: "simulated", potRF: 1, topPrizeRF: 1, freeStakeRF: 1 }, now, { rank: 3, lastBigPull: null })) assert.match(slide, /SIMULATED|ODDS/);
+  assert.equal(prizeLine({ ...live, price: failed }, "potRF", now).usd, "—");
+  const slides = jumbotronSlides({ kind: "simulated", potRF: 1000, topPrizeRF: 100, freeStakeRF: 1, price }, now, { rank: 3, lastBigPull: null });
+  for (const slide of slides) assert.match(slide, /SIMULATED|ODDS/);
+  assert.match(slides[0], /≈ \$1\.60/); assert.match(slides[1], /≈ \$0\.16/);
   assert.equal(new Date(cupEndsAt(now)).getUTCDay(), 1);
+});
+
+test("PRICE: no fixed or illustrative RF/USD price remains in the game sources", () => {
+  for (const file of ["index.tsx", "ui.tsx", "game/prizes.ts", "game/price.ts"]) {
+    const text = readFileSync(new URL(`../../games/penalty-kings/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(text, /ILLUSTRATIVE_USD_PER_RF|illustrative/i, file);
+  }
 });
 
 test("PRIZES: no UI source hard-codes a prize figure or promises a win", () => {

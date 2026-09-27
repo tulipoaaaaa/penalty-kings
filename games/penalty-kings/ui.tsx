@@ -10,6 +10,7 @@ import { RARITY_NAMES } from "./gfx/stage.js";
 import { MODES, isUnlocked, levelFromXp, totalStars, STADIUM_STARS, LADDER, type Progress, type ModeId } from "./game/progress.js";
 import { describe, type Level } from "./game/objectives.js";
 import { prizeLine, type PrizeSource } from "./game/prizes.js";
+import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPrice } from "./game/price.js";
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 
 /** A rotating ball (8-frame spin cycle) on a small canvas. */
@@ -53,13 +54,24 @@ export function OddsTable({ definition, tier, tag }: { definition: GameDefinitio
   </>;
 }
 
-/** Per-stadium prices and top prizes (true figures from the tier data; USD via the prize source). */
+/** Per-stadium prices and top prizes (true figures from the tier data; USD from the live RF price). */
 export function StadiumPrices({ source, now }: { source: PrizeSource; now: number }) {
-  return <table className="pk-odds"><thead><tr><th>Stadium</th><th>Ball price</th><th>Top prize (10×)</th></tr></thead>
-    <tbody>{TIERS.map(tier => {
-      const line = prizeLine(source.kind === "simulated" ? { ...source, topPrizeRF: tier.priceRF * 10 } : { ...source, topPrizeRF: source.topPrizeRF === null ? null : tier.priceRF * 10 }, "topPrizeRF", now);
-      return <tr key={tier.id}><td>{tier.name}</td><td>{tier.priceRF.toLocaleString("en-US")} RF</td><td>{line.value} <small>{line.usd}</small></td></tr>;
-    })}</tbody></table>;
+  const price = source.price ?? NO_PRICE;
+  return <>
+    <table className="pk-odds"><thead><tr><th>Stadium</th><th>Ball price</th><th>Top prize (10×)</th></tr></thead>
+      <tbody>{TIERS.map(tier => {
+        const line = prizeLine(source.kind === "simulated" ? { ...source, topPrizeRF: tier.priceRF * 10 } : { ...source, topPrizeRF: source.topPrizeRF === null ? null : tier.priceRF * 10 }, "topPrizeRF", now);
+        return <tr key={tier.id}><td>{tier.name}</td><td>{tier.priceRF.toLocaleString("en-US")} RF <small>{usdForRf(tier.priceRF, price, now)}</small></td><td>{line.value} <small>{line.usd}</small></td></tr>;
+      })}</tbody></table>
+    <RfPriceLine price={price} now={now} />
+  </>;
+}
+
+/** "RF price: 1 RF ≈ $0.00155 · live · 12s ago", or a dash when the pool reads failed. */
+export function RfPriceLine({ price, now }: { price: RfPrice; now: number }) {
+  return <p className="pk-note" data-testid="rf-price" data-status={isShowable(price, now) ? "live" : "error"}>
+    RF price: {rfPriceText(price, now)}{isShowable(price, now) ? ` · ${priceAgeLabel(price, now)}` : ""} <small>(Uniswap v4 RF/WETH × WETH/USDG on Robinhood Chain)</small>
+  </p>;
 }
 
 export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (mode: ModeId) => void }) {

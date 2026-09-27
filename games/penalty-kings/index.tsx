@@ -25,6 +25,7 @@ import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type Dail
 import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
 import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
+import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
 import { MatchDirector, type KickFacts } from "./game/director.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
@@ -114,11 +115,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const assist = assistLevel(progress, tier.id);
   const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
   const rfNumber = (value: bigint) => Number(value / 10n ** 15n) / 1000;
+  const rfPrice = useRfPrice(); // live RF/USD (game/price.ts); "—" when the pool reads fail
 
   // Prize source: the SDK's (simulated) ledger + the simulated Cup ledger in preview; on-chain reads only when live.
   const prizeSource: PrizeSource = simulated
-    ? { kind: "simulated", potRF: cupRF, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : 0 }
-    : { kind: "live", potRF: null, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : null, usdPerRF: null, readAt: snapshot ? now : null };
+    ? { kind: "simulated", potRF: cupRF, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : 0, price: rfPrice }
+    : { kind: "live", potRF: null, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : null, readAt: snapshot ? now : null, price: rfPrice };
   const pot = potBanner(prizeSource, now);
   const raceTable = [...SIM_RACE.map((points, index) => ({ name: RIVALS[index], points, mine: false })), { name: "Your Friend", points: race, mine: true }].sort((a, b) => b.points - a.points);
   const raceRank = raceTable.findIndex(row => row.mine) + 1;
@@ -550,7 +552,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "match") {
         const top10 = raceTable[Math.min(9, raceTable.length - 1)].points, gap = Math.max(0, top10 - race + 1);
-        result.match = { rf: `${rf(current.earned.rf)} in balls won${tag}`, gboot: `+${formatNumber(current.earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(current.earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
+        result.match = { rf: `${rf(current.earned.rf)} (${usdForRf(rfNumber(current.earned.rf), rfPrice, Date.now())}) in balls won${tag}`, gboot: `+${formatNumber(current.earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(current.earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -685,7 +687,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
       <button type="button" className="pk-pot" data-testid="pot" data-tag={pot.tag} onClick={() => setMenu("odds")} title="Tap for the exact odds and the 90% average return">
-        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-extra">({pot.usd}) · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
+        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span><span className="pk-pot-extra">{pot.priceNote} · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
       </button>
 
       {screen === "play" && s && <>
@@ -773,7 +775,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "odds" && <>
         <p>Exact odds at {tier.name} (ball price {rf(definition.price)}{tag}):</p>
         <OddsTable definition={definition} tier={tier} tag={tag} />
-        <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD values are illustrative." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
+        <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD uses the live RF price (a dash if the read fails)." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
       </>}
 
       {menu === "locker" && <>

@@ -4,6 +4,9 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
+import { installPriceFixture } from "./lib/price-fixture.mjs";
+
+installPriceFixture(); // answers the live RF/USD pool reads with recorded values (the SDK fixture rejects unknown reads)
 
 const args = process.argv.slice(2);
 const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
