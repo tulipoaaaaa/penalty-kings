@@ -9,7 +9,7 @@
  */
 import { GOAL_HALF_WIDTH, GOAL_HEIGHT, WALL_DISTANCE, JUMP_HEIGHT, JUMP_TIME, type FreeKickSetup, type FlightSample, type Zone } from "@penalty-kings/engine";
 import { sprite, clamp01, ease } from "./core.js";
-import { GOAL, toScreen, CAM_FX, CAM_FY, PENALTY_CAMERA, type PitchCamera } from "./stadium.js";
+import { GOAL, toScreen, glyphText, glyphCols, CAM_FX, CAM_FY, PENALTY_CAMERA, type PitchCamera } from "./stadium.js";
 
 const FX = CAM_FX, FY = CAM_FY;
 /** Free-kick broadcast camera: 14 m behind the ball, 3.6 m up. */
@@ -228,8 +228,9 @@ export function drawTargets(c: CanvasRenderingContext2D, targets: ReadonlyArray<
     c.beginPath(); c.ellipse(centre.x, centre.y, rx + pulse, ry + pulse, 0, 0, Math.PI * 2); c.fill();
     c.strokeStyle = target.value === 5 ? "#ffd23f" : "#ffffff"; c.lineWidth = 2; c.stroke();
     c.beginPath(); c.ellipse(centre.x, centre.y, rx * 0.45, ry * 0.45, 0, 0, Math.PI * 2); c.stroke();
-    c.fillStyle = "#0b0d1a"; c.font = "bold 8px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(String(target.value * 100), centre.x, centre.y); c.textAlign = "left"; c.textBaseline = "alphabetic";
+    // B4: bitmap digits (GLYPHS), so 500 never reads as S00 and 200 never as 800.
+    const label = String(target.value * 100);
+    glyphText(c, label, Math.round(centre.x - glyphCols(label) / 2), Math.round(centre.y) - 2, 1, "#0b0d1a");
   }
 }
 export function drawCrossbarGlow(c: CanvasRenderingContext2D, time: number) {
@@ -243,7 +244,7 @@ export function drawClock(c: CanvasRenderingContext2D, x: number, y: number, lef
   c.strokeStyle = "#00000066"; c.lineWidth = 3; c.beginPath(); c.arc(x, y, 12, 0, Math.PI * 2); c.stroke();
   c.strokeStyle = urgent ? (Math.floor(time * 8) % 2 ? "#ff5a6e" : "#ffffff") : "#ccff00";
   c.beginPath(); c.arc(x, y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction); c.stroke();
-  c.fillStyle = "#f7f7f2"; c.font = "bold 8px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
-  c.fillText(String(Math.ceil(left)), x + 18, y - 10); c.textAlign = "left"; c.textBaseline = "alphabetic";
+  const count = String(Math.ceil(left)), cx = Math.round(x + 18 - glyphCols(count) / 2), cy = Math.round(y - 12);
+  glyphText(c, count, cx + 1, cy + 1, 1, "#0b0d1a"); glyphText(c, count, cx, cy, 1, "#f7f7f2");
   void ease;
 }

@@ -116,11 +116,19 @@ export function createCrowd() {
     notes.forEach((f, i) => osc("square", f, f, 0.14, 0.05, i * 0.07));
     osc("triangle", notes[3], notes[3], 0.45, 0.06, 0.28);
   };
+  /** A card-flip chime: one note per rarity step (a major pentatonic climb), brighter and longer for rarer balls. */
+  const rarityChime = (rarity: number) => {
+    const f = 440 * 2 ** ([0, 2, 4, 7, 9, 12, 16][Math.max(0, Math.min(6, rarity))] / 12);
+    osc("triangle", f, f, 0.12 + rarity * 0.04, 0.12); if (rarity >= 4) osc("sine", f * 2, f * 2, 0.2 + rarity * 0.05, 0.05, 0.03);
+  };
   /** Every Sfx name → its voice (BQ-X4: none is silent). */
   const voices: Record<Sfx, () => void> = {
     kick,
     perfect: () => { osc("sine", 120, 38, 0.28, 0.8, 0, null, 0.14); osc("square", 240, 80, 0.06, 0.07); hiss("highpass", 6000, 6000, 0.7, 0.012, 0.4); }, // a bassier, crisper layer on the kick
     whoosh: () => hiss("bandpass", 1200, 300, 1.2, 0.18, 0.18),
+    "pack-tear": () => { hiss("bandpass", 2500, 6000, 1.5, 0.22, 0.3); hiss("highpass", 5000, 5000, 0.7, 0.06, 0.2, 0.18); }, // a paper-foil rip
+    "rarity-0": () => rarityChime(0), "rarity-1": () => rarityChime(1), "rarity-2": () => rarityChime(2), "rarity-3": () => rarityChime(3),
+    "rarity-4": () => rarityChime(4), "rarity-5": () => rarityChime(5), "rarity-6": () => rarityChime(6),
     net: () => { hiss("bandpass", 5000, 2000, 0.7, 0.32, 0.22); osc("sine", 90, 70, 0.06, 0.5); }, // swish + the back-of-the-net thud
     "net-ripple": () => { hiss("bandpass", 3800, 1400, 0.8, 0.5, 0.1, 0.04); hiss("bandpass", 2600, 1200, 0.8, 0.35, 0.06, 0.2); },
     clang: () => { // modal post: inharmonic partials, higher ones die faster

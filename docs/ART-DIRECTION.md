@@ -123,3 +123,13 @@ sleep through it. A Mexican wave runs on streaks.
 
 **Pixelify Sans** (SIL Open Font License 1.1). It's bundled inside the game, because the sandbox
 CSP blocks remote fonts, and credited in the README.
+
+**Numbers (B4):** Pixelify's digits read as letters (5≈S, 2≈Z/8, 8≈B, 0≈O) and are not tabular. Digits and
+number punctuation (`0-9 + , - . % × −`) come from **Departure Mono** v1.500 by Helena Zhang (SIL Open Font
+License 1.1, `games/penalty-kings/assets/DepartureMono-OFL.txt`) through a `unicode-range` face on the same
+`PixelifySans` family, so letters stay Pixelify and every number changes without touching markup. Menu headings
+(h2/h3) use it too (`PKHead`), because Pixelify's bold C closes into O. The vendored file is a 1.6 KB subset
+(`departure-mono-pk-subset.woff2`: digits, number punctuation, A–Z; copyright and licence kept in its name table)
+of the official release `DepartureMono-1.500.zip` (woff2 sha256 `5b4fed1d…038cfb`). On the canvas, numbers are
+drawn with the bitmap digits of the 4×5 `GLYPHS` font (`gfx/stadium.ts`): scoreboard, streak, target values and
+the shot-clock countdown.

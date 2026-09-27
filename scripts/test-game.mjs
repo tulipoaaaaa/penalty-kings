@@ -83,6 +83,26 @@ await testGame("./games/penalty-kings", {
       return bad;
     });
     assert.deepEqual(clipped, [], "pot banner is not truncated");
+    // B4: digits resolve to the Departure Mono digit face (unicode-range on the PixelifySans family), not Pixelify's S-like 5s.
+    {
+      const fonts = await game.getByTestId("pot").evaluate(async node => {
+        const doc = node.ownerDocument, span = doc.createElement("span");
+        span.textContent = "20 RF · 500,000 · 31.5% · ×2"; span.style.cssText = "font-size:13px"; node.closest(".pk").appendChild(span);
+        await doc.fonts.load("13px PixelifySans", "0123456789"); await doc.fonts.load("700 13px PixelifySans", "0123456789"); await doc.fonts.ready;
+        const family = getComputedStyle(span).fontFamily; span.remove();
+        const digitFace = [...doc.fonts].find(face => face.family.replace(/"/g, "") === "PixelifySans" && /U\+30-39/i.test(face.unicodeRange));
+        const width = ch => { const c = doc.createElement("canvas").getContext("2d"); c.font = "20px PixelifySans"; return c.measureText(ch).width; };
+        return { family, checked: doc.fonts.check("13px PixelifySans", "0123456789") && doc.fonts.check("700 13px PixelifySans", "0123456789"),
+          digitFace: digitFace ? { range: digitFace.unicodeRange, status: digitFace.status } : null,
+          tabular: new Set([..."0123456789"].map(width)).size === 1, letterWidth: width("S") !== width("5") };
+      });
+      assert.match(fonts.family, /^PixelifySans\b/, `numeric span font-family: ${fonts.family}`);
+      assert.ok(fonts.digitFace && fonts.digitFace.status === "loaded", `the digit face is loaded: ${JSON.stringify(fonts.digitFace)}`);
+      assert.ok(fonts.checked, "document.fonts.check: every face needed to draw the digits is loaded");
+      assert.ok(fonts.tabular, "digits are tabular (Pixelify's 1 is narrower than its other digits: the override is not in use)");
+      assert.ok(fonts.letterWidth, "letters are not drawn by the monospaced digit face");
+      console.log(`digit font: ${fonts.digitFace.range} (${fonts.digitFace.status}), tabular`);
+    }
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");
     // BQ-P1-11: the commentator strip (Stage.drawCommentary, 22 logical px tall at canvas[data-commentary-top]) never sits under the pot banner.
     {

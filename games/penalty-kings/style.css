@@ -1,6 +1,15 @@
 /* Penalty Kings — pixel UI kit inside the SDK sandbox. Scales with the frame (container units). */
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* B4 legible numbers: Pixelify draws 5≈S, 2≈Z/8, 8≈B, 0≈O and has no tabular figures ("20 RF" read as "80 RF").
+   Digits and number punctuation (0-9 + , - . % × −) come from Departure Mono (SIL OFL 1.1, Helena Zhang, v1.500;
+   assets/DepartureMono-OFL.txt), a monospaced pixel face, so digits are tabular. These faces are declared AFTER the
+   Pixelify ones: the browser checks them first for their unicode-range, and letters stay Pixelify.
+   The file is a 1.6 KB subset (digits, number punctuation, A–Z for headings). */
+@font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
+@font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
+/* Headings: Pixelify's bold uppercase C closes into O ("OUPS", "SOOUTING 8OOK"), so headings use the same clear face. */
+@font-face { font-family: PKHead; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
 
 .pk {
   --pk-ink: #0b0d1a; --pk-panel: #151a33; --pk-line: #2a3160; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2; --pk-sky: #7fd3ff;
@@ -201,7 +210,7 @@
 /* Keep SDK menus above the runtime toolbar (it overlays the frame's bottom edge). */
 .pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
 
-@media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball, .pk-card { animation: none !important; } }
 
 /* ── Ball flow: shop, pack opening, bag, collection, carousel, market ─────────────────── */
 .pk-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
@@ -212,8 +221,23 @@
 .pk-packs button { min-height: 44px; min-width: 72px; }
 .pk-packs button[aria-checked="true"] { outline: 3px solid currentColor; font-weight: 700; }
 .pk-cost b { white-space: nowrap; }
-.pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 40cqh; overflow: auto; box-sizing: border-box;
-  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
+.pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 60cqh; overflow: hidden; box-sizing: border-box;
+  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: flex; flex-direction: column; gap: 0.8cqh; font-size: clamp(11px, 1.4cqw, 13px); z-index: 3; }
+/* B5 / BQ-X3: the odds + honesty strip is pinned; only the body (cards, Reveal all, summary) scrolls. */
+.pk-pack-strip { flex: none; display: grid; gap: 0.4cqh; justify-items: center; padding-bottom: 0.6cqh; border-bottom: 2px solid var(--pk-line); }
+.pk-pack-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; display: grid; gap: 0.8cqh; justify-items: center; }
+.pk-oddsline .pk-fullodds { min-height: 24px; padding: 0 4px; border: 0; background: none; box-shadow: none; color: var(--pk-sky); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+/* B5 / BQ-X2: while the Stage reveals (tear → flips → best reveal) the panel is a compact strip UNDER the reveal:
+   the Stage draws the ball at logical y 112 and its rarity banner down to y 186, so the strip starts at y 192
+   (resolved with the pitch geometry below) and stops above the toolbar band. Cards shrink to 44 px tiles. */
+.pk-pack[data-phase="stage"] { top: calc(var(--pk-pt) + 192 * var(--pk-s)); bottom: auto; width: min(60cqw, 640px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 192 * var(--pk-s) - 4px);
+  background: #0b0d1acc; padding: 4px 8px; gap: 4px; }
+.pk-pack[data-phase="stage"] .pk-pack-strip { gap: 2px; padding-bottom: 4px; }
+.pk-pack[data-phase="stage"] .pk-pack-body { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.pk-pack[data-phase="stage"] .pk-cards { gap: 4px; }
+.pk-pack[data-phase="stage"] .pk-card { width: 44px; height: 44px; min-height: 44px; aspect-ratio: auto; padding: 0; }
+.pk-pack[data-phase="stage"] .pk-card :is(strong, small) { display: none; }
+.pk-pack[data-phase="stage"] .pk-cardback { font-size: 1.6em; }
 .pk-honest { margin: 0; font-size: max(11px, 0.9em); color: var(--pk-sky); text-align: center; }
 .pk-oddsline { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; font-size: max(11px, 0.85em); color: var(--pk-muted); }
 .pk-oddsline b { color: var(--pk-paper); }
@@ -293,7 +317,7 @@
   background: repeating-linear-gradient(90deg, var(--pk-head) 0 16px, var(--pk-head2) 16px 32px); box-shadow: inset 0 -2px 0 var(--pk-accent); }
 .pk .rf-frame-menu-heading::before { content: ""; flex: none; width: 28px; height: 28px; border: 2px solid var(--pk-paper); box-shadow: 2px 2px 0 #000;
   background: var(--pk-ink) var(--pk-icon, var(--pk-i-ball)) center / 20px 20px no-repeat; image-rendering: pixelated; }
-.pk .rf-frame-menu-heading h2 { flex: 1; min-width: 0; margin: 0; font: 700 17px/1.1 PixelifySans, ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+.pk .rf-frame-menu-heading h2 { flex: 1; min-width: 0; margin: 0; font: 400 17px/1.1 PKHead, PixelifySans, ui-monospace, monospace; letter-spacing: 0.02em; text-transform: uppercase;
   color: var(--pk-paper); text-shadow: 2px 2px 0 #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk .rf-frame-menu-heading button { flex: none; width: 36px; height: 36px; min-height: 0; padding: 0 0 2px; border: 2px solid var(--pk-paper); border-radius: 0; background: var(--pk-ink);
   color: var(--pk-paper); font: 700 20px/1 PixelifySans, ui-monospace, monospace; box-shadow: 2px 2px 0 #000; }
@@ -321,7 +345,7 @@
 .pk .rf-frame-menu-body::-webkit-scrollbar-thumb { background: var(--pk-line); border: 2px solid var(--pk-ink); }
 .pk .rf-frame-menu-body p { margin: 0 0 8px; }
 .pk .rf-frame-menu-body b { color: var(--pk-volt); }
-.pk .rf-frame-menu-body h3 { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font: 700 14px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 0.05em; text-transform: uppercase; }
+.pk .rf-frame-menu-body h3 { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font: 400 14px/1.2 PKHead, PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 0.02em; text-transform: uppercase; }
 .pk .rf-frame-menu-body h3::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--pk-accent); box-shadow: 2px 2px 0 #000; }
 .pk .rf-frame-menu-body > h3:first-child, .pk .rf-frame-menu-body > * > h3:first-child { margin-top: 0; }
 .pk .rf-frame-menu-body h3 small { font-size: 12px; font-weight: 400; color: var(--pk-muted); text-transform: none; letter-spacing: 0; opacity: 1; }
@@ -619,6 +643,11 @@
   .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
+  /* B5: the reveal strip runs from the left edge to the actions bar (the right letterbox), under the reveal banner;
+     the odds keep the chip and the % (the names stay for screen readers; "Full odds" is one tap). */
+  .pk-pack[data-phase="stage"] { left: 6px; transform: none; width: calc(100cqw - 24px - clamp(88px, calc(var(--pk-pl) - 12px), 140px)); font-size: 11px; padding: 3px 6px; }
+  .pk-pack[data-phase="stage"] .pk-oname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-pack[data-phase="stage"] .pk-oddsline { gap: 0 8px; }
   .pk-cards { gap: 6px; }
   .pk-card { width: clamp(52px, 9cqw, 72px); }
   .pk-carousel { top: auto; bottom: calc(var(--pk-tb) + 4px); width: min(calc(100cqw - 12px - clamp(88px, calc(var(--pk-pl) - 12px), 140px) - 12px), 460px);
@@ -665,6 +694,10 @@
   .pk-banner strong { font-size: clamp(24px, 9cqw, 44px); }
   .pk-reveal { top: calc(var(--pk-pt) + 20px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 28px); padding: 10px 12px; font-size: 13px; }
   .pk-pack { top: 60px; bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - 66px); padding: 10px; gap: 8px; font-size: 13px; }
+  /* B5: while the Stage reveals, the strip sits under the pitch and the actions row (the pitch stays whole). */
+  .pk-pack[data-phase="stage"] { top: calc(var(--pk-pt) + var(--pk-ph) + 60px); width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - var(--pk-ph) - 64px); font-size: 11px; padding: 4px 6px; }
+  .pk-pack[data-phase="stage"] .pk-oname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-pack[data-phase="stage"] .pk-oddsline { gap: 0 8px; }
   .pk-cards { gap: 6px; }
   .pk-card { width: clamp(56px, 20cqw, 80px); }
   .pk-carousel { top: calc(var(--pk-pt) + 12px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 20px); overflow: auto; padding: 8px 10px; gap: 6px; font-size: 13px; }

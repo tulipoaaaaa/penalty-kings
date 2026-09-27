@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveShot, keeperById, type ShotInput } from "@penalty-kings/engine";
 import { commitShot, keeperSeed, simulatedBeacon, type RandomnessSource, type RollKind, type Hex32 } from "../../games/penalty-kings/game/randomness.ts";
-import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, waitCue, WAIT_GRACE_MS } from "../../games/penalty-kings/game/suspense.ts";
+import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, waitCue, WAIT_GRACE_MS, PACK_TEAR_MS, PACK_BUDGET_MS, REVEAL_LANDED_MS } from "../../games/penalty-kings/game/suspense.ts";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.ts";
 
 const shot: ShotInput = { aimX: 0.72, aimY: 0.55, power: 0.66, curl: 0.2 };
@@ -115,10 +115,20 @@ test("pack flow at 0 / 5 / 15 s: sealed until the (simulated) roll lands, then l
     assert.equal(best.fullScreen, true); assert.ok(best.beats.every(beat => beat.shows === 6));
   }
   t.mock.timers.reset();
-  // A longer wait only lengthens the ceremony a little; the order and what shows never change.
+  // A longer wait only lengthens the build a little; the order and what shows never change.
   const quick = packRevealSequence(settled, 0), slow = packRevealSequence(settled, 15000);
   assert.deepEqual(quick.steps.map(s => [s.index, s.shows]), slow.steps.map(s => [s.index, s.shows]));
-  assert.ok(slow.total > quick.total && slow.total < 6000);
+  assert.ok(slow.steps[4].at > quick.steps[4].at && slow.total <= PACK_BUDGET_MS && quick.total <= PACK_BUDGET_MS);
+  // B5: a fixed tear first (the same for every outcome), and the whole ceremony fits in 6 s even for a 10-ball pack:
+  // the best ball's Stage reveal always lands (banner in) before the summary replaces the cards.
+  for (const pack of [[0], [6], [0, 0], [5, 0], settled, [0, 1, 2, 3, 4, 5, 6, 0, 1, 2], Array(10).fill(0)]) for (const wait of [0, 15000]) {
+    const plan = packRevealSequence(pack, wait), best = plan.steps[plan.steps.length - 1];
+    assert.equal(plan.tearMs, PACK_TEAR_MS);
+    assert.ok(plan.steps.every(step => step.at >= PACK_TEAR_MS), "no card flips before the pack has torn");
+    assert.ok(plan.total <= PACK_BUDGET_MS, `${pack.length} balls: ${plan.total} ms`);
+    assert.ok(best.at + REVEAL_LANDED_MS <= plan.summaryAt, `${pack.length} balls: the best reveal lands before the summary`);
+  }
+  assert.equal(packRevealSequence([0, 0, 6]).tearMs, packRevealSequence([0, 0, 0]).tearMs, "the tear never depends on the outcome");
   // One ball: the sting, then the ball. Invalid rarities are refused (never invent an outcome).
   const one = packRevealSequence([2]);
   assert.equal(one.steps.length, 1); assert.equal(one.steps[0].best, true); assert.ok(one.stingAt !== null && one.stingAt < one.steps[0].at);

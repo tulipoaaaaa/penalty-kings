@@ -12,6 +12,8 @@ export const SFX_NAMES = [
   "heartbeat", "hush", "whistle", "roar", "roar-swell", "groan", "ooh", "so-close", "chant", "beep", "honk",
   // reveals and streak stingers
   "reveal", "reveal-top", "stinger-3", "stinger-5", "stinger-10",
+  // the pack reveal (B5): the tear, and one chime per TRUE rarity on a card flip (higher rarity, higher pitch)
+  "pack-tear", "rarity-0", "rarity-1", "rarity-2", "rarity-3", "rarity-4", "rarity-5", "rarity-6",
   // the 12 keepers' signature voices (gfx/keepers.ts KEEPER_DESIGNS[..].sfx)
   "squeak", "chitter", "yawn", "blub", "mime", "disco", "hiss", "boo", "rumble",
 ] as const;

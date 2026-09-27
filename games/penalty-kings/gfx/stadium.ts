@@ -80,20 +80,28 @@ function layer(key: string, paint: (c: CanvasRenderingContext2D) => void, width 
   return canvas;
 }
 
-// ── 4×5 pixel font for cached art (the tifo, the mosaic, the jumbotron, the crowd's banners and PK flags) ─
-const GLYPHS: Readonly<Record<string, string>> = {
+// ── 4×5 pixel font: cached art (the tifo, the mosaic, the jumbotron, the crowd's banners and PK flags) and, since
+// B4, every canvas number (scoreboard, streak, target values, shot clock). Rows top to bottom, 4 bits each.
+// The digits are drawn to never read as letters: 5 has a flat top and a hard corner (S is round), 2 has a flat base
+// and a curved neck (Z is a diagonal), 8 is two closed loops with a pinched waist (B has a flat spine), 0 is square (O is round).
+export const GLYPHS: Readonly<Record<string, string>> = {
   A: "0110100111111001 1001", B: "1110100111101001 1110", C: "0111100010001000 0111", D: "1110100110011001 1110", E: "1111100011101000 1111",
-  F: "1111100011101000 1000", G: "0111100010111001 0111", H: "1001100111111001 1001", I: "1110010001000100 1110", K: "1001101011001010 1001",
-  L: "1000100010001000 1111", M: "1001111111111001 1001", N: "1001110110111001 1001", O: "0110100110011001 0110", P: "1110100111101000 1000",
-  R: "1110100111101010 1001", S: "0111100001100001 1110", T: "1111011001100110 0110", U: "1001100110011001 0110", V: "1001100110010110 0110",
-  W: "1001100111111111 1001", Y: "1001100101100110 0110", "!": "0100010001000000 0100", " ": "0000000000000000 0000",
+  F: "1111100011101000 1000", G: "0111100010111001 0111", H: "1001100111111001 1001", I: "1110010001000100 1110", J: "0001000100011001 0110",
+  K: "1001101011001010 1001", L: "1000100010001000 1111", M: "1001111111111001 1001", N: "1001110110111001 1001", O: "0110100110011001 0110",
+  P: "1110100111101000 1000", Q: "0110100110011011 0111", R: "1110100111101010 1001", S: "0111100001100001 1110", T: "1111011001100110 0110",
+  U: "1001100110011001 0110", V: "1001100110010110 0110", W: "1001100111111111 1001", X: "1001100101101001 1001", Y: "1001100101100110 0110",
+  Z: "1111001001001000 1111", "!": "0100010001000000 0100", " ": "0000000000000000 0000",
+  "0": "1111100110011001 1111", "1": "0010011000100010 0111", "2": "1110000101101000 1111", "3": "1110000101100001 1110", "4": "1001100111110001 0001",
+  "5": "1111100011100001 1110", "6": "0111100011101001 0110", "7": "1111000100100100 0100", "8": "0110100101101001 0110", "9": "0110100101110001 1110",
+  "/": "0001001000100100 1000", ".": "0000000000000000 0100", ",": "0000000000000100 1000", ":": "0000010000000100 0000", "%": "1001001001001001 0000",
+  "+": "0000010011100100 0000", "-": "0000000011100000 0000", "−": "0000000011100000 0000", "×": "0000100101100110 1001",
 };
 /** Width in font cells (4 per glyph + 1 gap). */
-export const glyphCols = (text: string) => text.length * 5 - 1;
+export const glyphCols = (text: string) => [...text].length * 5 - 1;
 export function glyphText(c: CanvasRenderingContext2D, text: string, x: number, y: number, px: number, colour: string) {
   c.fillStyle = colour;
   [...text].forEach((ch, i) => {
-    const bits = (GLYPHS[ch] ?? GLYPHS[" "]).replace(" ", "");
+    const bits = (GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()] ?? GLYPHS[" "]).replace(" ", "");
     for (let k = 0; k < 20; k++) if (bits[k] === "1") c.fillRect(x + (i * 5 + (k % 4)) * px, y + Math.floor(k / 4) * px, px, px);
   });
 }
