@@ -124,13 +124,15 @@ if (live.rewards) {
   rewards = { season: Number(season), ceilingWei: ceiling.toString(), sinkBurnedPrevWei: burnedPrev.toString(), set, budgetWei: seasonBudget.toString(), paidWei: paid.toString() };
 } else notes.push("No RewardsDistributor in deployments/live.json: no $GBOOT rewards budget to report.");
 
-const { rows, cup: cupRows, scale, wanted, seeding } = computeWeek({ settled: settledEvents, wildcards: wildcardEvents, base, potRf: Number(args["pot-rf"] ?? 0), perks, budget: budget.left });
+// Operator inputs, recorded in the report so a reader can check the payout table against them.
+const potRf = Number(args["pot-rf"] ?? 0);
+const { rows, cup: cupRows, scale, wanted, seeding } = computeWeek({ settled: settledEvents, wildcards: wildcardEvents, base, potRf, perks, budget: budget.left });
 const wallets = await Promise.all(rows.map(row => client.readContract({ address: GENERATIONS, abi: parseAbi(["function tokenBoundAccount(uint256) view returns (address)"]), functionName: "tokenBoundAccount", args: [BigInt(row.friendId)] })));
 rows.forEach((row, index) => { row.wallet = wallets[index]; });
 const cup = cupRows.map(row => ({ ...row, wallet: rows.find(r => r.friendId === row.friendId)?.wallet }));
 const split = edgeSplit(edgeWei);
 const output = {
-  dryRun: true, blocks: [from.toString(), to.toString()], base, twap: twap ?? null, vaultWeek: week,
+  dryRun: true, blocks: [from.toString(), to.toString()], base, twap: twap ?? null, potRf, inputs: { potRf: "operator input (--pot-rf)", twap: twap ? "operator input (--twap)" : "launch schedule" }, vaultWeek: week,
   dropBudget: { capWei: budget.capWei.toString(), releasedWei: releasedWei.toString(), left: budget.left, wanted, scale },
   edgeSplit: { totalWei: edgeWei.toString(), burnWei: split.burn.toString(), buybackWei: split.buyback.toString(), cupWei: split.cup.toString() },
   drops: rows, cup, seeding, rewards, wildcards: wildcardEvents.length, notes,
@@ -141,6 +143,7 @@ console.log(`Drop base: ${JSON.stringify(base)}${twap ? ` (TWAP ${twap} RF)` : "
 console.log(budgetLines(week, releasedWei).join("\n"));
 console.log(`Drops wanted ${fmt(wanted)} → paid ${fmt(rows.reduce((s, r) => s + r.drops, 0))}${scale < 1 ? ` (cap binds: every Friend ×${scale.toFixed(4)})` : ""}\n`);
 if (rewards) console.log(`Rewards season ${rewards.season}: ceiling ${fmt(formatEther(BigInt(rewards.ceilingWei)))}, previous season's sink burns ${fmt(formatEther(BigInt(rewards.sinkBurnedPrevWei)))}, budget ${rewards.set ? fmt(formatEther(BigInt(rewards.budgetWei))) : "not set yet (setSeasonBudget is permissionless)"}, paid ${fmt(formatEther(BigInt(rewards.paidWei)))} $GBOOT.\n`);
+console.log(`Cup pot (operator input --pot-rf): ${potRf.toLocaleString("en-US")} RF · TWAP (operator input --twap): ${twap ? `${twap} RF per $GBOOT` : "not given, launch schedule"}\n`);
 console.log("| Rank | Friend | Race pts | Perk tier (not a multiplier) | Cup share | RF |\n|---:|---|---:|---:|---:|---:|");
 for (const row of cup) console.log(`| ${row.rank} | #${row.friendId} | ${fmt(row.points)} | ${row.perkTier} | ${row.shareBps / 100}% | ${row.rf.toLocaleString("en-US")} |`);
 console.log(`\nNext week's Cup seeding (perk tier, then friendId; display and draw order only): ${seeding.slice(0, 20).map(r => `#${r.friendId} (T${r.perkTier})`).join(", ") || "—"}`);
