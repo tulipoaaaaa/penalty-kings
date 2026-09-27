@@ -22,6 +22,34 @@ const editSaveCode = (code, friendId, change) => {
   return `${prefix}.${next}.${crc32(`${friendId}:${next}`)}`;
 };
 
+// UI Bug Quest P2 (a fresh visit: 20 simulated RF, an empty Bag). `--p2-only` stops after this run.
+await testGame("./games/penalty-kings", {
+  width, timeout: 90_000,
+  check: async ({ page, game }) => {
+    await playInPortraitIfAsked(game);
+    page.on("pageerror", error => errors.push(String(error)));
+    const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable: " + JSON.stringify(window.__pkFlow?.()))) : setTimeout(poll, 50)); poll(); }));
+    const stats = () => game.locator("body").evaluate(() => window.__pkStats());
+    const quickKick = async () => { await waitShootable(); await game.getByTestId("quick").click(); await game.locator(".pk-banner").waitFor({ timeout: 10_000 }); const text = await game.locator(".pk-banner strong").textContent(); await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }); return text; };
+    const hold = async (key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
+    if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
+
+    // BQ-X7: the tutorial's net-cam replay of the best goal is never under the coaching toast. Kick 1 goes top right
+    // against the mouse (he never saves a top bin), so there is a goal to replay after kick 3.
+    await game.getByTestId("play").click();
+    await waitShootable();
+    await hold("ArrowRight", 250); await hold("ArrowUp", 600);
+    const tutorial = [await quickKick(), await quickKick()];
+    const replaysBefore = (await stats()).replays; console.log(`  tutorial: ${tutorial.join(", ")}`);
+    await waitShootable(); await game.getByTestId("quick").click();
+    await game.locator("body").evaluate((_, before) => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkStats().replays > before ? resolve(true) : Date.now() - start > 8000 ? reject(new Error("no net-cam replay")) : setTimeout(poll, 20)); poll(); }), replaysBefore);
+    assert.equal(await game.locator(".pk-toast").isVisible(), false, "no coaching toast over the net-cam replay");
+    await game.getByTestId("results").waitFor({ timeout: 15_000 });
+    ok("BQ-X7: the tutorial's net-cam replay plays with no coaching toast over it");
+  },
+});
+if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
+
 await testGame("./games/penalty-kings", {
   width, timeout: 90_000,
   check: async ({ page, game, friendId }) => {

@@ -1002,7 +1002,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const best = current.mode === "tutorial" && FIRST_SESSION[current.kicks.length - 1]?.replayBest ? bestGoal(tutorialShots.current) : null;
       if (best && stage.current) {
         const finished = current, epochAt = sessionEpoch.current;
-        setPhaseNow("idle");
+        setPhaseNow("idle"); setMessage(""); // BQ-X7: the coaching toast never sits over the replay
         replayDone.current = () => { replayDone.current = null; if (sessionEpoch.current === epochAt) endSession(finished); };
         stage.current.replay(best.outcome, best.curl, best.keeper);
         return;
