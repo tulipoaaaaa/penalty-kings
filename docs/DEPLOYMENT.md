@@ -1,5 +1,7 @@
 # Deployment status
 
+> **Founder decision (2026-09-27): no deployments from this repo.** Rare Friends deploys its own contracts for the pilot's two random rolls (SDK v0.2.1), and the pilot ships without $GBOOT. The "not deployed" rows below are final for this repo; see [STATUS.md](STATUS.md) and [GBOOT-UPGRADE.md](GBOOT-UPGRADE.md).
+
 | Component | Status |
 |---|---|
 | Simulated preview (GitHub Pages: `/`, `/pro/`, `/champions/`) | built by `.github/workflows/pages.yml` |
