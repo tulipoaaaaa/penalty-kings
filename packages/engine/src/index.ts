@@ -331,3 +331,4 @@ export function nextDifficultyLevel(level: number, history: readonly ShotRecord[
   const step = rate > TARGET_BAND[1] ? 1 : rate < TARGET_BAND[0] ? -1 : 0;
   return clamp(level + step, 0, DIFFICULTY_LADDER.length - 1);
 }
+export * from "./freekick.ts";
