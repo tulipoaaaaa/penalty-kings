@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { GameMenu } from "@rarefriends/friendsdk/frame";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
@@ -112,7 +112,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [race, setRace] = useState(0), [wildcards, setWildcards] = useState(0);
   /** A Wildcard spend waits for this confirmation (round 6 C11). */
   const [confirmWildcard, setConfirmWildcard] = useState(false);
-  useEffect(() => { setConfirmWildcard(false); }, [menu]);
+  /** BQ-P1-7: a Skill Cup entry or a Kit shop buy waits for its confirmation too (kept only on the menu it was asked from). */
+  const [confirmSpend, setConfirmSpend] = useState<{ kind: "skill" | "kit"; menu: Menu; item?: Cosmetic } | null>(null);
+  useEffect(() => { setConfirmWildcard(false); setConfirmSpend(current => (current && current.menu === menu ? current : null)); }, [menu]);
   const [lastBigPull, setLastBigPull] = useState<string | null>(null);
   const [owned, setOwned] = useState<Set<string>>(() => new Set(ALL_COSMETICS.filter(item => item.price === 0 && !item.name.includes("★")).map(item => item.id)));
   const [equipped, setEquipped] = useState<Record<Cosmetic["kind"], string>>({ boots: "boots-classic", kit: "kit-white", net: "net-white", celebration: "cele-knee-slide" });
@@ -181,8 +183,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const bagRef = useRef(bag); bagRef.current = bag;
   /** Every progress change goes through here so later reads in the same tick see it. */
   const updateProgress = (change: (p: Progress) => Progress) => { const next = change(progressRef.current); progressRef.current = next; setProgress(next); };
-  const live = useRef({ paused, menu, phase, session, screen, pack: Boolean(pack), carousel, busy });
-  live.current = { paused, menu, phase, session, screen, pack: Boolean(pack), carousel, busy };
+  /** The "Turn your phone sideways" card is up: the game is frozen exactly as when paused (BQ-P1-4). */
+  const [rotating, setRotating] = useState(false);
+  const halted = paused || rotating;
+  const live = useRef({ paused: halted, menu, phase, session, screen, pack: Boolean(pack), carousel, busy });
+  live.current = { paused: halted, menu, phase, session, screen, pack: Boolean(pack), carousel, busy };
   /** Kicks in flight (0 or 1) and the id of the current one: stale timers and events check it. */
   const inFlight = useRef(0), kickId = useRef(0);
   /** Time the game clocks were frozen (paused, hidden, menu, pack, carousel, walkout): shot clock and target timer use clockNow(). */
@@ -208,6 +213,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const setPhaseNow = (next: Phase) => { live.current = { ...live.current, phase: next }; setPhase(next); };
   const pointer = useRef<number | null>(null);
   const timeoutTimer = useRef(0);
+  /** XP the current session's kicks already added (goals, placement, Skill Zones): part of the Results total (BQ-P1-5). */
+  const sessionXp = useRef(0);
   /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
   const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
@@ -587,7 +594,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function beginSession(start: Session) {
     const scene = stage.current;
     if (inFlight.current) cancelKick();
-    sessionEpoch.current++; lineCursor.current = 0; afterBeat.current = null;
+    sessionEpoch.current++; lineCursor.current = 0; afterBeat.current = null; sessionXp.current = 0;
     targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     // The Match Director opens the session (replaces the old round intro). It keeps the shell's keeper in
     // paid, ranked and scripted modes, and may rotate it in free play (Pro/Champions between sessions).
@@ -620,7 +627,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
     if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
-    if (mode === "skill") { enterSkillCup(); return; }
+    if (mode === "skill") { setMenu("cups"); setConfirmSpend({ kind: "skill", menu: "cups" }); return; } // a paid entry: confirm first (BQ-P1-7)
     // Big Match (round 6 C12): kick straight away with the last-used ball (or the best one); "Change ball" opens the carousel.
     if (mode === "match") { const id = lastUsedBall(); if (id) kickWith(id); else setMenu("balls"); return; }
     beginSession(newSession(mode));
@@ -865,7 +872,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + (skillZone ? SKILL_ZONE_XP[skillZone] : XP.zoneBonus[record.zone]) : 0;
-    if (xp) addXp(xp);
+    if (xp) { addXp(xp); sessionXp.current += xp; } // the Results card counts it too (BQ-P1-5)
     if (skillZone) sub += ` · SKILL ZONE: ${SKILL_ZONE_LABEL[skillZone]} +${SKILL_ZONE_XP[skillZone]} XP, streak +2`;
     // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
@@ -997,9 +1004,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
         result.title = `Skill Cup entry: ${formatNumber(current.points)} pts${tag}`;
       }
-      result = { ...result, xp: result.xp + xp };
+      // The kicks' XP is already in p.xp: the Results total and the level-ups count from the session's start.
+      const kickXp = sessionXp.current; sessionXp.current = 0;
+      result = { ...result, xp: result.xp + kickXp + xp };
       updated.xp = p.xp + xp;
-      const before = levelFromXp(p.xp).level, after = levelFromXp(updated.xp).level;
+      const before = levelFromXp(p.xp - kickXp).level, after = levelFromXp(updated.xp).level;
       if (after > before) result.unlocked = [...(result.unlocked ?? []), `Level ${after}`];
       progressRef.current = updated;
       setProgress(updated);
@@ -1058,15 +1067,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         })();
         // The (simulated) beacon for this pack, requested after the plays are fixed. Instant: no timer at all.
         const beacon = expected > 0 ? packCommitment(plays.map(play => String(play.id)), { friendId: friendId.toString() }).then(commitment => source.next("pack", commitment, controller.signal)) : null;
-        await Promise.all([settle, beacon]);
+        try { await Promise.all([settle, beacon]); }
+        catch (error) { if (!isAbort(error)) throw error; await settle; } // the player left the sealed pack (BQ-P0-1): its balls still settle
       } finally {
         if (packRoll.current === controller) packRoll.current = null;
         stage.current?.endWait();
         if (version === epoch.current) setPack(current => (current?.sealed ? null : current));
       }
       if (version !== epoch.current) return;
+      const left = controller.signal.aborted; // left while sealed: the balls go to the Bag without the ceremony
       if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
-      if (!rarities.length) { live.current = { ...live.current, pack: false }; setMenu("balls"); return; }
+      if (!rarities.length) { live.current = { ...live.current, pack: false }; if (!left) setMenu("balls"); return; }
       let drops = 0, race = 0, value = 0n;
       for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight; value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
@@ -1075,6 +1086,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (best >= 5) { setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`); director().noteBigPull(); } // the Director only learns "a big pull happened" (intensity), never its value
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
       setBag(list => addPulls(list, rarities, tier.id, Date.now()));
+      if (left) { setMessage(`${rarities.length} ball${rarities.length === 1 ? "" : "s"} from your pack went to your Bag.`); return; }
       setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
       setMenu(null); setScreen("play"); stage.current?.say("pack");
       runPackSequence(rarities, performance.now() - started);
@@ -1091,6 +1103,18 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const later = (ms: number, run: () => void) => packTimers.current.push(window.setTimeout(() => { if (epoch.current === epochAt) run(); }, ms));
     for (const step of plan.steps) later(step.at, () => (step.best ? flipCard(step.index) : flipCard(step.index, true)));
     if (plan.stingAt !== null) later(plan.stingAt, () => { crowd.current?.sting(plan.stingLevel); stage.current?.crowd.react("tense"); });
+  }
+  /**
+   * BQ-P0-1: leave the pack (Change mode, back to the modes screen). Its reveal timers stop, a sealed pack's
+   * pending roll is aborted (its balls still settle into the Bag), and the dialog, the flow's pack flag and
+   * the Stage's wait/reveal are cleared, so every mode can start again.
+   */
+  function leavePack() {
+    clearPackTimers();
+    if (!live.current.pack && !packRoll.current) return;
+    packRoll.current?.abort(); packRoll.current = null;
+    stage.current?.cancel(); // ends the sealed pack's wait and any card reveal on the Stage
+    live.current = { ...live.current, pack: false }; setPack(null);
   }
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
@@ -1179,6 +1203,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // Paid skill contest: everyone kicks the same standard ball (no pay-to-win).
     if (stage.current) { stage.current.rarity = 7; stage.current.lucky = false; stage.current.season = "S1"; }
   }
+  /** Kit shop (simulated): buy a cosmetic after its confirmation; its $GBOOT is burned. */
+  function buyCosmetic(item: Cosmetic) {
+    if (owned.has(item.id) || gboot < item.price) return;
+    setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase");
+  }
+  /** BQ-P1-7: the Wildcard-style confirmation for any other $GBOOT spend (Skill Cup entry, Kit shop buy). */
+  function spendConfirm(kind: "skill" | "kit", what: ReactNode, price: number, onYes: () => void) {
+    return <div className="pk-confirm" role="alertdialog" aria-label={kind === "skill" ? "Confirm Skill Cup entry" : "Confirm purchase"} data-testid={`${kind}-confirm`}>
+      <p>{what} You have {formatNumber(gboot)} $GBOOT{tag}.</p>
+      <div className="pk-buyrow">
+        <button type="button" className="pk-primary" disabled={gboot < price || busy} data-testid={`${kind}-yes`} onClick={() => { setConfirmSpend(null); if (gboot >= price) onYes(); }}>Yes, spend {price} $GBOOT</button>
+        <button type="button" autoFocus onClick={() => setConfirmSpend(null)}>Cancel</button>
+      </div>
+    </div>;
+  }
+  const skillConfirm = () => spendConfirm("skill", <>Spend <b>{SKILL_CUP_ENTRY} $GBOOT</b>{tag} on a Skill Cup entry? Half ({SKILL_CUP_ENTRY / 2}) is burned and gone forever; half goes to the Skill Cup pot.</>, SKILL_CUP_ENTRY, enterSkillCup);
 
   // ── Input ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1210,12 +1250,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (!paused) return;
+    if (!halted) return;
     keys.current.clear(); keyAim.current.charging = false; swipe.current = null; pointer.current = null;
     // FD-3b: a pause while the keeper is deciding cancels that kick cleanly (the beacon request is aborted; nothing is scored).
     if (pendingRoll.current) abandonWait("Paused while the keeper was deciding: that kick was cancelled and nothing was scored. Take it again.");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused]);
+  }, [halted]);
   // Resize / rotate mid-swipe: the points were measured at the old scale, so drop the gesture (no shot).
   useEffect(() => {
     const drop = () => { swipe.current = null; pointer.current = null; };
@@ -1310,7 +1350,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
       {pack?.sealed && <p className="pk-wait" role="status" aria-live="polite" data-testid="pack-sealed">{pack.sealed.count} ball{pack.sealed.count === 1 ? "" : "s"} sealed: the rarity roll is on its way{simulated ? " (the preview's simulated draw)" : " (on-chain randomness)"}. Nothing is decided by waiting or tapping.</p>}
       {waitNote && !pack && <p className="pk-wait pk-wait-sr" role="status" aria-live="polite" data-testid="randomness-wait">{waitNote}</p>}
-      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={closeCarousel} />}
+      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={kickWith} onClose={closeCarousel} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
         {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}
@@ -1349,13 +1389,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>
     </div>}
 
-    <RotateOverlay />
+    <RotateOverlay onShownChange={setRotating} />
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
       {menu === "hub" && <div className="pk-hub">
         {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
-        <button type="button" onClick={() => { cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
+        <button type="button" onClick={() => { leavePack(); cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
         {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.</p>}
       </div>}
 
@@ -1405,7 +1445,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <h3>Skill Cup: 5 kicks vs THE FINAL WALL</h3>
         <p>Pot: {formatNumber(cupGboot)} $GBOOT{tag} · entry {SKILL_CUP_ENTRY} $GBOOT (50% burned, 50% to the pot). Scores use placement (corners ×3, top bins ×5).</p>
         {simulated ? <><ol className="pk-table">{skillTable.slice(0, 5).map((row, index) => <li key={row.id} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.score)}</b></li>)}</ol>
-          <button type="button" className="pk-primary" disabled={gboot < SKILL_CUP_ENTRY || Boolean(s && phase !== "idle")} onClick={enterSkillCup}>Enter · {SKILL_CUP_ENTRY} $GBOOT{tag}</button>
+          {confirmSpend?.kind === "skill" && confirmSpend.menu === "cups" ? skillConfirm()
+            : <button type="button" className="pk-primary" disabled={gboot < SKILL_CUP_ENTRY || Boolean(s && phase !== "idle")} onClick={() => setConfirmSpend({ kind: "skill", menu: "cups" })} data-testid="skill-enter">Enter · {SKILL_CUP_ENTRY} $GBOOT{tag}</button>}
           <p className="pk-note">SIMULATED locally. Live entries are replayed by a referee server: your kicks are committed before the keeper's dive exists, and every kick is re-simulated.</p></>
           : <p className="pk-note">Live Skill Cup entries are made in the Clubhouse (link above the game).</p>}
       </>}
@@ -1416,11 +1457,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         {(["boots", "kit", "net", "celebration"] as const).map(kind => <div key={kind} className="pk-shopgroup"><h3>{kind === "kit" ? "Kits (halo colour)" : kind === "net" ? "Net colours" : kind === "celebration" ? "Celebrations (try on: plays on your next goal)" : "Boots"}</h3>
           {ALL_COSMETICS.filter(item => item.kind === kind).map(item => {
             const has = owned.has(item.id), on = equipped[kind] === item.id, starOnly = item.name.includes("★");
-            return <button key={item.id} type="button" aria-pressed={on} disabled={starOnly ? !has : simulated ? !has && gboot < item.price : !has} onClick={() => {
-              if (!has && simulated && !starOnly) { setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase"); }
+            // BQ-P1-7: an item you don't own is a free try-on (shown for this session, never owned); buying is its own confirmed step.
+            const tryOn = !has && simulated && !starOnly;
+            return <Fragment key={item.id}><button type="button" aria-pressed={on} disabled={tryOn ? false : !has} onClick={() => {
               setEquipped(value => ({ ...value, [kind]: item.id }));
               if (kind === "celebration") stage.current?.startCelebration(celebrationOf(item.id) as CelebrationId);
-            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : starOnly ? "earn with stars" : simulated ? `${item.price} $GBOOT` : "unlock in Clubhouse"}</button>;
+            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : starOnly ? "earn with stars" : simulated ? `${on ? "trying on" : "try on"} · ${item.price} $GBOOT` : "unlock in Clubhouse"}</button>
+              {tryOn && on && (confirmSpend?.kind === "kit" && confirmSpend.item?.id === item.id
+                ? spendConfirm("kit", <>Buy <b>{item.name}</b> for <b>{item.price} $GBOOT</b>{tag}? The $GBOOT is burned.</>, item.price, () => buyCosmetic(item))
+                : <button type="button" className="pk-primary" disabled={gboot < item.price || busy} onClick={() => setConfirmSpend({ kind: "kit", menu: "shop", item })} data-testid="kit-buy">Buy for {item.price} $GBOOT{tag}</button>)}
+            </Fragment>;
           })}</div>)}
       </>}
 
@@ -1459,9 +1505,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </div>
       </div>}
 
-      {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
-        onAgain={() => { const last = session; setMenu(null); if (!last) { setScreen("modes"); return; }
-          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "skill") enterSkillCup(); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+      {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
+        onAgain={() => { const last = session;
+          if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
+          setMenu(null); if (!last) { setScreen("modes"); return; }
+          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
   </section>;
 

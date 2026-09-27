@@ -93,6 +93,44 @@ await testGame("./games/penalty-kings", {
     assert.equal(await kicks(), 0);
     ok("first matches after the tutorial: shot clock off");
 
+    // 5a2. BQ-P1-5: Results "XP earned" includes every kick's XP (goals, placement, Skill Zones), and a level
+    //      reached mid-session shows under "Unlocked". Start 1 XP short of level 3 (save code), kick 5 at a corner.
+    const hudXp = async () => {
+      const [, level, into] = (await game.locator(".pk-hud-left .pk-stat").textContent()).match(/LV\s*(\d+)\s*·\s*(\d+)\//);
+      return 100 * Number(level) * (Number(level) - 1) / 2 + Number(into); // levelFromXp: 100, 200, 300 … per level
+    };
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Settings", exact: true }).click();
+    await game.getByTestId("save-code-in").fill(editSaveCode(await game.getByTestId("save-code-out").inputValue(), friendId, { xp: 299 }));
+    await game.getByTestId("save-code-restore").click();
+    await game.getByTestId("save-code-note").filter({ hasText: /restored/ }).waitFor();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await waitShootable();
+    const xpBefore = await hudXp();
+    assert.equal(xpBefore, 299, "1 XP short of level 3");
+    let goals5a2 = 0;
+    for (let kick = 0; kick < 5; kick++) {
+      await waitShootable();
+      if (kick === 0) { // aim high to the right (kept between kicks): 0.5 → ~0.8 across, ~0.85 up
+        await page.keyboard.down("ArrowRight"); await page.waitForTimeout(250); await page.keyboard.up("ArrowRight");
+        await page.keyboard.down("ArrowUp"); await page.waitForTimeout(600); await page.keyboard.up("ArrowUp");
+      }
+      await game.getByTestId("quick").click();
+      await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+      if (/GOAL/.test(await game.locator(".pk-banner strong").textContent())) goals5a2++;
+      await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+    }
+    await game.getByTestId("results").waitFor({ timeout: 10_000 });
+    const resultsText = await game.getByTestId("results").textContent();
+    const resultsXp = Number(resultsText.match(/\+(\d+)\s*XP earned/)?.[1] ?? 0), xpAfter = await hudXp();
+    console.log(`  ${goals5a2} goals · HUD XP ${xpBefore} → ${xpAfter} · Results +${resultsXp}`);
+    assert.ok(goals5a2 > 0, "at least one goal (needed for kick XP)");
+    assert.equal(resultsXp, xpAfter - xpBefore, "Results XP equals the HUD's XP gain over the session");
+    assert.match(resultsText, /Unlocked:\s*Level 3/, "the mid-session level-up shows under Unlocked");
+    ok("BQ-P1-5: Results XP == HUD XP gain (kick XP included); mid-session level-up listed");
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await waitShootable();
+
     // Restore a save code with 3 matches played after the tutorial, so the clock is on from here.
     await game.getByTestId("menu").click();
     await game.getByRole("button", { name: "Settings", exact: true }).click();
@@ -125,6 +163,27 @@ await testGame("./games/penalty-kings", {
     assert.ok(Date.now() - lostAt >= 1300, `pause before the next kick (${Date.now() - lostAt} ms)`);
     assert.equal(await kicks(), 1, "the lost kick counts");
     ok("shot clock out: 'Time up — kick lost', a short pause, then the next kick");
+
+    // 5d. BQ-P1-4: "Turn your phone sideways" freezes the shot clock like a pause. Turn to portrait mid-clock
+    //     (the card stays up, not dismissed) for 6 s, then back: no kick lost, no "Time up".
+    //     (The 360 px run chose "Play in portrait anyway" for the session, so the card cannot come back there.)
+    if (width > 700) {
+      await waitShootable();
+      await game.getByTestId("shot-clock").waitFor({ state: "visible", timeout: 2000 });
+      const landscape = page.viewportSize(), before5d = await kicks();
+      await page.setViewportSize({ width: 400, height: 820 });
+      await game.getByTestId("rotate").waitFor({ state: "visible", timeout: 3000 });
+      assert.equal((await flow()).shootable, false, "not shootable behind the rotate card");
+      await page.waitForTimeout(6000);
+      assert.equal(await game.locator(".pk-banner").count(), 0, "no Time up behind the rotate card");
+      await page.setViewportSize(landscape);
+      await game.getByTestId("rotate").waitFor({ state: "hidden", timeout: 3000 });
+      await waitShootable();
+      await page.waitForTimeout(700);
+      assert.equal(await game.locator(".pk-banner").count(), 0, "no Time up after turning back");
+      assert.equal(await kicks(), before5d, "the kick counter did not change");
+      ok("BQ-P1-4: rotate card up for 6 s during a live shot clock: no timeout, no kick lost");
+    } else console.log("  (BQ-P1-4 rotate-card clock check runs at 960 px)");
 
     // 6. Swipe starting off-canvas (above the pitch, in the HUD band) and dragged over the ball: no shot.
     await waitShootable();
@@ -212,6 +271,9 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByText("2 balls bought.").waitFor();
+    // The SDK test fixture pins every preview roll to 1500 (a Scuffed Ball, 0 RF). Let the first roll of this pack
+    // land on 5000 (a Match Ball, 10 RF) so the Bag holds a redeemable ball for 12b; the rest stay pinned.
+    await page.evaluate(() => { const pinned = crypto.getRandomValues.bind(crypto); let once = true; crypto.getRandomValues = array => (once && array instanceof Uint32Array && array.length === 1 ? (once = false, array[0] = 5000, array) : pinned(array)); });
     await setDelay(3000); // FD-3b: the pack stays sealed while its (simulated) roll is on the way
     await game.getByTestId("open-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
@@ -225,11 +287,32 @@ await testGame("./games/penalty-kings", {
     assert.equal(during.pack, true); assert.equal(during.shootable, false, "not shootable while the pack is open");
     await page.keyboard.down(" "); await page.keyboard.up(" ");
     await noBanner(500);
-    await game.getByTestId("reveal-all").click();
-    await game.getByTestId("to-bag").click();
     ok("no kick while a pack is revealing (keyboard included)");
 
+    // 11b. BQ-P0-1: leave the pack mid-reveal (Menu → Change mode). The pack closes (no soft-lock), and both
+    //      Penalties and Big Match start afterwards.
+    assert.equal(await game.getByTestId("to-bag").count(), 0, "still mid-reveal");
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Change mode", exact: true }).click();
+    await game.getByTestId("mode-penalties").waitFor({ timeout: 3000 });
+    await page.waitForTimeout(2500); // past the reveal sequence's timers
+    const left = await flow();
+    assert.equal(left.pack, false, `pack cleared on Change mode: ${JSON.stringify(left)}`);
+    assert.equal(left.stage, false, "no Stage reveal left running");
+    assert.equal(await game.getByTestId("pack").count(), 0, "the pack dialog is gone");
+    await game.getByTestId("mode-penalties").click();
+    await waitShootable();
+    assert.equal((await flow()).match, false, "Penalties started after leaving the pack");
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Change mode", exact: true }).click();
+    await game.getByTestId("mode-match").click();
+    await waitShootable();
+    assert.equal((await flow()).match, true, "Big Match started after leaving the pack");
+    ok("BQ-P0-1: leaving a pack mid-reveal (Change mode) clears it; Penalties and Big Match start");
+
     // 12. Redeem the ball being aimed with → the aim is cancelled (cannot kick a ball you no longer hold).
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "My Bag", exact: true }).click();
     const cards = game.getByTestId("ball");
     await cards.first().getByTestId("shoot-ball").click();
     await waitShootable();
@@ -240,6 +323,34 @@ await testGame("./games/penalty-kings", {
     assert.equal((await flow()).shootable, false, "menu open: not shootable");
     ok("Big Match aim with menu open is not shootable");
 
+    // 12b. BQ-P1-6: redeem the SELECTED ball, then "Kick with this ball" in the carousel kicks with the ball it
+    //      shows (it used to pass the cleared selection, null, and open the Ball shop instead). Step 11's pack
+    //      holds one Match Ball (redeemable) and one Scuffed Ball (0 RF: no Redeem).
+    await game.getByRole("button", { name: "My Bag", exact: true }).click();
+    const redeemableCard = cards.filter({ has: game.locator("[data-testid=redeem-ball]:not([disabled])") }).first();
+    assert.ok(await cards.count() >= 2, "two balls in the Bag");
+    assert.equal(await redeemableCard.count(), 1, "a redeemable ball in the Bag");
+    {
+      await redeemableCard.getByTestId("shoot-ball").click(); // select it: the Big Match aims with it
+      await waitShootable();
+      await game.getByTestId("menu").click();
+      await game.getByRole("button", { name: "My Bag", exact: true }).click();
+      const ballsBefore = await cards.count();
+      await game.locator("[data-testid=ball][data-selected=true] [data-testid=redeem-ball]").click();
+      await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+      await game.getByText(/^Redeemed a /).first().waitFor({ timeout: 10_000 });
+      assert.equal(await cards.count(), ballsBefore - 1, "the redeemed ball left the Bag");
+      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("change-ball").click();
+      await game.getByTestId("carousel").waitFor({ timeout: 3000 });
+      await game.getByTestId("kick-with-ball").click();
+      await page.waitForTimeout(300);
+      assert.equal(await game.getByTestId("buy-pack").count(), 0, "the Ball shop did not open");
+      await waitShootable();
+      assert.equal((await flow()).match, true, "Big Match aims with the ball the carousel showed");
+      ok("BQ-P1-6: redeem the selected ball → carousel 'Kick with this ball' kicks with the shown ball");
+    }
+
     // 13. Speed (round 6 B3): penalties go release → result ≤ 1.2 s and result → next kick ready ≤ 1.5 s.
     // Instant randomness (the judged default): the waited kick of 8c is excluded, every other one must meet the targets.
     const timing = (await flow()).timing.filter(entry => entry.kind === "penalty" && entry.wait < 500);
@@ -247,6 +358,77 @@ await testGame("./games/penalty-kings", {
     assert.ok(timing.length >= 4, "enough penalty kicks timed");
     for (const entry of timing) { assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`); }
     ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after");
+
+    // 14. BQ-P1-7: no $GBOOT is spent without a confirmation: Kit shop "try on" is a free preview (buying is a
+    //     separate, confirmed step), and the Skill Cup entry (Cups) and its Results "Play again" both ask first.
+    const menuItem = name => game.getByRole("button", { name, exact: true });
+    const kitBalance = async () => { // the Kit shop's "Balance: N" line (simulated $GBOOT)
+      await menuItem("Kit shop").click();
+      const value = Number((await game.locator("body").textContent()).match(/Balance:\s*([\d,.]+)/)[1].replace(/,/g, ""));
+      await game.getByRole("button", { name: "Close" }).first().click();
+      return value;
+    };
+    const chip = () => game.getByTestId("mode-chip").textContent();
+    const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 0.011, `${message}: ${actual} vs ${expected}`); // 2-decimal display
+    await game.getByTestId("menu").click();
+    const g0 = await kitBalance();
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    const volt = game.getByRole("button", { name: /^Volt net/ });
+    await volt.click(); // try on
+    assert.equal(await volt.getAttribute("aria-pressed"), "true", "the tried-on net shows");
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    assert.equal(await kitBalance(), g0, "trying on spends nothing");
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    await game.getByTestId("kit-buy").click();
+    await game.getByTestId("kit-confirm").waitFor();
+    await game.getByTestId("kit-confirm").getByRole("button", { name: "Cancel" }).click();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    assert.equal(await kitBalance(), g0, "a cancelled buy spends nothing");
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    await game.getByTestId("kit-buy").click();
+    await game.getByTestId("kit-yes").click();
+    assert.match(await volt.textContent(), /equipped/, "bought and equipped");
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    const g1 = await kitBalance();
+    near(g1, g0 - 4, "the confirmed buy spends the Volt net's 4 $GBOOT");
+    ok("BQ-P1-7: Kit shop try-on is free; buying needs a confirmation (cancel spends nothing)");
+
+    // The Skill Cup entry is open when no kick is being aimed: from the modes screen's Cups.
+    const confirmBalance = async () => Number((await game.getByTestId("skill-confirm").textContent()).match(/You have ([\d,.]+) \$GBOOT/)[1].replace(/,/g, ""));
+    await game.getByTestId("menu").click();
+    await menuItem("Change mode").click();
+    await menuItem("Cups").click();
+    await game.getByRole("button", { name: /^Enter ·/ }).click();
+    await game.getByTestId("skill-confirm").waitFor({ timeout: 2000 });
+    assert.equal((await flow()).session, false, "no Skill Cup session before confirming");
+    near(await confirmBalance(), g1, "nothing spent on Enter");
+    await game.getByTestId("skill-confirm").getByRole("button", { name: "Cancel" }).click();
+    await game.getByRole("button", { name: /^Enter ·/ }).click();
+    near(await confirmBalance(), g1, "a cancelled Skill Cup entry spent nothing");
+    await game.getByTestId("skill-yes").click();
+    await waitShootable();
+    assert.match(await chip(), /SKILL CUP/, "the confirmed entry starts the Skill Cup");
+    await game.getByTestId("menu").click();
+    const g2 = await kitBalance();
+    near(g2, g1 - 100, "the confirmed entry spends 100 $GBOOT");
+    for (let kick = 0; kick < 5; kick++) { await waitShootable(); await game.getByTestId("quick").click(); await waitIdleKick(); }
+    await game.getByTestId("results").waitFor({ timeout: 10_000 });
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await game.getByTestId("skill-confirm").waitFor({ timeout: 2000 });
+    assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "5", "no new Skill Cup session before confirming");
+    assert.match(await game.getByTestId("skill-confirm").textContent(), new RegExp(`You have ${g2} \\$GBOOT`), "nothing spent yet");
+    await game.getByTestId("skill-yes").click();
+    await waitShootable();
+    assert.equal(await kicks(), 0, "a new Skill Cup session");
+    await game.getByTestId("menu").click();
+    near(await kitBalance(), g2 - 100, "the confirmed Play again spends 100 $GBOOT");
+    ok("BQ-P1-7: Skill Cup entry (Cups) and Results 'Play again' spend only after a confirmation");
   },
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);

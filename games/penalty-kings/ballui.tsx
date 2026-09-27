@@ -145,9 +145,9 @@ function Collection({ records, simulated }: { records: readonly BallRecord[]; si
     </tr>)}</tbody></table>;
 }
 
-/** d) CHOOSE: a carousel of the Bag before each Big Match kick. */
+/** d) CHOOSE: a carousel of the Bag before each Big Match kick. "Kick with this ball" kicks the ball SHOWN (the first one when nothing is selected, e.g. after redeeming the selected ball: BQ-P1-6). */
 export function BallCarousel({ records, selected, onSelect, onKick, onClose }: {
-  records: readonly BallRecord[]; selected: string | null; onSelect: (id: string) => void; onKick: () => void; onClose: () => void;
+  records: readonly BallRecord[]; selected: string | null; onSelect: (id: string) => void; onKick: (id: string) => void; onClose: () => void;
 }) {
   const real = records.filter(record => !record.sample);
   const index = Math.max(0, real.findIndex(record => record.id === selected)), current = real[index];
@@ -161,7 +161,7 @@ export function BallCarousel({ records, selected, onSelect, onKick, onClose }: {
     </div> : <p>No balls in your Bag.</p>}
     <button type="button" onClick={() => step(1)} aria-label="Next ball">›</button>
     <div className="pk-carouselactions">
-      <button type="button" className="pk-primary" disabled={!current} onClick={onKick} data-testid="kick-with-ball">Kick with this ball</button>
+      <button type="button" className="pk-primary" disabled={!current} onClick={() => { if (current) onKick(current.id); }} data-testid="kick-with-ball">Kick with this ball</button>
       <button type="button" onClick={onClose}>Close</button>
     </div>
     <p className="pk-note">{CHOICE_RULE}</p>
