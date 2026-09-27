@@ -34,6 +34,8 @@
     "build:site": "node scripts/build-site.mjs",
     "dev": "friendsdk dev ./games/penalty-kings",
     "sync:engine": "rm -rf node_modules/@penalty-kings/engine && npm install ./packages/engine --no-audit --no-fund",
-    "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src"
+    "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src",
+    "test:verifier": "node --experimental-strip-types --test verifier/test/*.test.ts",
+    "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning"
   }
 }

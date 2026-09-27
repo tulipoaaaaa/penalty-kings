@@ -319,7 +319,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "skill") {
       setSkillRun(run => {
         if (!run) return run;
-        const points = goal ? goalPoints(profile, 1, run.kicks.filter(Boolean).length + 1, false) : 0;
+        // Same rule as the referee (verifier/src/core.ts scoreKick): streak = consecutive goals.
+        const trailing = run.kicks.reduce((streak, kick) => (kick ? streak + 1 : 0), 0);
+        const points = goal ? goalPoints(profile, 1, trailing + 1, false) : 0;
         const next = { ...run, kicks: [...run.kicks, goal], points: run.points + points };
         setBanner({ text: labels[outcome.result], sub: `Skill Cup kick ${next.kicks.length}/5 · ${formatNumber(next.points)} pts (simulated)`, tone: goal ? "goal" : "miss" });
         return next;

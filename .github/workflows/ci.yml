@@ -26,6 +26,10 @@ jobs:
         run: npm run test:engine
       - name: Economy simulator smoke
         run: node scripts/economy-sim.mjs --smoke
+      - name: Verifier tests (Skill Cup referee)
+        run: npm run test:verifier
+      - name: Verifier Worker bundles
+        run: npm run build:verifier
       - name: FriendSDK game check
         run: npm run check
       - name: Install Chromium

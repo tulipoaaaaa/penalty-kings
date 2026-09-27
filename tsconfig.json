@@ -12,6 +12,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["games/**/*.ts", "games/**/*.tsx", "games/**/*.d.ts", "packages/**/*.ts"],
+  "include": ["games/**/*.ts", "games/**/*.tsx", "games/**/*.d.ts", "packages/**/*.ts", "verifier/**/*.ts"],
   "exclude": ["**/.friendsdk/**", "node_modules"]
 }
