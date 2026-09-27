@@ -12,7 +12,7 @@ import {
   type KeeperId, type ShotInput, type ShotOutcome,
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, tierForPrice, formatNumber, type Cosmetic } from "./economy.js";
-import { renderScene, ballFlightScreen, keeperPose, toScreen, drawBall, SPOT, W, H, type SceneState } from "./scene.js";
+import { renderScene, ballFlightScreen, keeperPose, toScreen, drawBall, drawMask, SPOT, W, H, type SceneState } from "./scene.js";
 import { createCrowd, type Crowd } from "./audio.js";
 import "@rarefriends/friendsdk/frame.css";
 import "./style.css";
@@ -61,6 +61,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [skillRun, setSkillRun] = useState<{ id: number; kicks: boolean[]; points: number } | null>(null);
   const [artStatus, setArtStatus] = useState("Loading your Friend…");
   const [aimHint, setAimHint] = useState(true);
+  const [intro, setIntro] = useState(true);
 
   const canvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<GenerationSprites | null>(null);
@@ -486,6 +487,21 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {(error || message) && phase !== "shooting" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}
     </div>
 
+    {intro && !menu && <div className="pk-intro" role="dialog" aria-label="Welcome to Penalty Kings">
+      <FriendPortrait sprites={sprites.current} />
+      <div>
+        <small>Your striker</small>
+        <h2>Friend #{friendId.toString()}</h2>
+        <ol>
+          <li><b>Kit bag</b>: buy balls with RF{simTag}.</li>
+          <li><b>Place ball</b>: its rarity is revealed by the chance game.</li>
+          <li><b>Shoot</b>: drag up from the ball (or ←→ + hold Space). Beat the keeper.</li>
+        </ol>
+        <p className="pk-rule">{RULE}</p>
+        <button type="button" className="pk-primary" autoFocus onClick={() => { setIntro(false); void unlockAudio(); }}>Kick off</button>
+      </div>
+    </div>}
+
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
@@ -620,6 +636,19 @@ function formatCompact(value: number) {
 
 function menuTitle(menu: Exclude<Menu, null>) {
   return { hub: "Menu", kitbag: "Kit bag", locker: "Locker", cup: "Cups", shop: "Kit shop", stadium: "Stadiums", rules: "Rules", settings: "Settings", keeper: "Choose keeper", round: "Round over" }[menu];
+}
+
+/** The Friend's canonical sprite, large and unaltered (black mask, white halo). */
+function FriendPortrait({ sprites }: { sprites: GenerationSprites | null }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const context = ref.current?.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, 112, 112);
+    if (!sprites) return;
+    drawMask(context, spriteFrame(sprites, "down", false, 0, "right").frame.rows, 8, 8, 6, "#000000", "#ffffff");
+  }, [sprites]);
+  return <canvas ref={ref} className="pk-portrait" width={112} height={112} aria-hidden="true" />;
 }
 
 function BallIcon({ color, accent, size }: { color: string; accent: string; size: number }) {

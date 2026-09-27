@@ -17,6 +17,10 @@ await testGame("./games/penalty-kings", {
     const button = name => game.getByRole("button", { name, exact: true });
     const text = id => game.getByTestId(id).textContent();
 
+    // Intro card shows the Friend as the striker; dismiss it.
+    await game.getByRole("dialog", { name: "Welcome to Penalty Kings" }).waitFor();
+    await button("Kick off").click();
+
     // Warm-up kick with the keyboard: no rewards, no round progress.
     await button("Warm-up").click();
     await game.locator("canvas.pk-canvas").focus();

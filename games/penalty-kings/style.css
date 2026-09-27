@@ -102,3 +102,12 @@
 .pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
 .pk-hub .pk-note { grid-column: 1 / -1; }
 .pk-hub { align-items: start; }
+
+/* First-load intro: the Friend as the star. */
+.pk-intro { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 3cqw; background: #0b0d1ae6; padding: 3cqh 4cqw 14cqh; font-size: clamp(9px, 1.6cqw, 15px); }
+.pk-intro h2 { margin: 0.1em 0 0.4em; font-size: 2em; color: var(--pk-volt); }
+.pk-intro small { text-transform: uppercase; letter-spacing: 0.14em; color: var(--pk-gold); }
+.pk-intro ol { margin: 0 0 0.6em; padding-left: 1.3em; line-height: 1.5; }
+.pk-intro .pk-primary { font: inherit; font-weight: 700; font-size: 1.2em; padding: 0.5em 1.6em; border: 0; border-radius: 4px; min-height: 32px; }
+.pk-portrait { width: clamp(64px, 20cqw, 200px); height: auto; image-rendering: pixelated; background: radial-gradient(circle, #2f8f3a 0 55%, transparent 56%); border-radius: 50%; flex-shrink: 0; }
+@container (max-width: 560px) { .pk-intro { gap: 8px; padding: 6px 10px 40px; font-size: 8px; } .pk-intro .pk-rule { display: none; } .pk-intro ol { line-height: 1.3; } }
