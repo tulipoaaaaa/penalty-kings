@@ -237,9 +237,13 @@ Formula: with *b* = 0.02673 ÷ P $GBOOT burned per RF and *d* = 0.02 ÷ P droppe
 
 ## Lacing (the Bootroom)
 
-- **Lacing:** you lock $GBOOT against a Friend for 1–52 weeks with `Bootroom.lace`. Anyone can
-  lace for any Friend. Only the Friend's owner, or its token-bound account, can unlace or move the
-  lock (a third party's top-up joins the existing lock as it is).
+- **Lacing:** you lock $GBOOT against a Friend for 1–52 weeks with
+  `Bootroom.lace(friendId, amount, lockWeeks, maxUnlockAt)`. Only the Friend's owner, or its
+  token-bound account, starts a lock or moves it to a later unlock (and only they can unlace). The
+  `FriendsAirdrop` may also start one (its 12-week pre-lace), but never extends an existing lock.
+  Anyone else can only top up a LIVE lock: the amount adds, the unlock and weeks stay (gifts). The
+  call reverts when the resulting lock would end after `maxUnlockAt`, so a lace never silently joins
+  a longer lock (pass `now + lockWeeks` weeks for exactly the weeks asked).
 - **Early unlace:** unlacing before expiry burns 50%.
 - **Progress curve:** `progressBps = 10,000 × log₂(1 + x) ÷ log₂(1 + 520,000)`, capped at 100%,
   where x = min(amount, 10,000) × lockWeeks (whole $GBOOT-weeks). The same log curve as before.
@@ -295,7 +299,10 @@ What each tier gives (progression; proposed values, the owner decides the exact 
 - **Setup:** the deployer sets the Merkle root once. The leaf is `keccak256(abi.encode(friendId,
   amount))`.
 - **Claiming:** a claim never pays a wallet. It laces the amount for that Friend for 12 weeks,
-  so every eligible Friend starts with a perk tier (tier 3 from 6,018 $GBOOT; see the table).
+  so every eligible Friend starts with a perk tier (tier 3 from 6,018 $GBOOT; see the table). If
+  the Friend's owner already has a live lock ending at least 12 weeks out, the claim joins it; a
+  shorter live lock or an expired lace makes the claim revert until the owner extends or unlaces it
+  (a permissionless claim never lengthens the owner's lock). Strangers cannot pre-start the lock.
 - **Eligibility:** the rules are published with the root and apply identically to every Friend.
   For example: every Friend hardwired at a published snapshot block, with an equal share each.
   They must not favour any wallet.

@@ -10,7 +10,7 @@
 |---|---|
 | `GBoot.sol` | 100M fixed supply; no owner, mint function, tax or blacklist |
 | `EmissionVault.sol` | Weekly release caps that halve on a schedule (drops, cups, rewards) |
-| `Bootroom.sol` | Lacing: lock $GBOOT against a Friend for perk tiers 0–3 (cosmetics, XP, cup seeding; no payouts); 50% burn if unlaced early |
+| `Bootroom.sol` | Lacing: lock $GBOOT against a Friend for perk tiers 0–3 (cosmetics, XP, cup seeding; no payouts); 50% burn if unlaced early. Only the Friend (owner or token-bound account) or the whitelisted airdrop starts a lock; others only top up a live one; `lace(id, amount, weeks, maxUnlockAt)` reverts rather than join a longer lock |
 | `FriendsAirdrop.sol` | 10M pre-laced airdrop to Friends (Merkle); unclaimed tokens go to Cups after 180 days |
 | `EdgeSplitter.sol` | The 10% edge split: 40% RF burned / 30% $GBOOT bought back and burned / 30% Golden Boot Cup |
 | `LiquidityLock.sol` | Locks the launch liquidity; `collectAndBurn` burns both fee sides (permissionless) |
@@ -20,7 +20,7 @@
 | `BallVault.sol` | Tradeable "Vault Balls" backed 1:1 by RF; a free-price escrow market; enforced edition scarcity |
 | `script/Launch.s.sol` | The whole launch wiring, rehearsed on a mainnet fork in CI |
 
-**Tests:** 169 Foundry unit/fuzz/invariant tests plus 7 mainnet-fork tests (`cd contracts && forge test`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
+**Tests:** 184 Foundry unit/fuzz/invariant tests plus 7 mainnet-fork tests (`cd contracts && forge test`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
 
 ## Recorded defaults (owner-approved design)
 

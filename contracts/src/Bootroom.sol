@@ -17,12 +17,13 @@ interface IBurnableToken {
 /// @notice Lock $GBOOT against a Friend for 1–52 weeks to earn a PERK TIER (0–3). Perks are
 /// progression only: cosmetic variants, an XP bonus and Cup seeding (display / draw order). A perk
 /// tier never changes a payout: it does not touch race points, drops, RF odds, Cup ranks or any
-/// $GBOOT reward (docs/ECONOMY.md, "Lacing"). The lace is keyed to the friendId: anyone may lace for a
-/// Friend (gifts, the pre-laced airdrop), but only the Friend's current owner or its token-bound
-/// account can unlace or move its lock, and the unlace goes to the caller. Early unlace burns 50%.
-/// The tier comes from a log-scaled progress curve, progressBps = 10,000 × log2(1 + x) /
-/// log2(1 + X_MAX) with x = min(amount, MAX_LACE) × weeks (whole $GBOOT-weeks), capped per Friend.
-/// No owner, no fees.
+/// $GBOOT reward (docs/ECONOMY.md, "Lacing"). The lace is keyed to the friendId. Only the Friend's
+/// current owner or its token-bound account starts or moves its lock (the whitelisted FriendsAirdrop
+/// may also start one, never extend one); anyone else may only top up a LIVE lock, as is (gifts).
+/// Only the owner or the token-bound account can unlace, and the unlace goes to the caller. Early
+/// unlace burns 50%. The tier comes from a log-scaled progress curve, progressBps = 10,000 ×
+/// log2(1 + x) / log2(1 + X_MAX) with x = min(amount, MAX_LACE) × weeks (whole $GBOOT-weeks),
+/// capped per Friend. No owner, no fees.
 contract Bootroom {
     using SafeERC20 for IERC20;
 
@@ -40,35 +41,52 @@ contract Bootroom {
 
     IERC20 public immutable gboot;
     IBootroomGenerations public immutable generations;
+    /// @notice The FriendsAirdrop: besides the Friend itself, the only caller that may START a lock.
+    address public immutable airdrop;
     mapping(uint256 friendId => Lace) public laces;
 
     error BadWeeks();
     error NothingLaced();
     error NotFriend();
+    /// @notice A third party laced a Friend with no live lock (only the Friend or the airdrop starts one).
+    error NoLiveLock();
+    /// @notice The airdrop would extend the Friend's existing lock (or re-lock expired $GBOOT).
+    error LockTooShort();
+    /// @notice The lace would end after the caller's `maxUnlockAt`.
+    error LockTooLong();
 
     event Laced(uint256 indexed friendId, address indexed from, uint256 amount, uint256 lockWeeks, uint256 unlockAt);
     event Unlaced(uint256 indexed friendId, address indexed to, uint256 returned, uint256 burned);
 
-    constructor(IERC20 gboot_, IBootroomGenerations generations_) {
-        gboot = gboot_; generations = generations_;
+    constructor(IERC20 gboot_, IBootroomGenerations generations_, address airdrop_) {
+        gboot = gboot_; generations = generations_; airdrop = airdrop_;
     }
 
-    /// @notice Lace `amount` for `friendId` for `lockWeeks` (1–52). The Friend's owner or token-bound
-    /// account may move the lock to a later unlock (taking the new weeks). Anyone else only adds $GBOOT
-    /// to the existing lock, and sets `lockWeeks` only when the Friend has nothing laced.
-    function lace(uint256 friendId, uint256 amount, uint256 lockWeeks) external {
+    /// @notice Lace `amount` for `friendId` for `lockWeeks` (1–52); reverts with LockTooLong when the
+    /// resulting lock would end after `maxUnlockAt` (pass block.timestamp + lockWeeks weeks for exactly
+    /// the weeks asked, never a longer lock someone else started).
+    /// - The Friend's owner or token-bound account starts a lock (also over an expired one) or moves a
+    ///   live lock to a later unlock, taking the new weeks; a shorter lace joins the live lock as is.
+    /// - The FriendsAirdrop starts a lock on an empty lace, or joins a live lock that already ends no
+    ///   earlier than its own weeks would; it never extends a lock or re-locks expired $GBOOT.
+    /// - Anyone else only tops up a live lock: the amount adds, the unlock and weeks stay.
+    function lace(uint256 friendId, uint256 amount, uint256 lockWeeks, uint256 maxUnlockAt) external {
         if (lockWeeks == 0 || lockWeeks > MAX_WEEKS) revert BadWeeks();
         if (amount == 0) revert NothingLaced();
-        gboot.safeTransferFrom(msg.sender, address(this), amount);
         Lace storage l = laces[friendId];
         uint256 unlockAt = block.timestamp + lockWeeks * 1 weeks;
-        bool empty = l.amount == 0;
+        bool live = l.amount != 0 && block.timestamp < l.unlockAt;
+        if (msg.sender == generations.ownerOf(friendId) || msg.sender == generations.tokenBoundAccount(friendId)) {
+            if (!live || unlockAt > l.unlockAt) { l.unlockAt = uint64(unlockAt); l.lockWeeks = uint64(lockWeeks); }
+        } else if (msg.sender == airdrop) {
+            if (l.amount == 0) { l.unlockAt = uint64(unlockAt); l.lockWeeks = uint64(lockWeeks); }
+            else if (l.unlockAt < unlockAt) revert LockTooShort();
+        } else if (!live) {
+            revert NoLiveLock();
+        }
+        if (l.unlockAt > maxUnlockAt) revert LockTooLong();
         l.amount += uint128(amount);
-        // Only the Friend (owner or token-bound account) sets or moves its lock. A third party (a gift, the
-        // airdrop) starts a lock only on an empty lace; otherwise its $GBOOT joins the existing lock as is,
-        // so nobody can shorten a Friend's weeks, extend its lock or re-lock expired $GBOOT with dust.
-        bool friend = msg.sender == generations.ownerOf(friendId) || msg.sender == generations.tokenBoundAccount(friendId);
-        if (friend ? unlockAt > l.unlockAt : empty) { l.unlockAt = uint64(unlockAt); l.lockWeeks = uint64(lockWeeks); }
+        gboot.safeTransferFrom(msg.sender, address(this), amount);
         emit Laced(friendId, msg.sender, amount, l.lockWeeks, l.unlockAt);
     }
 

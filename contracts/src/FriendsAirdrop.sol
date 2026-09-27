@@ -5,14 +5,19 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IBootroomLace {
-    function lace(uint256 friendId, uint256 amount, uint256 lockWeeks) external;
+    function lace(uint256 friendId, uint256 amount, uint256 lockWeeks, uint256 maxUnlockAt) external;
 }
 
 /// @title FriendsAirdrop (v1.1): 10% of $GBOOT to hardwired Friends, delivered PRE-LACED.
 /// @notice The deployer sets one Merkle root, once (leaf = keccak256(abi.encode(friendId, amount))).
 /// A claim is permissionless because it never pays a wallet: the tokens are laced in the Bootroom
 /// for that friendId for LOCK_WEEKS, so the Friend starts with a perk tier, and its owner (or
-/// token-bound account) can unlace after expiry, or early with the Bootroom's 50% burn. After the
+/// token-bound account) can unlace after expiry, or early with the Bootroom's 50% burn. This contract
+/// is the Bootroom's whitelisted `airdrop`: it starts a LOCK_WEEKS lock on an empty lace, or joins
+/// the Friend's own live lock when that already ends at least LOCK_WEEKS from now. It never extends
+/// the Friend's lock: if the Friend has a shorter live lock or an expired lace, the claim reverts
+/// (LockTooShort) until its owner extends or unlaces it. Strangers cannot start a lock, so nobody can
+/// shorten or lengthen the pre-lace with dust. After the
 /// claim window anyone can sweep what is left to the Cups & events vault. Eligibility rules are
 /// published with the root (docs/ECONOMY.md) and apply identically to every Friend.
 contract FriendsAirdrop {
@@ -61,7 +66,7 @@ contract FriendsAirdrop {
         for (uint256 i; i < proof.length; ++i) node = node < proof[i] ? keccak256(abi.encode(node, proof[i])) : keccak256(abi.encode(proof[i], node));
         if (node != root) revert BadProof();
         claimed[friendId] = true;
-        bootroom.lace(friendId, amount, LOCK_WEEKS);
+        bootroom.lace(friendId, amount, LOCK_WEEKS, type(uint256).max);
         emit Claimed(friendId, amount);
     }
 

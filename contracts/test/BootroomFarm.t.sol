@@ -50,7 +50,7 @@ contract BootroomFarmTest is Test {
     function setUp() public {
         gboot = new GBoot();
         gens = new BootroomMockGenerations();
-        room = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(address(gens)));
+        room = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(address(gens)), address(0));
         gens.set(FRIEND, farmer, address(0));
         gboot.transfer(farmer, 10_000_000e18);
         vm.prank(farmer);
@@ -73,7 +73,7 @@ contract BootroomFarmTest is Test {
         uint256 maxLace = room.MAX_LACE();
         uint256 maxWeeks = room.MAX_WEEKS();
         vm.prank(farmer); // after the view calls: a prank applies to the next external call only
-        room.lace(FRIEND, maxLace, maxWeeks);
+        room.lace(FRIEND, maxLace, maxWeeks, type(uint256).max);
     }
 
     /// Sanity: the economy tables really give a 90% RF return and a 2.15 average drop multiplier.
@@ -107,8 +107,8 @@ contract BootroomFarmTest is Test {
     /// Over-lacing (1M GBOOT) or stacking laces cannot push past the bound: there is nothing to push.
     function testOverLacingDoesNotHelp() public {
         vm.startPrank(farmer);
-        room.lace(FRIEND, 1_000_000e18, 52);
-        room.lace(FRIEND, 5_000_000e18, 52);
+        room.lace(FRIEND, 1_000_000e18, 52, type(uint256).max);
+        room.lace(FRIEND, 5_000_000e18, 52, type(uint256).max);
         vm.stopPrank();
         assertEq(room.perkTier(FRIEND), 3);
         (uint256 r, uint256 d) = _evPerBall(2);
@@ -124,7 +124,7 @@ contract BootroomFarmTest is Test {
         t = bound(t, 0, 2);
         (uint256 r0, uint256 d0) = _evPerBall(t);
         vm.prank(farmer);
-        room.lace(FRIEND, amount, lockWeeks);
+        room.lace(FRIEND, amount, lockWeeks, type(uint256).max);
         vm.warp(block.timestamp + elapsed);
         assertLe(room.perkTier(FRIEND), 3);
         (uint256 r, uint256 d) = _evPerBall(t);
