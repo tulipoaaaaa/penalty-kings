@@ -3,8 +3,10 @@
  *
  * Protocol (one entry = one 5-kick shootout vs Ghost):
  *  1. Week start: the referee publishes sha256(weekSecret). The secret stays private until week end.
- *  2. POST entry: the owner signs an entry message; the referee checks fresh ownership of a
- *     hardwired Friend, rate limits (1 per Friend per hour, 20 per week) and assigns an entryId.
+ *  2. POST entry {txHash}: the player's on-chain SkillCup.enter transaction is the entry. The
+ *     contract already enforced hardwired ownership, the 100 $GBOOT fee (50% burned, 50% pot) and
+ *     the rate limits (1 per Friend per hour, 20 per week). The referee reads the verified
+ *     `Entered` event and registers that entryId once.
  *  3. POST kick: the client sends its kick inputs. The referee STORES them first, then derives the
  *     keeper's dive seed = HMAC-SHA256(weekSecret, entryId ‖ kickIndex) and resolves the kick with
  *     the shared engine. The client can never supply or claim a result.
@@ -15,24 +17,20 @@
 import { KEEPERS, keeperById, resolveShot, goalPoints, clamp, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
 
 export const KICKS_PER_ENTRY = 5;
-export const HOUR = 3600_000;
-export const WEEKLY_LIMIT = 20;
 export const SKILL_KEEPER = keeperById("ghost");
 
 export type KickInput = ShotInput & { /** ms from aim start to release; recorded for review, not used by physics. */ releaseMs: number };
 export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number }[]; score: number; signature?: string };
 
 export interface Store {
-  nextEntryId(): Promise<number>;
   getEntry(id: number): Promise<Entry | null>;
   putEntry(entry: Entry): Promise<void>;
-  /** Entry timestamps for a Friend in a week. */
-  friendEntries(week: number, friendId: string): Promise<number[]>;
+  /** All entries of a week (for the leaderboard). */
+  weekEntries(week: number): Promise<Entry[]>;
 }
 export interface Chain {
-  /** Fresh read at the latest block: owner of the Generations token and its generation. */
-  friend(friendId: bigint): Promise<{ owner: string; generation: number }>;
-  verifySignature(owner: string, message: string, signature: string): Promise<boolean>;
+  /** Reads a confirmed SkillCup.enter receipt and returns its Entered event, or null. */
+  entryFromTx(txHash: string): Promise<{ entryId: number; friendId: string; player: string; week: number } | null>;
 }
 
 const enc = new TextEncoder();
@@ -67,7 +65,6 @@ export class RefereeError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
 
-export const entryMessage = (week: number, friendId: string, nonce: string) => `Penalty Kings Skill Cup entry\nweek: ${week}\nfriend: ${friendId}\nnonce: ${nonce}`;
 
 export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: number; store: Store; chain: Chain; signingKey: CryptoKey; now?: () => number }) {
   const now = options.now ?? Date.now;
@@ -82,19 +79,21 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
   return {
     async hash() { return secretHash(secret); },
 
-    async enter(body: { friendId: string; owner: string; nonce: string; signature: string }) {
-      if (!/^\d{1,10}$/.test(body.friendId ?? "")) throw new RefereeError(400, "Invalid friendId.");
-      const owner = String(body.owner ?? "").toLowerCase();
-      if (!/^0x[0-9a-f]{40}$/.test(owner)) throw new RefereeError(400, "Invalid owner.");
-      const message = entryMessage(week, body.friendId, String(body.nonce ?? ""));
-      if (!(await chain.verifySignature(owner, message, String(body.signature ?? "")))) throw new RefereeError(401, "Signature does not match the owner.");
-      const friend = await chain.friend(BigInt(body.friendId));
-      if (friend.owner.toLowerCase() !== owner) throw new RefereeError(403, "This wallet does not own that Friend.");
-      if (friend.generation < 1) throw new RefereeError(403, "Only hardwired Friends (generation ≥ 1) can enter.");
-      const history = await store.friendEntries(week, body.friendId);
-      if (history.length >= WEEKLY_LIMIT) throw new RefereeError(429, "Weekly limit reached (20 entries).");
-      if (history.some(time => now() - time < HOUR)) throw new RefereeError(429, "One entry per Friend per hour.");
-      const entry: Entry = { id: await store.nextEntryId(), week, friendId: body.friendId, owner, createdAt: now(), kicks: [], score: 0 };
+    /** Finished entries this week: best score first, ties to the earlier (lower) on-chain entryId. */
+    async leaderboard() {
+      return (await store.weekEntries(week)).filter(e => e.kicks.length === KICKS_PER_ENTRY)
+        .sort((a, b) => b.score - a.score || a.id - b.id)
+        .map(e => ({ entryId: e.id, friendId: e.friendId, score: e.score, kicks: e.kicks.map(k => k.result), signature: e.signature }));
+    },
+
+    async enter(body: { txHash: string }) {
+      const hash = String(body.txHash ?? "");
+      if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new RefereeError(400, "Invalid transaction hash.");
+      const entered = await chain.entryFromTx(hash);
+      if (!entered) throw new RefereeError(404, "No confirmed SkillCup entry in that transaction.");
+      if (entered.week !== week) throw new RefereeError(409, `That entry belongs to week ${entered.week}.`);
+      if (await store.getEntry(entered.entryId)) throw new RefereeError(409, "Entry already registered.");
+      const entry: Entry = { id: entered.entryId, week, friendId: entered.friendId, owner: entered.player.toLowerCase(), createdAt: now(), kicks: [], score: 0 };
       await store.putEntry(entry);
       return { entryId: entry.id, week, secretHash: await secretHash(secret) };
     },
@@ -130,12 +129,11 @@ export async function replayEntry(secret: Uint8Array<ArrayBuffer>, entryId: numb
 }
 
 export function memoryStore(): Store {
-  let id = 0; const entries = new Map<number, Entry>();
+  const entries = new Map<number, Entry>();
   return {
-    async nextEntryId() { return ++id; },
+    async weekEntries(week) { return [...entries.values()].filter(e => e.week === week).map(e => structuredClone(e)); },
     async getEntry(key) { const found = entries.get(key); return found ? structuredClone(found) : null; },
     async putEntry(entry) { entries.set(entry.id, structuredClone(entry)); },
-    async friendEntries(week, friendId) { return [...entries.values()].filter(e => e.week === week && e.friendId === friendId).map(e => e.createdAt); },
   };
 }
 

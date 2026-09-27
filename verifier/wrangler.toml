@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 WEEK = "1"
 RPC_URL = "https://rpc.mainnet.chain.robinhood.com"
 ALLOWED_ORIGIN = "https://tulipoaaaaa.github.io"
+SKILL_CUP = "REPLACE_WITH_SKILLCUP_ADDRESS"
 
 # Create with: npx wrangler kv namespace create ENTRIES   (then paste the id below)
 [[kv_namespaces]]
