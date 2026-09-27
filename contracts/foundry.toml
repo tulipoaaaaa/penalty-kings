@@ -4,9 +4,13 @@ test = "test"
 out = "out"
 cache_path = "cache"
 libs = ["lib"]
+# Tests compile the FriendSDK ChanceGame from the SDK package itself (never copied here).
+allow_paths = ["../node_modules/@rarefriends/friendsdk/contracts"]
 remappings = [
   "forge-std/=lib/forge-std/src/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "lib/openzeppelin-contracts/=lib/openzeppelin-contracts/",
+  "@friendsdk/=../node_modules/@rarefriends/friendsdk/contracts/src/",
 ]
 solc_version = "0.8.36"
 auto_detect_solc = false
