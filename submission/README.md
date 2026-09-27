@@ -165,6 +165,8 @@ npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champ
 - 12 keepers;
 - ball sprites per rarity.
 
-The Friend is its canonical on-chain Generations sprite (FriendSDK sprite reader), unaltered.
+The Friend is its canonical on-chain Generations sprite (FriendSDK sprite reader), unaltered. The
+crowd of little Friends reuses the player's own sprite (downscaled nearest-neighbour, pixels
+unaltered, props held around it); no other Friend's art is read.
 UI sounds come from the FriendSDK sound kit; crowd, kick and music are synthesised in code. No
 real clubs, crests, players or brands appear.

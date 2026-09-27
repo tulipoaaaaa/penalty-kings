@@ -14,6 +14,7 @@ recoloured or distorted.
 | **Layer order:** sky → far stands (parallax 0.3) → crowd (parallax 0.5) → ad boards → pitch → goal back net → keeper → goal frame → ball → striker → FX → canvas UI (scoreboard, commentator) → DOM HUD | Readable depth; the striker and goal are never covered |
 | The Friend is drawn at **4× (64 px)**, the largest character; keepers at 3×; crowd at 1× | Character Spotlight |
 | **Friend art is sacred:** only whole-sprite transforms (translate, rotate, squash/stretch, flip) and **separate layers around it** (shadow, boots, headband, cape, trails, sparkles) | Canonical artwork preserved |
+| **Crowd of little Friends:** the player's own canonical frames (idle/walk, facing down), downscaled nearest-neighbour to 8–12 px, black mask + 1 px halo in supporter colours, pre-rendered per stadium into one atlas; flags, big PK flags, scarves, banners and the Champions cards are held above/beside the sprite. Motion is continuous-time and eased, snapped to whole pixels; reduced motion drops hops, ripples and cloth waves. Original crowd until the sprite loads | The stands belong to Rare Friends without inventing Friend-like characters or reading anyone else's Friend |
 
 ## Palettes
 

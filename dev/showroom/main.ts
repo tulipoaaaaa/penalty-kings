@@ -11,7 +11,11 @@ import { drawKeeper, drawKeeperLook, keeperArms, KEEPER_DESIGNS, KEEPER_SHEET, P
 import { PENALTY_GOAL } from "../../games/penalty-kings/gfx/stadium.js";
 import { KEEPER_RIGS, type RigPose } from "@penalty-kings/engine";
 import { drawBall, drawBallSprite, drawBallShadow, ballSprite, ballSpriteCacheSize, BALL_FRAMES, BALL_IDENTITY, RARITY_FX, seasonFx, type Season } from "../../games/penalty-kings/gfx/ball.js";
-import { CROWD_TYPES } from "../../games/penalty-kings/gfx/crowd.js";
+import { CROWD_TYPES, type CrowdMood } from "../../games/penalty-kings/gfx/crowd.js";
+import { BACKDROP_DROP } from "../../games/penalty-kings/gfx/stage.js";
+// The SDK's recorded canonical Generations frames (Friends #7730, #3412): lets the Showroom show the
+// Friends crowd offline, when the chain cannot be reached. DEV only; the game reads the chain.
+import { sampleFriendSprites } from "../../node_modules/@rarefriends/friendsdk/examples/fishing/sample-sprites.js";
 import { COMMENTARY_COUNT, ALL_COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
 import type { CelebrationId } from "../../games/penalty-kings/gfx/friend.js";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.js";
@@ -34,6 +38,23 @@ async function loadFriend(id: string) {
   try { sprites = await createFriendReader().read(BigInt(id)); stage.friendName = `Friend #${id}`; status.textContent = "loaded from chain"; }
   catch (error) { sprites = null; status.textContent = `not loaded (${(error as Error).message.slice(0, 60)}) — placeholder shown`; }
 }
+
+function loadSample(id: string) {
+  const sample = sampleFriendSprites(BigInt(id));
+  sprites = sample ?? null; stage.friendName = `Friend #${id}`;
+  $<HTMLSpanElement>("#friend-status").textContent = sample ? `SDK recorded sample #${id} (canonical frames, offline)` : "no such SDK sample";
+}
+
+// ── Crowd: the stands filled with little copies of the loaded Friend (close-up, moods, wind) ──
+const crowdFriends = $<HTMLInputElement>("#crowd-friends"), zoomCanvas = $<HTMLCanvasElement>("#crowd-zoom"), zoomContext = zoomCanvas.getContext("2d")!;
+let crowdWind: number | null = null;
+function applyCrowd() { stage.crowd.friends = crowdFriends.checked; stage.crowd.windOverride = crowdWind; }
+crowdFriends.onchange = applyCrowd;
+$<HTMLInputElement>("#crowd-zoom-toggle").onchange = event => { zoomCanvas.hidden = !(event.target as HTMLInputElement).checked; };
+window.setInterval(() => {
+  const n = stage.crowd.census;
+  $("#crowd-info").textContent = `${n.friends} Friends (${n.peekers} over the tifo/cards), ${n.humans} human characters, ${n.flags} flag-wavers, ${n.bigFlags} big PK flags, ${n.banners} banners · mood ${stage.crowd.mood}`;
+}, 500);
 
 // ── Forced outcomes via the real engine ─────────────────────────────────────
 function findShot(result: ShotResult, keeper: KeeperId, accept: (outcome: ShotOutcome) => boolean = () => true): { outcome: ShotOutcome; curl: number } {
@@ -132,6 +153,12 @@ button("#moments", "Streak fire ×3", () => { stage.streak = 3; stage.rarity = 6
 button("#moments", "Reset streak", () => { stage.streak = 0; stage.rarity = 7; stage.ballVisible = false; });
 button("#moments", "Mexican wave", () => stage.wave());
 button("#moments", "Score +250", () => stage.setScore(stage.score + 250));
+button("#crowd", "Goal: hop ripple", () => stage.crowd.react("cheer"));
+button("#crowd", "Near-miss: ooh ripple", () => stage.crowd.react("ooh"));
+button("#crowd", "Groan", () => stage.crowd.react("groan"));
+button("#crowd", "Tense", () => stage.crowd.react("tense"));
+button("#crowd", "Mexican wave", () => stage.wave());
+for (const [label, wind] of [["Wind ←6", -6], ["Calm", 0], ["Wind 6→", 6], ["Wind: follow scene", null]] as const) button("#crowd", label, () => { crowdWind = wind; applyCrowd(); });
 const contexts: CommentaryContext[] = ["walkout", "buildup", "goal", "save", "post", "over", "wide", "streak2", "streak3", "rarity-high", "rarity-top", "keeper", "sudden-death", "boss"];
 for (const topic of contexts) button("#commentary", topic, () => stage.say(topic));
 $<HTMLSpanElement>("#line-count").textContent = `${COMMENTARY_COUNT} + ${ALL_COMMENTARY_COUNT - COMMENTARY_COUNT} Director`;
@@ -215,6 +242,7 @@ const STADIUM_NOTES: Record<StadiumId, string> = {
 };
 function setStadium(value: StadiumId) {
   stage.setStadium(value); ($<HTMLSelectElement>("#stadium")).value = value;
+  applyCrowd();
   document.querySelectorAll<HTMLButtonElement>("#stadiums button[data-stadium]").forEach(b => b.classList.toggle("active", b.dataset.stadium === value));
   $("#stadium-info").textContent = STADIUM_NOTES[value];
 }
@@ -223,7 +251,9 @@ for (const id of Object.keys(THEMES) as StadiumId[]) button("#stadiums", id === 
 button("#stadiums", "Goal finale", () => { toPenalty(); shoot("goal"); });
 setStadium("park");
 // Screenshot hook for scripts/stadium-shots (DEV only).
-(window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); } };
+(window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); },
+  crowd: (mood: CrowdMood) => stage.crowd.react(mood), census: () => stage.crowd.census, drop: BACKDROP_DROP, loadSample: (id: string) => loadSample(id),
+  friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); } };
 select<Weather>("#weather", (["sun", "rain", "snow", "fog", "sunset"] as const).map(value => ({ value, label: value })), value => { stage.weather = value; });
 select<string>("#rarity", RARITY_NAMES.map((name, index) => ({ value: String(index), label: name })), value => { stage.rarity = Number(value); });
 ($<HTMLSelectElement>("#rarity")).value = "7";
@@ -235,6 +265,7 @@ $<HTMLButtonElement>("#step").onclick = () => { paused = true; stepOnce = true; 
 $<HTMLInputElement>("#reduced").onchange = event => stage.setReduced((event.target as HTMLInputElement).checked);
 $<HTMLInputElement>("#phone").onchange = event => document.body.classList.toggle("phone", (event.target as HTMLInputElement).checked);
 $<HTMLInputElement>("#fps").onchange = event => $("#meter").toggleAttribute("hidden", !(event.target as HTMLInputElement).checked);
+document.querySelectorAll<HTMLButtonElement>("[data-sdk-sample]").forEach(element => { element.onclick = () => loadSample(element.dataset.sdkSample!); });
 $<HTMLButtonElement>("#friend-load").onclick = () => loadFriend($<HTMLInputElement>("#friend-id").value.trim());
 document.querySelectorAll<HTMLButtonElement>("[data-sample]").forEach(element => { element.onclick = () => { $<HTMLInputElement>("#friend-id").value = element.dataset.sample!; loadFriend(element.dataset.sample!); }; });
 document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(element => {
@@ -264,10 +295,12 @@ function frame(now: number) {
   if (freezeAtStrike && (stage.kickClock ?? 0) >= STRIKE_AT) { freezeAtStrike = false; paused = true; $("#pause").textContent = "Resume"; }
   stage.render(context);
   meter.push(performance.now() - started);
+  if (!zoomCanvas.hidden) zoomContext.drawImage(canvas, Number($<HTMLInputElement>("#crowd-zoom-x").value), Number($<HTMLInputElement>("#crowd-zoom-y").value), 120, 40, 0, 0, 480, 160);
   $("#meter").textContent = `frame ${meter.average.toFixed(2)} ms avg · ${meter.p95.toFixed(2)} ms p95 · particles ${stage.particles.count ?? "?"}`;
   requestAnimationFrame(frame);
 }
 canvas.width = W; canvas.height = H;
+zoomCanvas.width = 480; zoomCanvas.height = 160; zoomContext.imageSmoothingEnabled = false;
 (window as unknown as { __frameMeter: FrameMeter }).__frameMeter = meter;
 requestAnimationFrame(frame);
 

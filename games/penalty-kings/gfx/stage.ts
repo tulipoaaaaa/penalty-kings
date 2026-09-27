@@ -310,7 +310,7 @@ export class Stage {
     this.camera.apply(c, this.time);
     const pan = (this.camera.x - W / 2) * 2;
     const wind = this.kind === "freekick" && this.freeKick ? this.freeKick.setup.wind : 0;
-    this.crowd.wind = wind;
+    this.crowd.wind = wind; this.crowd.rows = this.rows; // the stands fill with little copies of the player's own Friend
     const fk = this.kind === "freekick" && this.freeKick ? this.freeKick : null;
     // Penalty camera (round 6 B1): the stands sit just behind the goal, so the whole backdrop layer
     // (sky, stands, crowd, boards, grass stripes) drops until the boards end ~30 px above the goal line.
