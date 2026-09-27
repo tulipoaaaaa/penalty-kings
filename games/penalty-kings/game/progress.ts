@@ -93,7 +93,7 @@ export const MODES: ReadonlyArray<{ id: ModeId; name: string; blurb: string; lev
  * heavy aim assist).
  */
 export const LADDER_MODES: readonly ModeId[] = ["penalties", "freekicks", "tour", "daily"];
-export const recordsDifficulty = (mode: ModeId | "tutorial", kind: "penalty" | "freekick" | "target") => kind !== "target" && (LADDER_MODES as readonly string[]).includes(mode);
+export const recordsDifficulty = (mode: ModeId | "tutorial" | "challenge", kind: "penalty" | "freekick" | "target") => kind !== "target" && (LADDER_MODES as readonly string[]).includes(mode);
 export const isUnlocked = (mode: ModeId, progress: Progress) => (MODES.find(item => item.id === mode)?.level ?? 1) <= levelFromXp(progress.xp).level;
 
 /** The keeper ladder for Penalties: beat one to face the next. */

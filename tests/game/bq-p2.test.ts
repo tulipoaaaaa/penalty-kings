@@ -12,7 +12,7 @@ const index = () => readFileSync(new URL("../../games/penalty-kings/index.tsx", 
 test("BQ-P2-2: only ladder-mode kicks feed the difficulty history (never Skill Cup, Big Match, Target or the tutorial)", () => {
   for (const mode of ["penalties", "tour", "daily"] as const) assert.equal(recordsDifficulty(mode, "penalty"), true, mode);
   assert.equal(recordsDifficulty("freekicks", "freekick"), true);
-  for (const mode of ["skill", "match", "tutorial"] as const) assert.equal(recordsDifficulty(mode, "penalty"), false, mode);
+  for (const mode of ["skill", "match", "tutorial", "challenge"] as const) assert.equal(recordsDifficulty(mode, "penalty"), false, mode);
   assert.equal(recordsDifficulty("target", "target"), false);
   assert.equal(recordsDifficulty("penalties", "target"), false);
   // The shell's one history write is behind the guard.
