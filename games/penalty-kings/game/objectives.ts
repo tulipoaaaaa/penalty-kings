@@ -23,7 +23,7 @@ export type Level = {
   mode: "penalty" | "freekick";
   keeper: KeeperId;
   kicks: number;
-  setup?: { distance: number; angle: number; wallSize: 3 | 4 | 5; wind?: number };
+  setup?: { distance: number; angle: number; wallSize: 3 | 4 | 5; wind?: number; wallHeight?: number };
   objectives: [Objective, Objective, Objective];
   /** Cosmetic unlocked at 3 stars (economy COSMETICS id), if any. */
   reward?: string;

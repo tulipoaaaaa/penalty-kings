@@ -47,6 +47,17 @@ test("the wall blocks a low straight shot at it; curling round or over it can sc
   assert.ok(dipped, "a dipping shot over the wall scores");
 });
 
+test("a taller wall blocks more; heights stay in range", () => {
+  let short = 0, tall = 0;
+  for (let l = 0.3; l <= 0.9; l += 0.02) for (let a = -0.8; a <= 0.8; a += 0.1) {
+    const shot = { aimX: a, lift: l, power: 0.6, spin: 0, top: 0 };
+    if (resolveFreeKick({ ...setup, wallHeight: 1.6 }, shot, keeper).result === "wall") short++;
+    if (resolveFreeKick({ ...setup, wallHeight: 1.95 }, shot, keeper).result === "wall") tall++;
+  }
+  assert.ok(tall > short, `tall ${tall} vs short ${short}`);
+  assert.equal(freeKickSetup(1, { wallHeight: 3 }).wallHeight, 1.95);
+});
+
 test("the keeper starts on the side the wall does not cover", () => {
   for (const angle of [-0.3, 0.3]) {
     const s = freeKickSetup(9, { distance: 22, angle, wallSize: 4 });

@@ -64,9 +64,9 @@ let setup: FreeKickSetup = freeKickSetup(42, { distance: 24, angle: 0.2, wallSiz
 let targetTimer = 0;
 function toPenalty() { stage.kind = "penalty"; stage.freeKick = null; stage.targets = []; window.clearInterval(targetTimer); }
 function useSetup(next: FreeKickSetup) {
-  setup = next; stage.kind = "freekick"; stage.targets = []; window.clearInterval(targetTimer);
+  setup = next; stage.kind = "freekick"; stage.targets = []; stage.ballVisible = true; window.clearInterval(targetTimer);
   stage.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(stage.keeper)).wall };
-  $("#setpiece-info").textContent = `${setup.distance} m · angle ${(setup.angle * 57.3).toFixed(0)}° · wall of ${setup.wallSize} · wind ${setup.wind} m/s`;
+  $("#setpiece-info").textContent = `${setup.distance} m · angle ${(setup.angle * 57.3).toFixed(0)}° · wall of ${setup.wallSize} × ${setup.wallHeight} m · wind ${setup.wind} m/s`;
 }
 function freeKick(want: "goal" | "wall" | "save" | "knuckle" | "curler") {
   if (stage.kind !== "freekick") useSetup(setup);
@@ -86,6 +86,7 @@ button("#setpieces", "FK: blocked by wall", () => freeKick("wall"));
 button("#setpieces", "FK: saved", () => freeKick("save"));
 button("#setpieces", "FK: new setup", () => useSetup(freeKickSetup(Math.floor(Math.random() * 1e6), { maxWind: 5 })));
 for (const distance of [18, 25, 32]) button("#setpieces", `FK ${distance} m`, () => useSetup(freeKickSetup(Math.floor(Math.random() * 1e6), { distance, maxWind: 3 })));
+for (const [label, wallHeight] of [["Wall: Park 1.65 m", 1.65], ["Wall: Pro 1.8 m", 1.8], ["Wall: Champions 1.9 m", 1.9]] as const) button("#setpieces", label, () => useSetup({ ...setup, wallHeight }));
 button("#setpieces", "Wind ←5", () => useSetup({ ...setup, wind: -5 }));
 button("#setpieces", "Wind 5→", () => useSetup({ ...setup, wind: 5 }));
 button("#setpieces", "Wall jump preview", () => { useSetup({ ...setup, wallJumpAt: 0 }); freeKick("wall"); });

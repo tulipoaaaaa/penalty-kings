@@ -9,7 +9,7 @@ import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefr
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
   KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, streakMultiplier, shotTarget, clamp,
-  swipeToShot, assistShot, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
+  swipeToShot, assistShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
@@ -225,7 +225,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       else if (step === "wave") scene.wave();
       else if (step === "taunt") { scene.say(`intro:${scene.keeper}`); scene.taunt(); }
       else if (step === "freekick") {
-        const setup = freeKickSetup(beat * 7919, { maxWind: 3 }), keeper = keeperById(scene.keeper);
+        const setup = freeKickSetup(beat * 7919, { maxWind: 3, wallHeight: WALL_HEIGHTS[tier.id] }), keeper = keeperById(scene.keeper);
         scene.kind = "freekick"; scene.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeper).wall };
         for (let i = 0; i < 3000; i++) {
           const outcome = resolveFreeKick({ ...setup, seed: setup.seed + i }, { aimX: Math.random() * 1.8 - 0.9, lift: Math.random(), power: Math.random(), spin: Math.random() * 2 - 1, top: Math.random() }, keeper);
@@ -321,7 +321,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const ladder = nextRung(progress);
     const base: Session = { mode, kind: "penalty", keeper: ladder, seed: (Date.now() ^ Number(friendId % 100000n)) >>> 0, total: 5, kicks: [], points: 0, streak: 0, rung: progress.difficulty, earned: { rf: 0n, gboot: 0, race: 0 } };
     if (mode === "tutorial") return { ...base, keeper: "mouse", total: 3, ...extra };
-    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, keeper: director.current.keeperForKick(progress.stamps, ladder, 0), setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4 }), ...extra };
+    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, keeper: director.current.keeperForKick(progress.stamps, ladder, 0), setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4, wallHeight: WALL_HEIGHTS[tier.id] }), ...extra };
     if (mode === "penalties") return { ...base, keeper: director.current.keeperForRound(progress.stamps, ladder), ...extra };
     if (mode === "target") return { ...base, kind: "target", total: 0, target: { startedAt: performance.now(), round: 0, targets: spawnTargets(base.seed, 0), combo: 0, hits: 0 }, ...extra };
     if (mode === "skill") return { ...base, keeper: "finalwall", ...extra };
@@ -356,7 +356,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }
 
   function startLevel(level: Level) {
-    const setup = level.setup ? freeKickSetup(dateSeed(level.id), { distance: level.setup.distance, angle: level.setup.angle, wallSize: level.setup.wallSize }) : undefined;
+    const setup = level.setup ? freeKickSetup(dateSeed(level.id), { distance: level.setup.distance, angle: level.setup.angle, wallSize: level.setup.wallSize, wallHeight: level.setup.wallHeight ?? WALL_HEIGHTS[level.stadium] }) : undefined;
     beginSession(newSession("tour", { kind: level.mode === "freekick" ? "freekick" : "penalty", keeper: level.keeper, total: level.kicks, level, setup: setup ? { ...setup, wind: level.setup?.wind ?? 0 } : undefined, seed: dateSeed(level.id) }));
     setPendingLevel(null);
   }
@@ -496,7 +496,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.kicks.length >= current.total) { endSession(current); return; }
     // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
     if (current.mode === "freekicks") {
-      const setup = freeKickSetup((current.seed + current.kicks.length * 101) >>> 0, { maxWind: tier.id === "champions" ? 0 : 4 });
+      const setup = freeKickSetup((current.seed + current.kicks.length * 101) >>> 0, { maxWind: tier.id === "champions" ? 0 : 4, wallHeight: WALL_HEIGHTS[tier.id] });
       const keeper = director.current.keeperForKick(progressRef.current.stamps, nextRung(progressRef.current), current.kicks.length);
       const updated = { ...current, setup, keeper };
       if (stage.current) { stage.current.keeper = keeper; if (keeper !== current.keeper) stage.current.say(`intro:${keeper}`); }

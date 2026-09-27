@@ -20,7 +20,7 @@
     "typescript": "^7.0.2",
     "viem": "^2.56.9"
   },
-  "description": "Penalty Kings \u2014 a Rare Friends penalty shootout. FriendSDK v0.1.2 game, RF-priced balls, $GBOOT economy.",
+  "description": "Penalty Kings — a Rare Friends penalty shootout. FriendSDK v0.1.2 game, RF-priced balls, $GBOOT economy.",
   "license": "Apache-2.0",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",

@@ -121,14 +121,16 @@ export function drawBoards(c: CanvasRenderingContext2D, stadium: StadiumId, time
 }
 
 /** Grass stripes, markings and weather tint (painted once per stadium/weather). */
-export function drawPitch(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather) {
-  c.drawImage(layer(`pitch-${stadium}-${weather}`, p => {
+/** `markings: false` paints grass only (free kicks draw their own markings in perspective). */
+export function drawPitch(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, markings = true) {
+  c.drawImage(layer(`pitch-${stadium}-${weather}-${markings}`, p => {
     const theme = THEMES[stadium];
     let y = 102, band = 0;
     while (y < H) { const h = 7 + (y - 102) * 0.13; p.fillStyle = theme.grass[band % 2]; p.fillRect(0, y, W + 80, Math.ceil(h)); y += h; band++; }
     if (weather === "snow") { p.fillStyle = "#ffffff55"; for (let i = 0; i < 400; i++) p.fillRect(Math.floor(hash01(i) * W), 102 + Math.floor(hash01(i + 999) * 218), 2, 1); }
     if (weather === "rain") { p.fillStyle = "#9fd3ff55"; for (let i = 0; i < 6; i++) { const px = 40 + hash01(i * 7) * 400, py = 200 + hash01(i * 13) * 100; p.beginPath(); p.ellipse(px, py, 16, 4, 0, 0, Math.PI * 2); p.fill(); } }
     if (stadium === "park") { p.fillStyle = "#6d8f5a"; for (let i = 0; i < 3; i++) { const px = 60 + i * 170, py = 280 + (i % 2) * 14; p.beginPath(); p.ellipse(px, py, 14, 3, 0, 0, Math.PI * 2); p.fill(); } }
+    if (!markings) return;
     p.strokeStyle = theme.lines; p.lineWidth = 1;
     const line = (x1: number, y1: number, x2: number, y2: number) => { p.beginPath(); p.moveTo(x1 + 0.5, y1 + 0.5); p.lineTo(x2 + 0.5, y2 + 0.5); p.stroke(); };
     line(0, GOAL.line, W, GOAL.line);

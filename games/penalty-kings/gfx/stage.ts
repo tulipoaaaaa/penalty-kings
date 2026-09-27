@@ -12,7 +12,7 @@ import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose 
 import { drawBall, emitTrail, RARITY_FX } from "./ball.js";
 import { drawFriend, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
-import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawWind, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock } from "./setpieces.js";
+import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawWind, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawFkMarkings } from "./setpieces.js";
 import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
@@ -138,9 +138,13 @@ export class Stage {
 
   /** Where the ball rests before the kick (penalty spot, or the free-kick spot through the FK camera). */
   ballHome() { return this.kind === "freekick" && this.freeKick ? fkBall(this.freeKick.setup) : { x: SPOT.x, y: SPOT.y, scale: 1 }; }
+  /** The goal group's placement: identity for penalties, true perspective for free kicks. */
+  goalXf() { return this.kind === "freekick" && this.freeKick ? goalTransform(this.freeKick.setup) : { g: 1, x: GOAL.cx, y: GOAL.line }; }
+  /** A point in goal-art coordinates → screen. */
+  goalPoint(p: { x: number; y: number }) { return applyGoal(this.goalXf(), p); }
 
   private resolve() {
-    const shot = this.shot!, result = shot.outcome.result, end = toScreen(shot.outcome.target.x, shot.outcome.target.y);
+    const shot = this.shot!, result = shot.outcome.result, art = toScreen(shot.outcome.target.x, shot.outcome.target.y), end = this.goalPoint(art);
     if (this.fk?.result === "wall") {
       const hit = fkProject(this.freeKick!.setup, this.fk.path[this.fk.path.length - 1]);
       this.crowd.react("ooh"); this.say(this.cue ?? "wall"); this.cue = null; this.stats.saves++; this.onEvent("resolved", "wall"); this.streak = 0; this.reaction = "save";
@@ -160,7 +164,7 @@ export class Stage {
       return;
     }
     if (result === "goal") {
-      this.net.impulse(end.x, end.y, 160); this.camera.addTrauma(0.5); this.goalFlash = 2;
+      this.net.impulse(art.x, art.y, 160); this.camera.addTrauma(0.5); this.goalFlash = 2;
       this.particles.emit("confetti", end.x, end.y - 10, 60, { color: THEMES[this.stadium].confetti, speed: 140, spread: Math.PI * 1.2, gravity: 70, life: 2.4 });
       this.particles.emit("thread", end.x, end.y, 8, { color: "#ffffff", speed: 60, life: 0.5, gravity: 60 });
       this.sfx("net"); this.sfx("roar");
@@ -239,21 +243,27 @@ export class Stage {
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
     drawBoards(c, this.stadium, this.time, pan);
-    drawPitch(c, this.stadium, this.weather);
+    const fk = this.kind === "freekick" && this.freeKick ? this.freeKick : null;
+    drawPitch(c, this.stadium, this.weather, !fk);
+    if (fk) drawFkMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
     drawHeatShimmer(c, this.streak >= 2 && !this.reduced ? Math.min(1, this.streak - 1) : 0, this.time);
     this.drawReferee(c);
+    const xf = this.goalXf();
+    c.save();
+    if (xf.g !== 1) { c.translate(xf.x, xf.y); c.scale(xf.g, xf.g); c.translate(-GOAL.cx, -GOAL.line); }
     this.net.draw(c);
     drawZoneHints(c, this.hints);
-    const ballBehind = this.ballBehindKeeper();
+    const ballBehind = !fk && this.ballBehindKeeper();
     if (ballBehind) this.drawBallLayer(c);
     if (this.kind !== "target") this.drawKeeperLayer(c);
     drawGoalFrame(c, this.reduced ? 0 : this.postWobble, this.time);
+    c.restore();
     if (this.kind === "target") { drawCrossbarGlow(c, this.time); drawTargets(c, this.targets, this.time, this.reduced); }
     if (this.kind === "freekick" && this.freeKick) {
       const { setup, wall } = this.freeKick, since = this.shot && this.mode === "shot" ? this.modeTime - this.shot.strikeAt : null;
       const beyond = this.fk && since !== null && since >= 0 && pathAt(this.fk.path, since).z > Math.cos(setup.angle) * WALL_DISTANCE;
       if (beyond && !ballBehind) this.drawBallLayer(c);
-      drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced, this.stadium);
+      drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced, this.stadium, this.time);
       if (this.preview && this.mode === "idle") drawPreview(c, setup, this.preview.path, this.preview.alpha);
       if (!beyond && !ballBehind) this.drawBallLayer(c);
       drawWind(c, setup.wind, this.time, this.reduced);
@@ -362,13 +372,13 @@ export class Stage {
     if (!this.ballVisible) return;
     const fx = RARITY_FX[this.rarity], onFire = this.streak >= 3;
     const home = this.ballHome();
-    let { x, y, r } = { x: home.x, y: home.y, r: 4.5 * (this.kind === "freekick" ? Math.min(1.6, home.scale * 0.6) : 1) }, spin = 0;
+    let { x, y, r } = { x: home.x, y: home.y, r: "pxPerM" in home ? Math.max(2, 0.11 * home.pxPerM) : 4.5 }, spin = 0;
     const shot = this.shot;
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt && this.fk && this.freeKick) {
       const since = this.modeTime - shot.strikeAt, last = this.fk.path[this.fk.path.length - 1];
       if (since <= last.t) {
         const at = fkProject(this.freeKick.setup, pathAt(this.fk.path, since));
-        x = at.x; y = at.y; r = Math.max(1.8, 0.11 * at.scale * 24.6 * 0.9); spin = this.time * 14 * (Math.abs(this.fk.knuckle ? 0 : 1) || 0.1);
+        x = at.x; y = at.y; r = Math.max(1.4, 0.11 * at.pxPerM); spin = this.time * 14 * (Math.abs(this.fk.knuckle ? 0 : 1) || 0.1);
         if (this.fk.knuckle && !this.reduced) spin = Math.sin(this.time * 9) * 0.4;
         const ground = fkProject(this.freeKick.setup, { ...pathAt(this.fk.path, since), y: 0 });
         c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(ground.x, ground.y, r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
@@ -397,6 +407,7 @@ export class Stage {
         else if (result === "over") { x = end.x + (end.x - 240) * 0.5 * q; y = end.y - 70 * q; r = 2.5 - 1.2 * q; }
         else { x = end.x + (end.x - 240) * 1.2 * q; y = end.y + 20 * q; r = 2.5; }
         if (q >= 1 && result !== "goal") return;
+        if (this.fk) { const at = this.goalPoint({ x, y }), g = this.goalXf().g; x = at.x; y = at.y; r = Math.max(1.2, r * g); }
       }
     }
     c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, home.y + 5 - (home.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
@@ -478,7 +489,8 @@ export class Stage {
 
   private drawBubble(c: CanvasRenderingContext2D) {
     if (!this.bubble) return;
-    const pop = ease.outBack(clamp01(this.bubble.t / 0.3)), x = GOAL.cx + 40, y = GOAL.bar - 6, w = 10 + this.bubble.text.length * 5;
+    const anchor = this.goalPoint({ x: GOAL.cx + 40, y: GOAL.bar - 6 });
+    const pop = ease.outBack(clamp01(this.bubble.t / 0.3)), x = anchor.x, y = anchor.y, w = 10 + this.bubble.text.length * 5;
     c.save(); c.translate(x, y); c.scale(pop, pop);
     c.fillStyle = "#ffffff"; c.fillRect(0, -14, w, 13); c.fillRect(4, -2, 4, 3);
     c.fillStyle = "#0b0d1a"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillText(this.bubble.text, 5, -7); c.textBaseline = "alphabetic";

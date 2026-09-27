@@ -8,7 +8,9 @@ import { prng, clamp, keeperAt, type KeeperProfile, type KeeperPlan, type Diffic
 
 export const GOAL_HALF_WIDTH = 3.66, GOAL_HEIGHT = 2.44, WALL_DISTANCE = 9.15;
 const G = 9.81, DRAG = 0.0125, MAGNUS = 0.19, DT = 1 / 240, WIND_GAIN = 0.09;
-const PLAYER_WIDTH = 0.62, WALL_HEIGHT = 1.85, JUMP_HEIGHT = 0.38, JUMP_TIME = 0.5;
+export const PLAYER_WIDTH = 0.62, JUMP_HEIGHT = 0.38, JUMP_TIME = 0.5;
+/** Wall height by difficulty (stadium): a youth wall at Park, a pro wall at Champions. Levels may override. */
+export const WALL_HEIGHTS = { park: 1.65, pro: 1.8, champions: 1.9 } as const;
 
 export type FreeKickSetup = Readonly<{
   /** Straight-line distance from the ball to the centre of the goal line (18–32 m). */
@@ -16,6 +18,8 @@ export type FreeKickSetup = Readonly<{
   /** Angle off the centre line, radians (negative = ball left of centre). */
   angle: number;
   wallSize: 3 | 4 | 5;
+  /** Standing height of the wall players, metres (1.55–1.95). */
+  wallHeight: number;
   /** Seconds after the strike when the wall leaves the ground. */
   wallJumpAt: number;
   /** Lateral wind, m/s (+ blows towards +x). 0 indoors. */
@@ -52,13 +56,13 @@ export type FreeKickOutcome = Readonly<{
 }>;
 
 /** A date/level-seeded setup. Outdoor stadiums pass maxWind > 0. */
-export function freeKickSetup(seed: number, options: { distance?: number; angle?: number; wallSize?: 3 | 4 | 5; maxWind?: number } = {}): FreeKickSetup {
+export function freeKickSetup(seed: number, options: { distance?: number; angle?: number; wallSize?: 3 | 4 | 5; maxWind?: number; wallHeight?: number } = {}): FreeKickSetup {
   const random = prng(seed);
   const distance = options.distance ?? 18 + Math.round(random() * 14);
   const angle = options.angle ?? (random() - 0.5) * 0.7;
   const wallSize = options.wallSize ?? ((3 + Math.floor(random() * 3)) as 3 | 4 | 5);
   const wind = options.maxWind ? Math.round((random() * 2 - 1) * options.maxWind * 10) / 10 : 0;
-  return { distance: clamp(distance, 18, 32), angle: clamp(angle, -0.5, 0.5), wallSize, wallJumpAt: 0.12 + random() * 0.18, wind, seed };
+  return { distance: clamp(distance, 18, 32), angle: clamp(angle, -0.5, 0.5), wallSize, wallHeight: clamp(options.wallHeight ?? WALL_HEIGHTS.pro, 1.55, 1.95), wallJumpAt: 0.12 + random() * 0.18, wind, seed };
 }
 
 /** Knuckleball: hard and almost spinless. */
@@ -105,7 +109,7 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
       jumped = jump > 0;
       // Over the top, or UNDER a wall that has jumped (a skidding low shot).
       const under = jump > 0.12 && cy < jump - 0.08;
-      if (Math.abs(cx - wallX) < halfWidth && cy < WALL_HEIGHT + jump && !under) wallHit = true;
+      if (Math.abs(cx - wallX) < halfWidth && cy < (setup.wallHeight ?? 1.85) + jump && !under) wallHit = true;
     }
     if (wallHit) break;
     if (t >= nextSample) { path.push({ t, x, y, z }); nextSample += 1 / 30; }
