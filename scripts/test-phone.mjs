@@ -3,6 +3,8 @@
 //   - the frame fits the screen (no scrolling to reach the game);
 //   - portrait: the "Turn your phone sideways" card, then "Play in portrait anyway"; landscape: no card;
 //   - the goal and the ball are wholly on screen, uncovered by game UI, and clear of the SDK toolbar;
+//   - the tutorial coaching toast (aim phase) is on screen and unclipped, clear of the goal mouth, the ball, the
+//     striker, the lower-left pitch quadrant and all of the pitch below the crossbar, and of the pot banner / HUD / actions;
 //   - no text under 11 CSS px anywhere in the game UI (a DOM walk in the game frame) on the rotate card, the
 //     title, the HUD / pot banner / coaching toast, the results, the pack opening and the ball carousel;
 //   - Kick off, Quick shot and Menu (and the pack/carousel buttons) are on screen, tappable (nothing covers them)
@@ -25,6 +27,11 @@ const MIN_FONT = 11;
 // Logical scene geometry (gfx/stadium.ts, penalty camera): goal mouth incl. posts and bar, and the ball on the spot.
 const GOAL = { left: 168, right: 312, top: 146, bottom: 212 };
 const BALL = { left: 233, right: 247, top: 243, bottom: 257 };
+// While aiming, the coaching toast stays off the pitch that matters: the striker (run-up left of the ball), the
+// lower-left quadrant (where the toast sat on landscape phones before), and everything from just above the bar down.
+const STRIKER = { left: 110, right: 250, top: 190, bottom: 300 };
+const LOWER_LEFT = { left: 0, right: 240, top: 160, bottom: 320 };
+const PLAY = { left: 0, right: 480, top: GOAL.top - 6, bottom: 320 };
 await mkdir(OUT, { recursive: true });
 
 for (const [width, height] of SIZES) {
@@ -97,6 +104,28 @@ for (const [width, height] of SIZES) {
         checked.push(`visible:${name}`);
         return box;
       };
+      /** The tutorial coaching toast while aiming: on screen, unclipped, off the pitch that matters and off the other UI. */
+      const toastClear = async () => {
+        const toast = game.locator(".pk-toast");
+        await toast.waitFor({ state: "visible" });
+        assert.match(await toast.textContent(), /^Tutorial: swipe up/, `${label}: the tutorial coaching toast is up`);
+        const origin = await iframeOrigin(), bar = await toolbar();
+        const rectOf = locator => locator.evaluate(node => { const r = node.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; });
+        const shift = r => ({ x1: r.x1 + origin.x, y1: r.y1 + origin.y, x2: r.x2 + origin.x, y2: r.y2 + origin.y });
+        const box = shift(await rectOf(toast));
+        assert.ok(inViewport(box), `${label}: the coaching toast is off screen ${JSON.stringify(box)}`);
+        assert.ok(!hit(box, bar), `${label}: the coaching toast is under the SDK toolbar`);
+        assert.equal(await toast.evaluate(node => node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1), true, `${label}: the coaching toast's text is clipped`);
+        for (const [rect, name] of [[GOAL, "goal mouth"], [BALL, "ball"], [STRIKER, "striker"], [LOWER_LEFT, "lower-left pitch quadrant"], [PLAY, "pitch below the crossbar"]]) {
+          const a = await toPage(rect.left, rect.top), b = await toPage(rect.right, rect.bottom), area = { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+          assert.ok(!hit(box, area), `${label}: the coaching toast covers the ${name} ${JSON.stringify({ toast: box, [name]: area })}`);
+        }
+        for (const selector of [".pk-pot", ".pk-hud-left", ".pk-hud-right", ".pk-actions"]) {
+          const other = shift(await rectOf(game.locator(selector)));
+          assert.ok(!hit(box, other), `${label}: the coaching toast overlaps ${selector} ${JSON.stringify({ toast: box, other })}`);
+        }
+        checked.push("toast:clear");
+      };
       /** A real swipe: touch events from the ball, up and slightly right, ~180 ms. */
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
@@ -142,6 +171,8 @@ for (const [width, height] of SIZES) {
       await waitShootable();
       await sceneVisible(GOAL, "goal");
       await sceneVisible(BALL, "ball");
+      await toastClear();
+      await page.screenshot({ path: `artifacts/phone-${label}-tutorial.png` });
       await fonts("tutorial HUD");
       await reachable(game.getByTestId("quick"), "Quick shot");
       await reachable(game.getByTestId("menu"), "Menu");
