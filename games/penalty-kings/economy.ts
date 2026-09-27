@@ -10,14 +10,15 @@ export type TierId = "park" | "pro" | "champions";
 export type Tier = Readonly<{ id: TierId; name: string; priceRF: number; path: string; raceWeight: number; baseDrop: number }>;
 
 /**
- * Base $GBOOT drop per ball at the launch price (0.01 RF per $GBOOT).
- * Average rarity multiplier is 2.15, so the average drop is 2.15 × baseDrop.
+ * Base $GBOOT drop per ball at the launch price (0.01 RF per $GBOOT):
+ * floor(3% × ball price ÷ 0.01 ÷ 2.15), where 2.15 is the average rarity multiplier.
  * Park: 13 × 2.15 = 27.95 $GBOOT ≈ 0.28 RF = 2.8% of the 10 RF ball price (target ≤ 3%).
+ * Live rate each week: min(this schedule, 3% × price ÷ TWAP ÷ 2.15, treasury budget) — docs/DROPS.md.
  */
 export const TIERS: readonly Tier[] = [
   { id: "park", name: "Park", priceRF: 10, path: "./", raceWeight: 1, baseDrop: 13 },
-  { id: "pro", name: "Pro", priceRF: 1000, path: "./pro/", raceWeight: 100, baseDrop: 1300 },
-  { id: "champions", name: "Champions", priceRF: 10000, path: "./champions/", raceWeight: 1000, baseDrop: 13000 },
+  { id: "pro", name: "Pro", priceRF: 1000, path: "./pro/", raceWeight: 100, baseDrop: 1395 },
+  { id: "champions", name: "Champions", priceRF: 10000, path: "./champions/", raceWeight: 1000, baseDrop: 13953 },
 ];
 
 export const tierForPrice = (priceRF: number) => TIERS.find(tier => tier.priceRF === priceRF) ?? TIERS[0];

@@ -69,7 +69,7 @@ Every purchased ball reserves the top prize (10 × price) until settled; kept ba
 with no expiry. `game.json` is the Park definition; `tiers/*.json` hold all three. The SDK
 runtime runs one chance-game definition per session, so each stadium is its own build/page.
 
-Base $GBOOT drop (simulated preview, launch price 0.01 RF): Park 13, Pro 1,300, Champions 13,000
+Base $GBOOT drop (simulated preview, launch price 0.01 RF): Park 13, Pro 1,395, Champions 13,953
 × the rarity multiplier (average 2.15×, ≈ 2.8% of the ball price).
 
 ## Assets

@@ -1,0 +1,36 @@
+# Addresses and sources
+
+Every external address used by Penalty Kings, where it came from, and how it was checked on
+Robinhood mainnet (chain 4663). Reads were made through a QuickNode Robinhood endpoint on
+2026-09-27 (around block 73,657,545). **UNVERIFIED** entries are never sent funds.
+
+| Name | Address | Source | On-chain check | Status |
+|---|---|---|---|---|
+| RF ($RAREFRIENDS) | `0x0779369854d3EcdEA927206718FFD7730C67B71f` | rarefriends.com/docs/contracts; FriendSDK `contracts/README.md` | code present; `symbol()` = `RAREFRIENDS`; `totalSupply()` = 951,420,552.59; bytecode has `burn(uint256)` (`0x42966c68`) and `burnFrom` (`0x79cc6790`) | verified |
+| Generations | `0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D` | rarefriends.com/docs/contracts; FriendSDK | `token()` = RF | verified |
+| Genesis | `0x116EaA62241751E0c98dA43d458600c6C17cD361` | rarefriends.com/docs/contracts | not read (not used by our scripts) | recorded |
+| ActivationManager | `0xD4A35e11318E3679168d409184B788bcF9F283Ac` | rarefriends.com/docs/contracts | not yet read; hardwire entry point to be read from verified source before use | UNVERIFIED until Phase 2 |
+| RF/WETH hook | `0x7A65d0194e6Cc43971C31CE7D1471Da01D42A0cC` | rarefriends.com/docs/contracts | not read | recorded |
+| Market | `0x99930E551b6f849bAabC4B491053eF28a700C4F2` | rarefriends.com/docs/contracts | not yet read (candidate RF buy path) | UNVERIFIED until Phase 2 |
+| Reserve | `0xA850B2499c064900EfF341745807e1cB0d71a52b` | rarefriends.com/docs/contracts | not read | recorded |
+| Token-bound account impl | `0xED038886c002B285EB0f74971e967B02F6af8ea5` | rarefriends.com/docs/contracts | not read (the SDK resolves wallets) | recorded |
+| Dice Entropy | `0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c` | FriendSDK `contracts/README.md` (pinned by the SDK CLI) | checked by SDK deploy tooling at deploy time | SDK-pinned |
+| Dice provider | `0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6` | FriendSDK `contracts/README.md` | as above | SDK-pinned |
+| RF/WETH v4 pool id | `0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240` | rarefriends.com/docs/contracts | StateView `getSlot0` → sqrtPriceX96 59949106155254258080182211, tick −143740; `getLiquidity` 147865847752143433133351 (≈ 112 ETH + 195M RF virtual) | verified |
+| Uniswap v4 PoolManager | `0x8366a39cc670b4001a1121b8f6a443a643e40951` | Uniswap docs `content/protocols/v4/deployments.mdx` ("Robinhood Chain: 4663"), Uniswap/docs commit `1c7597d` | returned by `poolManager()` on StateView, PositionManager and Quoter | verified |
+| Uniswap v4 PositionManager | `0x58daec3116aae6d93017baaea7749052e8a04fa7` | same | `poolManager()` = PoolManager | verified |
+| Uniswap v4 StateView | `0xf3334192d15450cdd385c8b70e03f9a6bd9e673b` | same | `poolManager()` = PoolManager; pool reads succeed | verified |
+| Uniswap v4 Quoter | `0x8dc178efb8111bb0973dd9d722ebeff267c98f94` | same | `poolManager()` = PoolManager | verified |
+| Universal Router | `0x8876789976decbfcbbbe364623c63652db8c0904` | same; also Uniswap swapping-API supported chains | not read | recorded |
+| Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | same | `DOMAIN_SEPARATOR()` answers | verified |
+| PONS v2 factory | `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` | owner brief | `approvedPairTokens(RF)` = **false** (2026-09-27) → launch via Uniswap v4 directly | checked |
+
+## Vendored packages
+
+| Package | Source | SHA-256 |
+|---|---|---|
+| `vendor/rarefriends-friendsdk-0.1.2.tgz` | https://github.com/spokesz/friendsdk/releases/download/v0.1.2/rarefriends-friendsdk-0.1.2.tgz | `a6352e187916089b6829c5387fe87f386c5774004f181990e4e3c8ae641cfe83` |
+
+## Our deployments
+
+None yet. See [DEPLOYMENT.md](DEPLOYMENT.md).

@@ -24,6 +24,8 @@ jobs:
         run: npm run verify:odds
       - name: Engine unit tests
         run: npm run test:engine
+      - name: Economy simulator smoke
+        run: node scripts/economy-sim.mjs --smoke
       - name: FriendSDK game check
         run: npm run check
       - name: Install Chromium
