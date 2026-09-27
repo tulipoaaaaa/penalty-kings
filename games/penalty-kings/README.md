@@ -75,6 +75,8 @@ Base $GBOOT drop (simulated preview, launch price 0.01 RF): Park 13, Pro 1,395, 
 ## Assets
 
 All art is original and drawn in code: pitch, crowd, goal, four keepers, ball, UI. The Friend is
-drawn from its canonical on-chain Generations sprite (SDK sprite reader), unaltered. UI sounds
+drawn from its canonical on-chain Generations sprite (SDK sprite reader), unaltered. The crowd of
+little Friends is that same sprite (the player's own; no other Friend is read), downscaled
+nearest-neighbour with its pixels unaltered, with flags, scarves and banners held around it. UI sounds
 use the FriendSDK sound kit (code-synthesised, see its NOTICE); crowd/kick sounds are synthesised
 noise in `audio.ts`. No real clubs, crests, players or brands.

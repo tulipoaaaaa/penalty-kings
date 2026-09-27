@@ -80,7 +80,7 @@ function layer(key: string, paint: (c: CanvasRenderingContext2D) => void, width 
   return canvas;
 }
 
-// ── 4×5 pixel font for cached art (the tifo, the mosaic, the jumbotron) ─────────
+// ── 4×5 pixel font for cached art (the tifo, the mosaic, the jumbotron, the crowd's banners and PK flags) ─
 const GLYPHS: Readonly<Record<string, string>> = {
   A: "0110100111111001 1001", B: "1110100111101001 1110", C: "0111100010001000 0111", D: "1110100110011001 1110", E: "1111100011101000 1111",
   F: "1111100011101000 1000", G: "0111100010111001 0111", H: "1001100111111001 1001", I: "1110010001000100 1110", K: "1001101011001010 1001",
@@ -89,8 +89,8 @@ const GLYPHS: Readonly<Record<string, string>> = {
   W: "1001100111111111 1001", Y: "1001100101100110 0110", "!": "0100010001000000 0100", " ": "0000000000000000 0000",
 };
 /** Width in font cells (4 per glyph + 1 gap). */
-const glyphCols = (text: string) => text.length * 5 - 1;
-function glyphText(c: CanvasRenderingContext2D, text: string, x: number, y: number, px: number, colour: string) {
+export const glyphCols = (text: string) => text.length * 5 - 1;
+export function glyphText(c: CanvasRenderingContext2D, text: string, x: number, y: number, px: number, colour: string) {
   c.fillStyle = colour;
   [...text].forEach((ch, i) => {
     const bits = (GLYPHS[ch] ?? GLYPHS[" "]).replace(" ", "");

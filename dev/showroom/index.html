@@ -30,6 +30,8 @@
   label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 8px 2px 0; }
   .muted { color: var(--muted); font-size: 12px; }
   pre#log { background: #000; color: #9f9; font-size: 11px; height: 160px; overflow: auto; padding: 6px; margin: 8px 0 0; white-space: pre-wrap; }
+  canvas#crowd-zoom { width: 100%; image-rendering: pixelated; display: block; margin-top: 6px; border: 2px solid var(--line); background: #000; }
+  canvas#crowd-zoom[hidden] { display: none; }
   canvas#cast { width: 100%; max-width: 960px; image-rendering: pixelated; border: 2px solid var(--line); }
   @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 </style>
@@ -38,11 +40,13 @@
 <div class="devbar">DEV SHOWROOM — local only, never deployed. Outcomes come from the real engine.</div>
 <div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button><button data-tab="balls" data-testid="tab-balls">Balls</button><button data-tab="keepers" data-testid="tab-keepers">Keepers</button></div>
 <div class="layout" data-panel="stage">
-  <div class="screen"><canvas id="stage"></canvas><div id="meter"></div><pre id="director-overlay" data-testid="director-overlay"></pre></div>
+  <div class="screen"><canvas id="stage"></canvas><div id="meter"></div><pre id="director-overlay" data-testid="director-overlay"></pre>
+    <canvas id="crowd-zoom" data-testid="crowd-zoom" hidden></canvas></div>
   <aside>
     <h3>Friend</h3>
     <input id="friend-id" value="336583" size="8" aria-label="Friend ID"><button id="friend-load">Load</button>
     <div>Samples: <button data-sample="336583">336583 (burner)</button><button data-sample="7730">7730</button><button data-sample="3412">3412</button><button data-sample="15008">15008</button><button data-sample="78784">78784</button><button data-sample="86300">86300</button></div>
+    <div>SDK recorded samples (offline, canonical): <button data-sdk-sample="7730">7730</button><button data-sdk-sample="3412">3412</button></div>
     <div class="muted" id="friend-status"></div>
     <h3>Scene</h3>
     <label>Keeper <select id="keeper"></select></label>
@@ -59,6 +63,13 @@
     <h3>Reactions</h3><div id="reactions"></div>
     <h3>Rarity reveals</h3><div id="rarities"></div>
     <h3>Moments</h3><div id="moments"></div>
+    <h3>Crowd: little Friends</h3>
+    <label><input id="crowd-friends" type="checkbox" checked data-testid="crowd-friends"> Friends crowd (off: the original crowd, as shown while the Friend loads)</label>
+    <label><input id="crowd-zoom-toggle" type="checkbox" data-testid="crowd-zoom-toggle"> Close-up ×4 (under the stage)</label>
+    <label>x <input id="crowd-zoom-x" type="range" min="0" max="360" value="170"></label>
+    <label>y <input id="crowd-zoom-y" type="range" min="0" max="280" value="100"></label>
+    <div id="crowd"></div>
+    <div class="muted" id="crowd-info"></div>
     <h3>Commentary (<span id="line-count"></span> lines)</h3><div id="commentary"></div>
     <h3>Director debug</h3>
     <label><input id="director-overlay-toggle" type="checkbox" checked data-testid="director-overlay-toggle"> Overlay on the stage</label>
