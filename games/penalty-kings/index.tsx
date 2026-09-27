@@ -634,11 +634,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (scene && current) {
       scene.ballVisible = true;
       const index = current.kicks.length;
+      // Every aim starts with the equipped celebration again: the first-goal trophy lift can land on the tutorial's
+      // LAST kick, and must not stick for the rest of the session.
+      scene.celebration = celebrationOf(equipped.celebration) as CelebrationId;
       if (current.mode === "tutorial") {
         // The first-session script (the very first match only): Squeak with aim assist, then the surprise keeper.
         const plan = FIRST_SESSION[Math.min(FIRST_SESSION.length - 1, index)], epochAt = sessionEpoch.current;
         const soon = (ms: number, run: () => void) => window.setTimeout(() => { if (sessionEpoch.current === epochAt && stage.current) run(); }, ms);
-        scene.hints = 1; scene.celebration = celebrationOf(equipped.celebration) as CelebrationId; // after kick 1's first-goal celebration
+        scene.hints = 1;
         if (plan.surprise && plan.keeper !== current.keeper) {
           // "Here comes trouble…", then Chroma walks on (walk-off, walk-on, taunt) and gets an intro line.
           current = { ...current, keeper: plan.keeper }; setSessionNow(current);
