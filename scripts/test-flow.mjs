@@ -225,11 +225,32 @@ await testGame("./games/penalty-kings", {
     assert.equal(during.pack, true); assert.equal(during.shootable, false, "not shootable while the pack is open");
     await page.keyboard.down(" "); await page.keyboard.up(" ");
     await noBanner(500);
-    await game.getByTestId("reveal-all").click();
-    await game.getByTestId("to-bag").click();
     ok("no kick while a pack is revealing (keyboard included)");
 
+    // 11b. BQ-P0-1: leave the pack mid-reveal (Menu → Change mode). The pack closes (no soft-lock), and both
+    //      Penalties and Big Match start afterwards.
+    assert.equal(await game.getByTestId("to-bag").count(), 0, "still mid-reveal");
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Change mode", exact: true }).click();
+    await game.getByTestId("mode-penalties").waitFor({ timeout: 3000 });
+    await page.waitForTimeout(2500); // past the reveal sequence's timers
+    const left = await flow();
+    assert.equal(left.pack, false, `pack cleared on Change mode: ${JSON.stringify(left)}`);
+    assert.equal(left.stage, false, "no Stage reveal left running");
+    assert.equal(await game.getByTestId("pack").count(), 0, "the pack dialog is gone");
+    await game.getByTestId("mode-penalties").click();
+    await waitShootable();
+    assert.equal((await flow()).match, false, "Penalties started after leaving the pack");
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Change mode", exact: true }).click();
+    await game.getByTestId("mode-match").click();
+    await waitShootable();
+    assert.equal((await flow()).match, true, "Big Match started after leaving the pack");
+    ok("BQ-P0-1: leaving a pack mid-reveal (Change mode) clears it; Penalties and Big Match start");
+
     // 12. Redeem the ball being aimed with → the aim is cancelled (cannot kick a ball you no longer hold).
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "My Bag", exact: true }).click();
     const cards = game.getByTestId("ball");
     await cards.first().getByTestId("shoot-ball").click();
     await waitShootable();

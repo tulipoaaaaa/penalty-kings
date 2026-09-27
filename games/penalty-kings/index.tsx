@@ -1040,15 +1040,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         })();
         // The (simulated) beacon for this pack, requested after the plays are fixed. Instant: no timer at all.
         const beacon = expected > 0 ? packCommitment(plays.map(play => String(play.id)), { friendId: friendId.toString() }).then(commitment => source.next("pack", commitment, controller.signal)) : null;
-        await Promise.all([settle, beacon]);
+        try { await Promise.all([settle, beacon]); }
+        catch (error) { if (!isAbort(error)) throw error; await settle; } // the player left the sealed pack (BQ-P0-1): its balls still settle
       } finally {
         if (packRoll.current === controller) packRoll.current = null;
         stage.current?.endWait();
         if (version === epoch.current) setPack(current => (current?.sealed ? null : current));
       }
       if (version !== epoch.current) return;
+      const left = controller.signal.aborted; // left while sealed: the balls go to the Bag without the ceremony
       if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
-      if (!rarities.length) { live.current = { ...live.current, pack: false }; setMenu("balls"); return; }
+      if (!rarities.length) { live.current = { ...live.current, pack: false }; if (!left) setMenu("balls"); return; }
       let drops = 0, race = 0, value = 0n;
       for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight; value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
@@ -1057,6 +1059,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (best >= 5) { setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`); director().noteBigPull(); } // the Director only learns "a big pull happened" (intensity), never its value
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
       setBag(list => addPulls(list, rarities, tier.id, Date.now()));
+      if (left) { setMessage(`${rarities.length} ball${rarities.length === 1 ? "" : "s"} from your pack went to your Bag.`); return; }
       setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
       setMenu(null); setScreen("play"); stage.current?.say("pack");
       runPackSequence(rarities, performance.now() - started);
@@ -1073,6 +1076,18 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const later = (ms: number, run: () => void) => packTimers.current.push(window.setTimeout(() => { if (epoch.current === epochAt) run(); }, ms));
     for (const step of plan.steps) later(step.at, () => (step.best ? flipCard(step.index) : flipCard(step.index, true)));
     if (plan.stingAt !== null) later(plan.stingAt, () => { crowd.current?.sting(plan.stingLevel); stage.current?.crowd.react("tense"); });
+  }
+  /**
+   * BQ-P0-1: leave the pack (Change mode, back to the modes screen). Its reveal timers stop, a sealed pack's
+   * pending roll is aborted (its balls still settle into the Bag), and the dialog, the flow's pack flag and
+   * the Stage's wait/reveal are cleared, so every mode can start again.
+   */
+  function leavePack() {
+    clearPackTimers();
+    if (!live.current.pack && !packRoll.current) return;
+    packRoll.current?.abort(); packRoll.current = null;
+    stage.current?.cancel(); // ends the sealed pack's wait and any card reveal on the Stage
+    live.current = { ...live.current, pack: false }; setPack(null);
   }
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
@@ -1337,7 +1352,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
       {menu === "hub" && <div className="pk-hub">
         {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
-        <button type="button" onClick={() => { cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
+        <button type="button" onClick={() => { leavePack(); cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
         {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.</p>}
       </div>}
 
@@ -1441,7 +1456,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </div>
       </div>}
 
-      {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
         onAgain={() => { const last = session; setMenu(null); if (!last) { setScreen("modes"); return; }
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "skill") enterSkillCup(); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
