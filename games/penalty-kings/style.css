@@ -677,3 +677,9 @@
 @media (prefers-reduced-motion: no-preference) { .pk-wait { animation: pk-discover-in 0.3s ease-out; } }
 /* The penalty wait is drawn on the canvas ("THE KEEPER IS DECIDING…"); its status line is for screen readers only. */
 .pk-wait.pk-wait-sr { width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; animation: none; }
+/* ── BQ-P1-9: the main CTA is a real button at every frame size (the min-heights above lived only in the phone
+   @container blocks, so on frames taller than 519px "Kick off" was 73 × 24). Low specificity (:where), so the
+   phone container blocks above still win; the title's own primary already has min-height 48px at base. ── */
+:where(.pk-attract-bottom) button.pk-primary { min-height: 44px; font-size: 16px; padding: 0 1.2em; } /* (0,1,1): beats `.pk button`, loses to the (0,2,0) phone rules */
+/* ── BQ-P1-10: tap targets >= 44 CSS px. "Skip intro" on landscape phones was 40px tall (the phone block above). ── */
+@container (orientation: landscape) and (max-height: 519px) { .pk-skip { min-height: 44px; } }

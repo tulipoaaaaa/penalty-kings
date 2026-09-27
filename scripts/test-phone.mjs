@@ -11,7 +11,9 @@
 //     and not under the SDK toolbar;
 //   - a real swipe (touch events on the page, from the ball upwards) produces a kick;
 //   - saves artifacts/phone-<w>x<h>.png (or --out docs/screenshots to refresh the docs) (the phone's screen while aiming, after the first kick).
-// Usage: node scripts/test-phone.mjs [--size 360x800] [--out docs/screenshots]
+// Also (BQ-P1-9): at 960×640 and 1280×800 the title's Kick off is >= 44 CSS px (cold open and attract card).
+// PK_TAP_SURVEY=1 lists every small tap target instead of failing on the first.
+// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only] [--out docs/screenshots]
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
@@ -21,9 +23,10 @@ installPriceFixture(); // answers the live RF/USD pool reads with recorded value
 
 const args = process.argv.slice(2);
 const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const SIZES = (option("--size") ? [option("--size")] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
+const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
 const OUT = option("--out") ?? "artifacts";
 const MIN_FONT = 11;
+const MIN_TAP = 44; // BQ-P1-10: every tap target (was 32)
 // Logical scene geometry (gfx/stadium.ts, penalty camera): goal mouth incl. posts and bar, and the ball on the spot.
 const GOAL = { left: 168, right: 312, top: 146, bottom: 212 };
 const BALL = { left: 233, right: 247, top: 243, bottom: 257 };
@@ -33,6 +36,25 @@ const STRIKER = { left: 110, right: 250, top: 190, bottom: 300 };
 const LOWER_LEFT = { left: 0, right: 240, top: 160, bottom: 320 };
 const PLAY = { left: 0, right: 480, top: GOAL.top - 6, bottom: 320 };
 await mkdir(OUT, { recursive: true });
+/** BQ-P1-10: every visible interactive element in the game frame (buttons, links, fields; a checkbox counts by its
+ *  label, the real hit area), on screen or scrolled out of a menu, is at least MIN_TAP x MIN_TAP CSS px.
+ *  PK_TAP_SURVEY=1 lists them instead of failing. */
+async function assertTargets(game, where) {
+  const small = await game.locator("body").evaluate(min => {
+    const bad = [], seen = new Set();
+    for (let el of document.querySelectorAll("button, a[href], input, select, textarea, summary, [role=button], [tabindex]:not([tabindex='-1'])")) {
+      if (el instanceof HTMLInputElement && ["checkbox", "radio"].includes(el.type)) el = el.closest("label") ?? el;
+      if (seen.has(el) || !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+      seen.add(el);
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (r.height < min - 0.5 || r.width < min - 0.5) bad.push(`${Math.round(r.width)}x${Math.round(r.height)} <${el.tagName.toLowerCase()} class="${el.className}"> "${(el.textContent || el.getAttribute("aria-label") || "").trim().slice(0, 30)}"`);
+    }
+    return { bad, count: seen.size };
+  }, MIN_TAP);
+  if (process.env.PK_TAP_SURVEY) console.log(`SURVEY ${where} (${small.count} targets):${small.bad.map(line => `\n  ${line}`).join("")}`);
+  else assert.deepEqual(small.bad, [], `${where}: tap targets under ${MIN_TAP} CSS px`);
+}
 
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
@@ -88,9 +110,12 @@ for (const [width, height] of SIZES) {
         assert.ok(!hit(box, bar), `${label}: ${name} is under the SDK toolbar ${JSON.stringify({ box, bar })}`);
         const onPage = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.tagName, [own.x + origin.x, own.y + origin.y]);
         assert.equal(onPage, "IFRAME", `${label}: ${name}'s centre is covered on the page by ${onPage}`);
-        assert.ok(box.y2 - box.y1 >= 32 && box.x2 - box.x1 >= 32, `${label}: ${name} is a small target ${JSON.stringify(box)}`);
+        const big = box.y2 - box.y1 >= MIN_TAP && box.x2 - box.x1 >= MIN_TAP;
+        if (process.env.PK_TAP_SURVEY) { if (!big) console.log(`SURVEY ${label} ${name}: ${JSON.stringify(box)}`); }
+        else assert.ok(big, `${label}: ${name} is a small target ${JSON.stringify(box)}`);
         checked.push(`tap:${name}`);
       };
+      const targets = async state => { await assertTargets(game, `${label} ${state}`); checked.push(`targets:${state}`); };
       /** A logical scene rect: on screen, not under the toolbar, and every sampled point hits the canvas. */
       const sceneVisible = async (rect, name) => {
         const a = await toPage(rect.left, rect.top), b = await toPage(rect.right, rect.bottom), bar = await toolbar(), origin = await iframeOrigin();
@@ -157,11 +182,13 @@ for (const [width, height] of SIZES) {
 
       // Title: the cold open (showreel) and the attract card.
       await fonts("title (cold open)");
+      await targets("title (cold open)");
       await reachable(game.getByTestId("play"), "Kick off");
       if (await game.getByTestId("skip-intro").isVisible()) {
         await reachable(game.getByTestId("skip-intro"), "Skip intro");
         await game.getByTestId("skip-intro").click();
         await fonts("title (attract)");
+        await targets("title (attract)");
         await reachable(game.getByTestId("play"), "Kick off");
       }
       await press(game.getByTestId("play"));
@@ -199,16 +226,25 @@ for (const [width, height] of SIZES) {
       }
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await fonts("results");
+      await targets("results");
       await game.getByRole("button", { name: "Close" }).first().click();
       await reachable(game.getByTestId("menu"), "Menu");
       await press(game.getByTestId("menu"));
       await fonts("menu hub");
+      await targets("menu hub");
+      await game.locator(".pk-hub").getByRole("button", { name: "Settings", exact: true }).click();
+      await game.locator(".pk-settings").waitFor();
+      await fonts("settings");
+      await targets("settings");
+      await game.getByRole("button", { name: "Close" }).first().click();
+      await press(game.getByTestId("menu"));
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await fonts("mode select");
 
       // Big Match: buy a 2-ball pack, open it (pack opening overlay), reveal, kick, then the ball carousel.
       await game.getByTestId("ball-shop").click();
       await fonts("ball shop");
+      await targets("ball shop");
       await game.getByTestId("pack-2").click();
       await game.getByTestId("buy-pack").click();
       await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
@@ -250,5 +286,55 @@ for (const [width, height] of SIZES) {
   });
   assert.deepEqual(errors.filter(e => !/favicon/.test(e)), [], `console errors: ${errors.join("\n")}`);
   console.log(`PASS phone ${label} (${portrait ? "portrait, after the rotate card" : "landscape"}): ${checked.length} checks — ${checked.filter(c => c.startsWith("swipe")).join(", ")}`);
+}
+// BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
+// in the cold open and on the attract card after "Skip intro". BQ-P1-10: and every tap target in Results, the menu
+// hub, Settings, mode select and the Ball shop.
+const DESKTOP = option("--size") ? [] : [[960, 640], [1280, 800]];
+for (const [width, height] of DESKTOP) {
+  const label = `${width}x${height}`, sizes = [];
+  await testGame("./games/penalty-kings", {
+    width, height, timeout: 60_000,
+    check: async ({ page, game }) => {
+      const tall = async (locator, name) => {
+        await locator.waitFor({ state: "visible" });
+        const box = await locator.boundingBox();
+        assert.ok(box.height >= 44 && box.width >= 44, `${label}: ${name} is a small target ${JSON.stringify(box)}`);
+        sizes.push(`${name} ${Math.round(box.width)}x${Math.round(box.height)}`);
+      };
+      await tall(game.getByTestId("play"), "Kick off (cold open)");
+      await assertTargets(game, `${label} title (cold open)`);
+      if (await game.getByTestId("skip-intro").isVisible()) {
+        await game.getByTestId("skip-intro").click();
+        await tall(game.getByTestId("play"), "Kick off (attract)");
+        await assertTargets(game, `${label} title (attract)`);
+      }
+      if (width === 1280) await page.screenshot({ path: `artifacts/title-${label}.png` });
+      // BQ-P1-10 on a desktop frame: Results, the menu hub, Settings and the Ball shop.
+      const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
+      await game.getByTestId("play").click();
+      for (let kick = 1; kick <= 3; kick++) {
+        await waitShootable();
+        await game.getByTestId("quick").click();
+        await game.locator(".pk-banner").waitFor({ timeout: 8000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
+      }
+      await game.getByTestId("results").waitFor({ timeout: 10_000 });
+      await assertTargets(game, `${label} results`); sizes.push("results");
+      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("menu").click();
+      await assertTargets(game, `${label} menu hub`); sizes.push("hub");
+      await game.locator(".pk-hub").getByRole("button", { name: "Settings", exact: true }).click();
+      await game.locator(".pk-settings").waitFor();
+      await assertTargets(game, `${label} settings`); sizes.push("settings");
+      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("menu").click();
+      await game.getByRole("button", { name: "Change mode", exact: true }).click();
+      await assertTargets(game, `${label} mode select`); sizes.push("mode select");
+      await game.getByTestId("ball-shop").click();
+      await assertTargets(game, `${label} ball shop`); sizes.push("ball shop");
+    },
+  });
+  console.log(`PASS title CTA ${label}: ${sizes.join(", ")}`);
 }
 console.log(`PASS phone layouts: ${SIZES.map(s => s.join("x")).join(", ")}; screenshots in ${OUT}/`);
