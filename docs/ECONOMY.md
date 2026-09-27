@@ -557,7 +557,7 @@ A Park ball costs 10 RF and returns 9 RF on average plus its drop; a Wildcard re
 | 10× (1.0027 RF) | 17.78 | **2,228.23** | 222.22 | 201.08 | balls |
 | 100× (10.0270 RF) | 17.78 | **22,282.31** | 222.22 | 201.08 | balls |
 
-**Launch default, known limit:** with fixed $GBOOT prices, a Wildcard is the cheaper route to race points only if $GBOOT trades below **0.0098 RF** (≈ 0.098× the launch price, a 90.2% fall). The weekly report (`scripts/cup/weekly.mjs --twap`) reads the market price, so the operator can see it coming; the structural fix is the audited hook, whose RF pricing removes the break-even: a Wildcard then costs 10 RF of $GBOOT at every price (≥ 9.05 RF at spot under the divergence guard), while a ball's net cost per point never exceeds 22.22 RF. Skill Cup entries (100 $GBOOT) and KitShop items (listed $GBOOT prices) are fixed the same way; their farm check is in $GBOOT and does not depend on the price (see Rewards).
+**Launch default, known limit:** with fixed $GBOOT prices, a Wildcard is the cheaper route to race points only if $GBOOT trades below **0.0098 RF** (≈ 0.098× the launch price, a 90.2% fall). The weekly report takes the market price as an operator input (`scripts/cup/weekly.mjs --twap`, not read on-chain), so the operator can see it coming; the structural fix is the audited hook, whose RF pricing removes the break-even: a Wildcard then costs 10 RF of $GBOOT at every price (≥ 9.05 RF at spot under the divergence guard), while a ball's net cost per point never exceeds 22.22 RF. Skill Cup entries (100 $GBOOT) and KitShop items (listed $GBOOT prices) are fixed the same way; their farm check is in $GBOOT and does not depend on the price (see Rewards).
 <!-- SIM:farm:END -->
 
 ## RF-priced sinks and the TWAP

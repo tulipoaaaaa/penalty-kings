@@ -1,6 +1,10 @@
 # Weekly reports
 
-Each week gets a report that anyone can re-run. The numbers come from on-chain reads only:
+Each week gets a report that anyone can re-run. The numbers come from on-chain reads plus two
+**operator inputs that the script does NOT read on-chain**: the Cup pot (`--pot-rf`, in RF; the
+payout table is this pot × the curve, and it defaults to 0) and the TWAP (`--twap`, RF per $GBOOT;
+without it the launch drop schedule is used). Publish both with the report, so re-running with the same
+inputs gives the same numbers; check the pot against the pot wallet's balance yourself.
 
 ```sh
 node scripts/cup/weekly.mjs --from <block> --to <block> --twap <RF per $GBOOT> --pot-rf <Cup RF>
@@ -32,7 +36,7 @@ node scripts/cup/weekly.mjs --plan --week <n> --edge-rf <RF>    # offline: the v
 
    The integer rounding is the contract's own: the Cup gets the remainder.
 5. **Cup results.** The top 10 of the race by points, paid 25 / 18 / 13 / 10 / 8 / 7 / 6 / 5 /
-   4 / 4 %. This part also covers the Skill Cup results and the week secret's hash and reveal.
+   4 / 4 % of the `--pot-rf` the operator passes (an input, not an on-chain read). This part also covers the Skill Cup results and the week secret's hash and reveal.
 6. **Rewards.** When `RewardsDistributor` is in `deployments/live.json` (`rewards`): the season,
    its halving ceiling, the previous season's sink burns (`sinkBurned`), the budget
    (`setSeasonBudget` is permissionless and on-chain only) and what was paid. Every claim is a
