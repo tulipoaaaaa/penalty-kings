@@ -29,7 +29,7 @@ Generations NFT (generation ≥ 1).
 | Power | drag length (meter beside the ball; red = over the bar) | hold Space, release to shoot |
 | Curl | curve the flick | A / D |
 | Loft | — | ↑ ↓ |
-| Continue | buttons | Enter on the reveal |
+| Place ball · Warm-up · Continue | buttons | Enter · W · Enter on the reveal |
 
 Warm-up kicks are free and give no score or rewards. Mute and reduced motion are in Settings.
 The game pauses whenever the runtime menu is open.

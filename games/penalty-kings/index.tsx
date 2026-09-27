@@ -149,7 +149,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         state.ball.visible = current.phase === "aim" || current.phase === "reveal";
         state.ball.x = SPOT.x; state.ball.y = SPOT.y; state.ball.r = 4.5; state.ball.spin = 0; trail.length = 0;
         if (current.phase === "aim") {
-          const am = aim.current, target = shotTarget({ aimX: am.aimX, loft: am.loft, power: am.charging || drag.current ? am.power : 0.78, curl: am.curl });
+          const am = aim.current, target = shotTarget({ aimX: am.aimX + wobble(now, am.power), loft: am.loft, power: am.charging || drag.current ? am.power : 0.78, curl: am.curl });
           state.reticle = { x: target.x - am.curl * 0.3, y: target.y, power: am.power, curl: am.curl, aimX: am.aimX, active: am.charging || Boolean(drag.current) };
         }
       } else if (a.kind === "runup") {
@@ -175,7 +175,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       } else if (a.kind === "after" && a.outcome && a.shot) {
         const p = clamp(elapsed / 1.3, 0, 1), result = a.outcome.result, end = toScreen(a.outcome.target.x, a.outcome.target.y);
         state.keeperPose = keeperPose(a.outcome.plan, a.outcome.target.time + p * 0.3, clock);
-        state.friend = { ...state.friend, rows: rowsFor("up", false, 0), x: 232, y: 260 };
+        const slump = result !== "goal" && motion ? Math.min(1, p * 2) : 0;
+        state.friend = { ...state.friend, rows: rowsFor("up", false, 0), x: 232, y: 260 + slump * 3, squash: slump * 0.12, rotate: slump * 0.12 * Math.sin(clock * 3) };
         let bx = end.x, by = end.y, br = 2.5;
         if (result === "goal") { bx = end.x + (240 - end.x) * 0.15 * p; by = end.y - 6 * Math.sin(Math.PI * Math.min(1, p * 2)) + Math.min(1, p * 1.5) * (168 - 4 - end.y); br = 2.3; }
         else if (result === "save") { const dir = end.x >= 240 ? 1 : -1; bx = end.x + dir * 120 * p; by = end.y + 90 * p - 40 * Math.sin(Math.PI * p); br = 2.5 + 2 * p; }
@@ -221,7 +222,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current;
       if (current.paused || current.menu) return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) event.preventDefault();
-      if (current.phase !== "aim") { if (event.key === "Enter" && current.phase === "reveal") startAim(); return; }
+      if (current.phase !== "aim") {
+        if (event.key === "Enter" && current.phase === "reveal") startAim();
+        if (current.phase === "idle" && !event.repeat && (event.target as HTMLElement | null)?.tagName !== "BUTTON") {
+          if (event.key === "Enter") placeRef.current();
+          if (event.key === "w" || event.key === "W") warmRef.current();
+        }
+        return;
+      }
       keys.current.add(event.key);
       const am = aim.current;
       if (event.key === "a" || event.key === "A") am.curl = clamp(Math.round((am.curl - 0.25) * 4) / 4, -1, 1);
@@ -233,7 +241,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const am = aim.current;
       if (event.key === " " && am.charging) {
         am.charging = false;
-        if (live.current.phase === "aim" && !live.current.paused && !live.current.menu) shoot({ aimX: am.aimX, loft: am.loft, power: am.power, curl: am.curl });
+        if (live.current.phase === "aim" && !live.current.paused && !live.current.menu) shoot({ aimX: am.aimX + wobble(performance.now(), am.power), loft: am.loft, power: am.power, curl: am.curl });
       }
     };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up);
@@ -306,6 +314,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     setPhase("shooting");
   }
   const skillRunRef = useRef(skillRun); skillRunRef.current = skillRun;
+  const placeRef = useRef(() => {}), warmRef = useRef(() => {});
+  placeRef.current = () => { if (snapshot && (snapshot.consumables > 0n || pending)) placeBall(); };
+  warmRef.current = warmUp;
 
   function onShotResolved(outcome: ShotOutcome) {
     const current = live.current, profile = keeperById(current.keeper), mode = current.ball?.mode ?? "warmup";
@@ -581,6 +592,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
     </GameMenu>}
   </section>;
+}
+
+/** Reticle wobble: grows with charge, so a held Space never gives a perfectly still aim. */
+function wobble(now: number, power: number) {
+  return Math.sin(now / 173) * 0.05 * power + Math.sin(now / 71) * 0.02 * power;
 }
 
 function wildcardPoints(count: number, weight: number) {
