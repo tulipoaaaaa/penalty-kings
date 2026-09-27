@@ -11,3 +11,4 @@ contracts/broadcast/
 *.key
 .wrangler/
 .dev/
+.claude/worktrees/

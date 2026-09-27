@@ -111,20 +111,40 @@ contract BootroomTest is Test {
         assertEq(lockWeeks, 8);
     }
 
-    /// FINDING (documented, not changed): the NatSpec says "the boost uses the longer of the two
-    /// commitments", but the code takes the weeks of whichever lace unlocks LATER. A later-ending but
-    /// shorter top-up (possible from any address, for 1 wei) therefore lowers lockWeeks, and so the
-    /// boost, and extends the owner's lock (early unlace then burns 50%).
-    function testThirdPartyDustTopUpLowersWeeksAndExtendsLock() public {
+    /// FIXED: a third party's top-up (1 wei, any weeks) can no longer lower the Friend's weeks, move
+    /// its unlock or re-lock expired $GBOOT. Only the owner / token-bound account moves the lock.
+    function testThirdPartyDustTopUpCannotMoveTheLock() public {
         _lace(owner, FRIEND, 10_000e18, 52);
         assertEq(room.boostBps(FRIEND), 2 * BPS);
         uint256 originalUnlock = block.timestamp + 52 weeks;
         vm.warp(block.timestamp + 10 weeks);
-        _lace(stranger, FRIEND, 1, 43); // 1 wei, ends 1 week after the original lace
-        (, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
-        assertEq(lockWeeks, 43, "weeks of the later-ending (shorter) lace");
-        assertEq(unlockAt_, originalUnlock + 1 weeks, "owner's lock extended by a stranger");
-        assertLt(room.boostBps(FRIEND), 2 * BPS, "boost lowered by a dust gift");
+        _lace(stranger, FRIEND, 1, 43); // would end 1 week after the original lace
+        (uint128 amount, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(amount, 10_000e18 + 1);
+        assertEq(lockWeeks, 52, "weeks unchanged");
+        assertEq(unlockAt_, originalUnlock, "unlock unchanged");
+        assertEq(room.boostBps(FRIEND), 2 * BPS, "boost unchanged");
+    }
+
+    function testThirdPartyCannotRelockExpiredLace() public {
+        _lace(owner, FRIEND, 1_000e18, 2);
+        vm.warp(block.timestamp + 3 weeks); // expired: the owner may unlace everything without a burn
+        _lace(stranger, FRIEND, 1, 52);
+        (, uint64 unlockAt_,) = room.laces(FRIEND);
+        assertLe(unlockAt_, block.timestamp, "still expired");
+        uint256 before = gboot.balanceOf(owner);
+        vm.prank(owner);
+        room.unlace(FRIEND);
+        assertEq(gboot.balanceOf(owner), before + 1_000e18 + 1, "no burn");
+    }
+
+    function testOwnerCanExtendAndThirdPartyCanStartOnEmpty() public {
+        _lace(gifter, FRIEND, 100e18, 4); // empty lace: a gift starts the lock
+        (, uint64 u1, uint64 w1) = room.laces(FRIEND);
+        assertEq(w1, 4); assertEq(u1, block.timestamp + 4 weeks);
+        _lace(owner, FRIEND, 100e18, 30); // the owner moves it later
+        (, uint64 u2, uint64 w2) = room.laces(FRIEND);
+        assertEq(w2, 30); assertEq(u2, block.timestamp + 30 weeks);
     }
 
     // ---------------------------------------------------------------- unlace

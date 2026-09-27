@@ -47,16 +47,22 @@ contract Bootroom {
         gboot = gboot_; generations = generations_;
     }
 
-    /// @notice Lace `amount` for `friendId` for `lockWeeks` (1–52). Adding to an existing lace keeps
-    /// the later unlock time; the boost uses the longer of the two commitments.
+    /// @notice Lace `amount` for `friendId` for `lockWeeks` (1–52). The Friend's owner or token-bound
+    /// account may move the lock to a later unlock (taking the new weeks). Anyone else only adds $GBOOT
+    /// to the existing lock, and sets `lockWeeks` only when the Friend has nothing laced.
     function lace(uint256 friendId, uint256 amount, uint256 lockWeeks) external {
         if (lockWeeks == 0 || lockWeeks > MAX_WEEKS) revert BadWeeks();
         if (amount == 0) revert NothingLaced();
         gboot.safeTransferFrom(msg.sender, address(this), amount);
         Lace storage l = laces[friendId];
         uint256 unlockAt = block.timestamp + lockWeeks * 1 weeks;
+        bool empty = l.amount == 0;
         l.amount += uint128(amount);
-        if (unlockAt > l.unlockAt) { l.unlockAt = uint64(unlockAt); l.lockWeeks = uint64(lockWeeks); }
+        // Only the Friend (owner or token-bound account) sets or moves its lock. A third party (a gift, the
+        // airdrop) starts a lock only on an empty lace; otherwise its $GBOOT joins the existing lock as is,
+        // so nobody can shorten a Friend's weeks, extend its lock or re-lock expired $GBOOT with dust.
+        bool friend = msg.sender == generations.ownerOf(friendId) || msg.sender == generations.tokenBoundAccount(friendId);
+        if (friend ? unlockAt > l.unlockAt : empty) { l.unlockAt = uint64(unlockAt); l.lockWeeks = uint64(lockWeeks); }
         emit Laced(friendId, msg.sender, amount, l.lockWeeks, l.unlockAt);
     }
 
