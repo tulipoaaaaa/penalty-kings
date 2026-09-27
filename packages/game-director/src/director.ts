@@ -245,14 +245,15 @@ export class GameDirector {
   private rotates() { return this.freePlay(); }
   private rollRun() { return this.setup.stadium === "park" ? 2 + this.rng.int(2) : ROUND_KICKS; }
   /**
-   * Rotation pool. Park: the easy ladder up to one rung past the shell's keeper (at least two keepers).
+   * Rotation pool. Park: the four easiest keepers plus two rungs past the shell's keeper (so new players meet the cast).
    * Pro: keepers with multiplier ≥ 1.25; Champions: ≥ 1.5 (harder ladders), up to one rung past the
    * shell's keeper. The boss only appears through its set piece.
    */
   pool(): KeeperId[] {
     const index = Math.max(0, this.ladder.indexOf(this.setup.keeper));
     const floor = this.setup.stadium === "park" ? 0 : this.setup.stadium === "pro" ? 1.25 : 1.5;
-    const reach = Math.max(this.setup.stadium === "park" ? 1 : 0, index + 1);
+    // Park: meet the cast. The four easiest keepers plus two rungs past the player's level (difficulty stays with the difficulty director).
+    const reach = this.setup.stadium === "park" ? Math.max(3, index + 2) : Math.max(0, index + 1);
     const ids = this.ladder.filter((id, i) => {
       const info = this.keepers.find(k => k.id === id);
       return info && !info.boss && i <= reach && info.mult >= floor;

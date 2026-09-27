@@ -63,11 +63,11 @@ test("Park rotation: the same keeper for at most 3 kicks in a row, and the playe
     assert.ok(longest <= 3, `seed ${seed}: ${longest} kicks in a row against one keeper`);
     const met = new Set(steps.map(step => step.before.keeper));
     assert.ok(met.size >= 5, `seed ${seed}: only met ${[...met]}`);
-    for (const id of met) assert.ok(LADDER.indexOf(id) <= LADDER.indexOf("mime"), `${id} is beyond the next rung`);
+    for (const id of met) assert.ok(LADDER.indexOf(id) <= LADDER.indexOf("octopus") + 2, `${id} is more than two rungs past the player`);
   }
-  // A brand-new player (ladder at the mouse) still alternates between two keepers.
-  const fresh = simulate({ seed: 3, kicks: 12, mode: "penalties", stadium: "park", keeper: "mouse" }).steps.map(step => step.before.keeper);
-  assert.deepEqual(new Set(fresh), new Set(["mouse", "squirrel"]));
+  // A brand-new player (ladder at the mouse) meets the four easiest keepers.
+  const fresh = simulate({ seed: 3, kicks: 30, mode: "penalties", stadium: "park", keeper: "mouse" }).steps.map(step => step.before.keeper);
+  assert.deepEqual(new Set(fresh), new Set(["mouse", "squirrel", "sloth", "peacock"]));
 });
 
 test("Pro and Champions keep the harder ladders", () => {

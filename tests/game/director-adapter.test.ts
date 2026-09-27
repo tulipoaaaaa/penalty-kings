@@ -96,7 +96,7 @@ test("shell wiring (SIO-3): keeper kept in paid, ranked and scripted modes; rota
     for (const line of after.lines) { assert.ok(!used.some(([id, at]) => id === line.id && n * 6 - at < 60), `line ${line.id} repeated within 60 s`); used.push([line.id, n * 6]); }
   }
   assert.ok(met.size >= 2, `Park free play rotates keepers (${[...met]})`);
-  assert.ok([...met].every(id => ["mouse", "squirrel", "sloth"].includes(id)), `Park keepers stay on the easy ladder (${[...met]})`);
+  assert.ok([...met].every(id => ["mouse", "squirrel", "sloth", "peacock", "octopus"].includes(id)), `Park keepers stay on the easy ladder (${[...met]})`);
 });
 
 test("shell wiring: Golden Hour doubles only FREE-PLAY skill points; the Director is never told about balls, RF or prizes", () => {
