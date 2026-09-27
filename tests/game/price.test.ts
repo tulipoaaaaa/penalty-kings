@@ -84,7 +84,7 @@ test("the SDK preview uses the labelled on-chain snapshot (no network), matching
   const { snapshotPrice, SNAPSHOT_BLOCK } = await import("../../games/penalty-kings/game/price.ts");
   const snap = snapshotPrice();
   assert.equal(snap.status, "snapshot");
-  assert.ok(Math.abs(snap.usdPerRf! - 0.001557) < 0.000005, `snapshot ${snap.usdPerRf}`);
+  assert.ok(Math.abs(snap.usdPerRf! - 0.0014565) < 0.000005, `snapshot ${snap.usdPerRf}`);
   assert.equal(priceAgeLabel(snap, Date.now()), `on-chain snapshot · block ${SNAPSHOT_BLOCK.toLocaleString("en-US")}`);
-  assert.equal(usdForRf(500_000, snap, Date.now()), "≈ $779");
+  assert.equal(usdForRf(500_000, snap, Date.now()), "≈ $728");
 });

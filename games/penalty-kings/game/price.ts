@@ -33,11 +33,11 @@ export const NO_PRICE: RfPrice = { usdPerRf: null, fetchedAt: null, status: "err
 /**
  * The SDK preview may only read the game's own contract (its runtime/test fixture rejects any other
  * eth_call), so the judged PREVIEW converts USD with this recorded on-chain snapshot: the same two
- * StateView.getSlot0 reads, taken at block 73,793,321 (docs/ADDRESSES.md), labelled as a snapshot.
+ * StateView.getSlot0 reads, taken at block 73,949,883 (docs/ADDRESSES.md), labelled as a snapshot.
  * Live stadiums read the pools every 60 s.
  */
-export const SNAPSHOT_BLOCK = 73_793_321;
-export const SNAPSHOT_SQRT = { rfWeth: 59977880447322165122003233n, wethUsdg: 4129642798072125940494846n } as const;
+export const SNAPSHOT_BLOCK = 73_949_883;
+export const SNAPSHOT_SQRT = { rfWeth: 58044609030160763602152886n, wethUsdg: 4127154612578269849892860n } as const;
 
 // ── Pure helpers (unit-tested) ──────────────────────────────────────────────
 

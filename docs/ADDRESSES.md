@@ -75,3 +75,8 @@ None yet. See [DEPLOYMENT.md](DEPLOYMENT.md).
 - **Can $GBOOT launch on Pons against RF?** Not today. V2 launches pair only with tokens in the owner-controlled allowlist `approvedPairTokens` (`setPairTokenApproved` is `onlyOwner`). `approvedPairTokens(RF 0x0779…B71f)` = **false**, and `pairTokenEconomics(RF)` is unset. `approvedPairTokens(USDG)` = true, which shows the check works.
 - A Pons V2 launch trades on a bonding curve first, then "graduates" into a full-range **Uniswap v4** pool in the chosen pair token. A curve fee (≤ 10%) and a creator tax (≤ 10%) apply.
 - To launch on Pons against RF, the Pons team must approve RF as a pair token.
+
+**Price check (FD-5, 2026-09-27, block 73,949,883):**
+- An independent `cast call StateView.getSlot0` on both pools gives 1 RF = **$0.0014565** (WETH/RF 5.367e-7 × $2,713.6/WETH).
+- The game's own `fetchRfPrice()`, the live-stadium path, returns the identical value, so the 500,000 RF pot shows ≈ $728.
+- The preview's labelled on-chain snapshot was refreshed to this block; the previous snapshot, at block 73,793,321, was 6.5% stale.
