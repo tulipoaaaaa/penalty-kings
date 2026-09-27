@@ -15,7 +15,7 @@ export type FirstKick = Readonly<{
   surprise?: boolean;
   /** After the kick: a net-cam slow-mo replay of the best goal so far. */
   replayBest?: boolean;
-  /** On a goal: full celebration + crowd wave. */
+  /** From this kick on, the tutorial's FIRST goal gets the full celebration + crowd wave (a save on this kick carries it over). */
   bigCelebration?: boolean;
 }>;
 
@@ -33,6 +33,12 @@ export const FIRST_UNLOCK = {
   /** Shown once the tutorial XP has opened Free Kicks (the usual case: the tutorial reaches level 2). */
   teaserOpen: "Next up: Free Kicks — bend it round the wall!",
 } as const;
+
+/** True when this tutorial kick is the first goal and a big celebration is due (so a save on kick 1 never loses the wave). */
+export function bigCelebrationDue(previous: readonly { result: string }[], goal: boolean) {
+  if (!goal || previous.length >= FIRST_SESSION.length || previous.some(kick => kick.result === "goal")) return false;
+  return FIRST_SESSION.slice(0, previous.length + 1).some(kick => kick.bigCelebration);
+}
 
 /** The best goal so far (for the replay): highest points, then the most recent. */
 export function bestGoal<T extends { result: string; points: number }>(kicks: readonly T[]) {

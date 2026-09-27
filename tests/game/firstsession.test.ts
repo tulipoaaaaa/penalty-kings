@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { KEEPERS } from "@penalty-kings/engine";
-import { FIRST_SESSION, FIRST_UNLOCK, bestGoal } from "../../games/penalty-kings/game/firstsession.ts";
+import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "../../games/penalty-kings/game/firstsession.ts";
 import { readFileSync } from "node:fs";
 import { commentary, commentaryContexts } from "../../games/penalty-kings/gfx/commentary.ts";
 
@@ -31,4 +31,15 @@ test("first session wiring (SIO-2): the shell follows the plan, assist is aim-on
   for (const [key, value] of Object.entries(FIRST_UNLOCK)) { assert.ok(!/rf|coin|gboot|prize|odds|\$/i.test(String(value)), `${key}: ${value}`); }
   assert.match(FIRST_UNLOCK.teaser, /Free Kicks/); assert.match(FIRST_UNLOCK.teaserOpen, /Free Kicks/);
   assert.match(commentary("first-walkout", { friend: "Friend #7", keeper: "Squeak" }), /Friend #7/, "the commentator introduces YOUR Friend");
+});
+
+test("first session: the first tutorial goal always gets the big celebration + wave, even after a save on kick 1", () => {
+  const save = { result: "save" }, goal = { result: "goal" };
+  assert.equal(bigCelebrationDue([], true), true, "kick 1 goal");
+  assert.equal(bigCelebrationDue([], false), false, "no celebration on a save");
+  assert.equal(bigCelebrationDue([save], true), true, "kick 1 saved: kick 2's goal gets it");
+  assert.equal(bigCelebrationDue([save, save], true), true, "kick 3's goal gets it");
+  assert.equal(bigCelebrationDue([goal], true), false, "only once");
+  assert.equal(bigCelebrationDue([save, goal], true), false, "only once");
+  assert.equal(bigCelebrationDue([save, save, save], true), false, "not after the tutorial");
 });

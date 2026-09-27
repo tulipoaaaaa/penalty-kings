@@ -35,7 +35,7 @@ import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
-import { FIRST_SESSION, FIRST_UNLOCK, bestGoal } from "./game/firstsession.js";
+import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
@@ -797,8 +797,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // The Director's reaction moments (the result line was already said by the Stage).
     priorityLine();
     if (!timedOut) playMoments(afterBeat.current, ["reaction"], current.kind);
-    // First session, kick 1: a goal gets the full celebration plus a crowd wave.
-    if (current.mode === "tutorial" && goal && FIRST_SESSION[current.kicks.length]?.bigCelebration && stage.current) {
+    // First session: the first goal (kick 1, or later if kick 1 was saved) gets the full celebration plus a crowd wave.
+    if (current.mode === "tutorial" && bigCelebrationDue(current.kicks, goal) && stage.current) {
       const scene = stage.current; scene.celebration = FIRST_GOAL_CELEBRATION; // the Stage starts it 1 s after the goal; startAim restores the equipped one
       scene.wave(); scene.particles.emit("firework", 240, 60, scene.reduced ? 8 : 26, { color: ["#ffd23f", "#ff5a6e", "#7fd3ff", "#ffffff"], speed: 60, spread: Math.PI * 2, life: 1.1, gravity: 30 });
       lineLater(0, () => stage.current?.say("wave")); // the wave's line after the goal line
