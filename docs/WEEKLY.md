@@ -38,7 +38,7 @@ node scripts/cup/weekly.mjs --plan --week <n> --edge-rf <RF>    # offline: the v
    (`setSeasonBudget` is permissionless and on-chain only) and what was paid. Every claim is a
    `Claimed` event of a referee-signed, capped claim for a paid Skill Cup entry.
 7. **Vault releases and burns.** The drop and Cups vault releases, the rewards claims, the sink
-   burns per week (`burnedInWeek` of KitShop, SkillCup and Wildcards), the hook-fee burns and the
+   burns per week (`burnedInWeek` of KitShop, SkillCup and Wildcards), the `LiquidityLock.collect` fee splits (burned / to the pot) and the
    balance of every vault. Every line links a transaction.
 
 The script also writes `weekly-<from>-<to>.json`. It holds the drops per Friend (paid to the

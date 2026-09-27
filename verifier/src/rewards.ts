@@ -3,7 +3,7 @@
  * contracts/src/RewardsDistributor.sol. The contract enforces every hard limit itself (hardwired
  * Friend of generation ≤ 4, a PAID SkillCup entry of that Friend, ≤ 2 RF-equivalent per entry, ≤ 3 RF
  * per Friend per day, nonce, deadline ≤ 7 days, season budget); this module only decides what a
- * finished entry earns, in RF terms (the contract converts at the 30-minute TWAP).
+ * finished entry earns, in RF terms (the contract converts at its price source: a fixed 0.1 RF per $GBOOT at launch, the 30-minute TWAP only with the audited hook).
  *
  * Paid kinds (both tied to one paid entry, together ≤ ENTRY_CAP_RF):
  *  - KIND_SKILL (0): by goals in the 5 referee-judged kicks: 5 → 1.5 RF, 4 → 1 RF, 3 → 0.5 RF, else 0.
