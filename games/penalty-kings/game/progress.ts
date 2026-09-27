@@ -80,6 +80,13 @@ export function assistLevel(progress: Progress, stadium: "park" | "pro" | "champ
   return stadium === "park" ? Math.max(0.35, faded) : faded;
 }
 
+/**
+ * Shot clock (round 6 C14): off in the tutorial and for the first 3 matches after it. `matches`
+ * counts completed free sessions, the tutorial included, so the clock starts with the 4th.
+ */
+export const SHOT_CLOCK_FREE_MATCHES = 3;
+export const shotClockOn = (progress: Progress) => progress.tutorialDone && progress.matches >= 1 + SHOT_CLOCK_FREE_MATCHES;
+
 /** Stars needed to open each stadium in the World Tour (10 levels × 3 stars per stadium). */
 export const STADIUM_STARS = { park: 0, pro: 12, champions: 30 } as const;
 export const totalStars = (progress: Progress) => Object.values(progress.stars).reduce((sum, value) => sum + value, 0);

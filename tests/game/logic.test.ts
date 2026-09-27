@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { KEEPERS } from "@penalty-kings/engine";
 import { starsFor, met, describe, type Level, type KickRecord } from "../../games/penalty-kings/game/objectives.ts";
 import levelsJson from "../../games/penalty-kings/game/levels.json";
-import { loadProgress, saveProgress, fresh, levelFromXp, assistLevel, isUnlocked, nextRung, LADDER, STORAGE_KEY } from "../../games/penalty-kings/game/progress.ts";
+import { loadProgress, saveProgress, fresh, levelFromXp, assistLevel, isUnlocked, nextRung, shotClockOn, LADDER, STORAGE_KEY } from "../../games/penalty-kings/game/progress.ts";
 import { dailyScenario, dailyStreak, dailyState, utcDate } from "../../games/penalty-kings/game/daily.ts";
 import { spawnTargets, resolveTargetShot, targetAt, MAX_COMBO } from "../../games/penalty-kings/game/target.ts";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.ts";
@@ -63,6 +63,14 @@ test("levels, unlocks, ladder and assist fade", () => {
   assert.equal(assistLevel(fresh(), "pro"), 1);
   assert.equal(assistLevel({ ...fresh(), tutorialDone: true, matches: 6 }, "pro"), 0);
   assert.ok(assistLevel({ ...fresh(), tutorialDone: true, matches: 6 }, "park") > 0);
+});
+
+test("shot clock (round 6 C14): off in the tutorial and the first 3 matches after it", () => {
+  assert.equal(shotClockOn(fresh()), false, "tutorial");
+  for (const matches of [1, 2, 3]) assert.equal(shotClockOn({ ...fresh(), tutorialDone: true, matches }), false, `tutorial + ${matches - 1} matches`);
+  assert.equal(shotClockOn({ ...fresh(), tutorialDone: true, matches: 4 }), true, "the 4th session after the tutorial has a clock");
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  assert.match(index, /Time up — kick lost/, "a timed-out kick is announced, never silent");
 });
 
 test("daily challenge: same scenario for everyone per date, streak calendar", () => {

@@ -33,6 +33,12 @@
 .pk-stat, .pk-chip { background: #0b0d1ad9; border: 2px solid #ffffff2e; padding: 0.3em 0.6em; white-space: nowrap; }
 .pk-stat b { color: var(--pk-volt); }
 .pk-chip { font-weight: 700; letter-spacing: 0.06em; }
+/* Shot clock bar (round 6 C14): drains from full to empty; red in the last 1.5 s. */
+.pk-clockbar { position: relative; width: 100%; min-width: 72px; height: 1.3em; background: #0b0d1ad9; border: 2px solid #ffffff2e; box-sizing: border-box; }
+.pk-clockbar[hidden] { display: none; }
+.pk-clockbar i { position: absolute; inset: 0; background: var(--pk-volt); transform-origin: left center; transform: scaleX(var(--left, 1)); }
+.pk-clockbar[data-urgent="true"] i { background: var(--pk-red); }
+.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: 0.85em; line-height: 1.2em; color: #fff; text-shadow: 1px 1px 0 #000; }
 .pk-sim { background: var(--pk-gold); color: var(--pk-ink); border-color: var(--pk-gold); }
 .pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
 

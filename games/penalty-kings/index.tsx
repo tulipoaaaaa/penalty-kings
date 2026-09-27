@@ -19,7 +19,7 @@ import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
-import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
+import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
@@ -61,6 +61,7 @@ const RIVALS = ["Rival Friend A", "Rival Friend B", "Rival Friend C", "Rival Fri
 const SIM_RACE = [2400, 1900, 1500, 1210, 1000, 820, 640, 500, 360, 240, 120];
 const SIM_SKILL = [9350, 7900, 6120, 4600, 3800];
 const LADDER_SHOWCASE: readonly KeeperId[] = ["squirrel", "peacock", "octopus", "mime", "disco", "sumo", "robot", "ghost", "finalwall"];
+const TIME_UP = "Time up — kick lost", TIME_UP_PAUSE_MS = 1600;
 const LABELS: Record<ShotResult | "wall", string> = { goal: "GOAL!", save: "SAVED!", post: "OFF THE POST!", over: "OVER THE BAR!", wide: "WIDE!", wall: "BLOCKED!" };
 const vibrate = (pattern: number | number[]) => { try { navigator.vibrate?.(pattern); } catch { /* iPhone Safari: unsupported, skip */ } };
 
@@ -152,6 +153,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const setPhaseNow = (next: Phase) => { live.current = { ...live.current, phase: next }; setPhase(next); };
   const pointer = useRef<number | null>(null);
   const timeoutTimer = useRef(0);
+  /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
+  const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
   const timing = useRef<{ release: number; resolved: number; log: { kind: string; toResult: number; toReady: number }[] }>({ release: 0, resolved: 0, log: [] });
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
@@ -336,14 +339,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "tutorial") return { ...DIFFICULTY_LADDER[0], clock: 0 };
     return DIFFICULTY_LADDER[current.rung];
   }
-  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" ? 0 : difficultyFor(current).clock);
+  /** Shot clock seconds (0 = off): off in the tutorial, Target Practice and the first 3 matches (the Skill Cup keeps the referee's rules). */
+  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" || (current.mode !== "skill" && !shotClockOn(progressRef.current)) ? 0 : difficultyFor(current).clock);
   /** Aim assist strength for a penalty/target kick: the reticle and the kick both use it (WYSIWYG). */
   const kickAssist = (current: Session) => Math.max(difficultyFor(current).assist, current.mode === "skill" ? 0 : assist * 0.5);
 
   // ── Aiming (keyboard, clock, live previews) ─────────────────────────────
   function tickAim(dt: number) {
     const current = live.current, scene = stage.current;
-    if (!scene || !current.session || !canShoot(flow())) { if (scene && current.phase !== "aim") scene.clock = null; return; }
+    if (!scene || !current.session || !canShoot(flow())) { if (scene && current.phase !== "aim") { scene.clock = null; showClock(null); } return; }
     const s = current.session, k = keys.current, am = keyAim.current;
     if (k.has("ArrowLeft")) am.aimX = clamp(am.aimX - dt * 1.2, -1.4, 1.4);
     if (k.has("ArrowRight")) am.aimX = clamp(am.aimX + dt * 1.2, -1.4, 1.4);
@@ -354,9 +358,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const total = clockFor(s);
     if (total > 0) {
       const left = total - (clockNow() - aimStarted.current) / 1000;
-      scene.clock = { left: Math.max(0, left), total };
+      scene.clock = { left: Math.max(0, left), total }; showClock(scene.clock);
       if (left <= 0) { timeout(); return; }
-    } else scene.clock = null;
+    } else { scene.clock = null; showClock(null); }
     // Live aim display: reticle (penalties/target) or trajectory preview (free kicks), faded by assist.
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficultyFor(s), s.streak));
     if (s.kind === "freekick" && s.setup) {
@@ -522,14 +526,23 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     scene.cue = current.kind === "target" ? null : cue.say; pendingWave.current = cue.wave;
   }
 
+  /** The countdown bar: fraction left, red in the last 1.5 s; hidden when the clock is off. */
+  function showClock(clock: { left: number; total: number } | null) {
+    const bar = clockBar.current; if (!bar) return;
+    bar.hidden = !clock;
+    if (clock) { bar.style.setProperty("--left", String(Math.max(0, Math.min(1, clock.left / clock.total)))); bar.dataset.urgent = String(clock.left < 1.5); bar.setAttribute("aria-valuenow", String(Math.ceil(clock.left))); }
+  }
+
+  /** The shot clock ran out: never a silent loss. "Time up — kick lost" stays up for a short pause before the next kick. */
   function timeout() {
     const current = live.current.session;
     if (!current || !may("tick-clock")) return;
     inFlight.current = 1; const id = ++kickId.current; setPhaseNow("shooting");
     swipe.current = null; pointer.current = null; keyAim.current.charging = false;
+    showClock(null); if (stage.current) { stage.current.clock = null; stage.current.reticle = null; }
     pendingKick.current = { record: { result: "wide", zone: "centre", points: 0, x: 0, y: 0 }, result: "wide" };
-    setBanner({ text: "TIME!", sub: "The shot clock ran out: that counts as a miss.", tone: "miss" });
-    timeoutTimer.current = window.setTimeout(() => { if (kickId.current !== id) return; latest.current.onResolved("wide", true); latest.current.onKickDone(); }, 900);
+    setBanner({ text: TIME_UP, sub: "The shot clock ran out. Next kick in a moment.", tone: "miss" });
+    timeoutTimer.current = window.setTimeout(() => { if (kickId.current !== id) return; latest.current.onResolved("wide", true); latest.current.onKickDone(); }, TIME_UP_PAUSE_MS);
   }
 
   // ── Results of a kick ───────────────────────────────────────────────────
@@ -554,7 +567,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     }
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = streak; }
-    let sub = timedOut ? "Shot clock" : goal ? `+${formatNumber(record.points)} pts · ${record.zone === "bin" ? "TOP BIN ×5" : record.zone === "corner" ? "corner ×3" : record.zone === "side" ? "side ×2" : "centre ×1"}${record.postIn ? " · in off the post +50%" : ""}${record.knuckle ? " · knuckleball ×2" : ""}` : "Streak reset";
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} pts · ${record.zone === "bin" ? "TOP BIN ×5" : record.zone === "corner" ? "corner ×3" : record.zone === "side" ? "side ×2" : "centre ×1"}${record.postIn ? " · in off the post +50%" : ""}${record.knuckle ? " · knuckleball ×2" : ""}` : "Streak reset";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
@@ -566,7 +579,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
+    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;
@@ -904,6 +917,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </header>
         <header className="pk-hud pk-hud-right">
           <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel} · ×{streakMultiplier(s.streak)}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
+          <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={5}><span>Shot clock</span><i /></div>
         </header>
       </>}
 
@@ -1025,7 +1039,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <ol>
           <li>Swipe up from the ball. Where you release decides the shot; speed is power; a curved swipe bends it. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power.</li>
           <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. Streaks multiply up to ×3.</li>
-          <li>A 5-second shot clock keeps the pressure on (off in the tutorial). Aim wobble grows with your streak.</li>
+          <li>After your first 3 matches, a shot clock (4–5 seconds, shown as a bar) keeps the pressure on; if it runs out, that kick is lost. It is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
           <li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
           <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome, 90% average return), and keep them in your Bag. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
           <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>
