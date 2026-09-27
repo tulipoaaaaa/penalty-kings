@@ -126,6 +126,27 @@ await testGame("./games/penalty-kings", {
     assert.equal(await kicks(), 1, "the lost kick counts");
     ok("shot clock out: 'Time up — kick lost', a short pause, then the next kick");
 
+    // 5d. BQ-P1-4: "Turn your phone sideways" freezes the shot clock like a pause. Turn to portrait mid-clock
+    //     (the card stays up, not dismissed) for 6 s, then back: no kick lost, no "Time up".
+    //     (The 360 px run chose "Play in portrait anyway" for the session, so the card cannot come back there.)
+    if (width > 700) {
+      await waitShootable();
+      await game.getByTestId("shot-clock").waitFor({ state: "visible", timeout: 2000 });
+      const landscape = page.viewportSize(), before5d = await kicks();
+      await page.setViewportSize({ width: 400, height: 820 });
+      await game.getByTestId("rotate").waitFor({ state: "visible", timeout: 3000 });
+      assert.equal((await flow()).shootable, false, "not shootable behind the rotate card");
+      await page.waitForTimeout(6000);
+      assert.equal(await game.locator(".pk-banner").count(), 0, "no Time up behind the rotate card");
+      await page.setViewportSize(landscape);
+      await game.getByTestId("rotate").waitFor({ state: "hidden", timeout: 3000 });
+      await waitShootable();
+      await page.waitForTimeout(700);
+      assert.equal(await game.locator(".pk-banner").count(), 0, "no Time up after turning back");
+      assert.equal(await kicks(), before5d, "the kick counter did not change");
+      ok("BQ-P1-4: rotate card up for 6 s during a live shot clock: no timeout, no kick lost");
+    } else console.log("  (BQ-P1-4 rotate-card clock check runs at 960 px)");
+
     // 6. Swipe starting off-canvas (above the pitch, in the HUD band) and dragged over the ball: no shot.
     await waitShootable();
     const top = await toScreen(240, 40);

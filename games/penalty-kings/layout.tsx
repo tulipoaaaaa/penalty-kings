@@ -3,7 +3,7 @@
 // its own frame: a ResizeObserver on the game root (.pk) reports the frame size, and a portrait frame on a
 // phone-sized screen shows "Turn your phone sideways". The portrait layout works (style.css, @container
 // orientation: portrait), so the overlay offers "Play in portrait anyway" and remembers that for the session.
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Portrait = taller than wide by a margin (no flicker on near-square frames), on a phone-sized frame. */
 export function isPortraitFrame(width: number, height: number): boolean {
@@ -22,8 +22,8 @@ function PhoneIcon() {
   </svg>;
 }
 
-/** Full-frame "Turn your phone sideways" card over a portrait frame, until the player chooses portrait. */
-export function RotateOverlay() {
+/** Full-frame "Turn your phone sideways" card over a portrait frame, until the player chooses portrait. `onShownChange`: the shell freezes the game while it is up (BQ-P1-4). */
+export function RotateOverlay({ onShownChange }: { onShownChange?: (shown: boolean) => void } = {}) {
   const node = useRef<HTMLDivElement>(null);
   const [portrait, setPortrait] = useState(false);
   const [stay, setStay] = useState(false);
@@ -38,6 +38,7 @@ export function RotateOverlay() {
     return () => observer.disconnect();
   }, []);
   const show = portrait && !stay;
+  useEffect(() => { onShownChange?.(show); }, [show, onShownChange]);
   return <div ref={node} className="pk-rotate" hidden={!show} role="dialog" aria-modal="true" aria-label="Turn your phone sideways" data-testid="rotate">
     {show && <>
       <PhoneIcon />

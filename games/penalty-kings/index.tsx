@@ -179,8 +179,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const bagRef = useRef(bag); bagRef.current = bag;
   /** Every progress change goes through here so later reads in the same tick see it. */
   const updateProgress = (change: (p: Progress) => Progress) => { const next = change(progressRef.current); progressRef.current = next; setProgress(next); };
-  const live = useRef({ paused, menu, phase, session, screen, pack: Boolean(pack), carousel, busy });
-  live.current = { paused, menu, phase, session, screen, pack: Boolean(pack), carousel, busy };
+  /** The "Turn your phone sideways" card is up: the game is frozen exactly as when paused (BQ-P1-4). */
+  const [rotating, setRotating] = useState(false);
+  const halted = paused || rotating;
+  const live = useRef({ paused: halted, menu, phase, session, screen, pack: Boolean(pack), carousel, busy });
+  live.current = { paused: halted, menu, phase, session, screen, pack: Boolean(pack), carousel, busy };
   /** Kicks in flight (0 or 1) and the id of the current one: stale timers and events check it. */
   const inFlight = useRef(0), kickId = useRef(0);
   /** Time the game clocks were frozen (paused, hidden, menu, pack, carousel, walkout): shot clock and target timer use clockNow(). */
@@ -1207,12 +1210,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (!paused) return;
+    if (!halted) return;
     keys.current.clear(); keyAim.current.charging = false; swipe.current = null; pointer.current = null;
     // FD-3b: a pause while the keeper is deciding cancels that kick cleanly (the beacon request is aborted; nothing is scored).
     if (pendingRoll.current) abandonWait("Paused while the keeper was deciding: that kick was cancelled and nothing was scored. Take it again.");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused]);
+  }, [halted]);
   // Resize / rotate mid-swipe: the points were measured at the old scale, so drop the gesture (no shot).
   useEffect(() => {
     const drop = () => { swipe.current = null; pointer.current = null; };
@@ -1346,7 +1349,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>
     </div>}
 
-    <RotateOverlay />
+    <RotateOverlay onShownChange={setRotating} />
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
