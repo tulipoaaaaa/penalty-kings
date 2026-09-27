@@ -33,7 +33,7 @@ console.log(`fork ready; Friend #${FRIEND} owner ${owner} (impersonated on the f
 
 // 1) Deploy the launch contracts with the real script.
 const env = { ...process.env, ...Object.fromEntries(launchEnv(0n, 0n).map(line => line.split("="))) };
-const out = execFileSync("forge", ["script", "script/Launch.s.sol", "--rpc-url", ANVIL, "--unlocked", "--sender", DEPLOYER, "--broadcast", ...(process.env.SOLC ? ["--use", process.env.SOLC] : [])],
+const out = execFileSync("forge", ["script", "script/Launch.s.sol", "--rpc-url", ANVIL, "--unlocked", "--sender", DEPLOYER, "--broadcast", "--slow", ...(process.env.SOLC ? ["--use", process.env.SOLC] : [])],
   { cwd: new URL("../contracts/", import.meta.url).pathname, env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 const grab = name => out.match(new RegExp(`${name}\\s+(0x[0-9a-fA-F]{40})`))?.[1];
 const live = { gboot: grab("GBOOT"), kitShop: grab("KitShop"), skillCup: grab("SkillCup"), wildcards: grab("Wildcards") };

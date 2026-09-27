@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1 # pinned: matches local runs
       - run: npm ci
       - name: Throwaway runtime key (never stored)
         run: |
@@ -39,7 +41,7 @@ jobs:
           SLOT=$(cast index address "$REHEARSAL_ADDR" 0)
           cast rpc anvil_setStorageAt 0x0779369854d3EcdEA927206718FFD7730C67B71f "$SLOT" $(cast to-uint256 1000000000000000000000000) --rpc-url http://127.0.0.1:8545 >/dev/null
           set -a; eval "$(node ../scripts/onchain/pool-plan.mjs --env 250000 1000)"; set +a
-          forge script script/Launch.s.sol --rpc-url http://127.0.0.1:8545 --private-key "$REHEARSAL_KEY" --broadcast -vv | tee launch.log
+          forge script script/Launch.s.sol --rpc-url http://127.0.0.1:8545 --private-key "$REHEARSAL_KEY" --broadcast --slow -vv | tee launch.log
           grep -q "positionA" launch.log
       - name: Park stadium (SDK ChanceGame deploy + fund) on a fork
         run: |
