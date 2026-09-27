@@ -47,6 +47,8 @@ export type KickRecord = {
   screamer?: boolean;
   distance?: number;
   tipOver?: boolean;
+  /** C2: struck in the PERFECT band (engine isPerfectStrike): a quicker ball and a steadier aim. */
+  perfect?: boolean;
 };
 
 const goals = (kicks: readonly KickRecord[]) => kicks.filter(kick => kick.result === "goal");

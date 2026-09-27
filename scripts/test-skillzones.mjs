@@ -16,6 +16,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { chromium } from "playwright";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
 import { playInPortraitIfAsked } from "./lib/phone.mjs";
@@ -70,6 +71,16 @@ console.log(`engine pre-pass: park-1 vs ${keeper.name}, rung ${RUNG}, assist ${a
 // ── Browser ─────────────────────────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
+/** --motion: full motion (the SDK harness forces prefers-reduced-motion: reduce), so the instant replay is the slow-mo net-cam, not the still card. */
+const motion = args.includes("--motion");
+if (motion) {
+  const launch = chromium.launch.bind(chromium);
+  chromium.launch = async (...launchArgs) => {
+    const browser = await launch(...launchArgs), newContext = browser.newContext.bind(browser);
+    browser.newContext = async (options = {}) => newContext({ ...options, reducedMotion: "no-preference" });
+    return browser;
+  };
+}
 const errors = [];
 const crc32 = text => { let crc = ~0; for (let i = 0; i < text.length; i++) { crc ^= text.charCodeAt(i); for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (~crc >>> 0).toString(16).padStart(8, "0"); };
 const editSaveCode = (code, friendId, change) => {
@@ -137,7 +148,27 @@ await testGame("./games/penalty-kings", {
     // (the modes screen's D18 check-in may have added 20 XP; the level still has room for every kick below)
     assert.ok((await xpInto()) <= 40, `the HUD starts near a clean level (${START_XP} XP)`);
 
-    const [post, bin, plain] = [await kick(PLAN[0], 0), await kick(PLAN[1], 1), await kick(PLAN[2], 2)];
+    // C2 INSTANT REPLAY: a great goal (here in off the post, then a top bin) gets a 1.5 s slow-mo replay; a tap skips it
+    // (and aims at once); left alone it ends by itself; a plain goal gets none.
+    const replay = game.getByTestId("instant-replay");
+    const post = await kick(PLAN[0], 0);
+    await replay.waitFor({ state: "visible", timeout: 1500 });
+    assert.match(await replay.textContent(), /INSTANT REPLAY.*IN OFF THE POST/);
+    const still = (await replay.getAttribute("data-still")) === "true";
+    console.log(`instant replay shown as ${still ? "a still replay card (reduced motion)" : "the slow-mo net-cam"}`);
+    assert.equal(still, !motion, "reduced motion: a still card; full motion: the slow-mo replay on the Stage");
+    if (motion) assert.equal((await game.locator("body").evaluate(() => window.__pkFlow())).stage, true, "the slow-mo replay is a Stage moment");
+    assert.equal((await game.locator("body").evaluate(() => window.__pkFlow())).shootable, false, "no shooting during the replay");
+    { const box = await canvas.boundingBox(); const tapAt = Date.now(); await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.8); await replay.waitFor({ state: "detached", timeout: 1000 }); await waitShootable(); console.log(`instant replay (post-in) skipped by a tap: aimable ${Date.now() - tapAt} ms after the tap`); }
+    const bin = await kick(PLAN[1], 1);
+    await replay.waitFor({ state: "visible", timeout: 1500 });
+    assert.match(await replay.textContent(), /TOP BIN/);
+    { const shownAt = Date.now(); await replay.waitFor({ state: "detached", timeout: 3000 }); const ms = Date.now() - shownAt; console.log(`instant replay (top bin) ran ${ms} ms`); assert.ok(ms <= 2000, `the replay ends by itself in about 1.5 s (${ms} ms)`); }
+    const plain = await kick(PLAN[2], 2);
+    await page.waitForTimeout(400);
+    assert.equal(await replay.count(), 0, "a plain side-netting goal gets no replay");
+    const logged = (await game.locator("body").evaluate(() => window.__pkFlow())).timing.filter(entry => entry.replay !== undefined);
+    assert.equal(logged.length, 2, `two replays logged: ${JSON.stringify(logged)}`);
     const skill = zone => `SKILL ZONE: ${E.SKILL_ZONE_LABEL[zone]} +${E.SKILL_ZONE_XP[zone]} XP, streak +2`;
 
     // Kick 1: in off the post.
@@ -167,4 +198,4 @@ await testGame("./games/penalty-kings", {
   },
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);
-console.log(`PASS D17 Skill Zones end to end at ${width}px: in off the post (+20 XP), top bin (+15 XP), streak text counts real goals, a plain goal shows no Skill Zone`);
+console.log(`PASS D17 Skill Zones end to end at ${width}px${motion ? " (full motion)" : ""}: in off the post (+20 XP), top bin (+15 XP), streak text counts real goals, a plain goal shows no Skill Zone; C2 instant replays (tap-skip, 1.5 s, none for a plain goal)`);

@@ -33,13 +33,15 @@ export type Progress = {
   stadiumsSeen: string[];
   /** D18 7-day check-in track (XP, a cosmetic on day 7): the last UTC day checked in and the day reached (1–7). */
   login: { lastDay: string; day: number };
+  /** C2: the all-time BEST STREAK, the most real goals in a row in one session (shown on Results and in the Scouting Book). */
+  bestStreak: number;
 };
 
 export const STORAGE_KEY = "penalty-kings/progress/v1";
 export const fresh = (): Progress => ({
   version: 1, xp: 0, stars: {}, stamps: [], pulled: [], matches: 0, tutorialDone: false, difficulty: 3, history: [],
   daily: { date: "", attempts: 0, best: 0, played: [] }, best: { target: 0, penalties: 0, freekicks: 0 }, rewards: [],
-  directorSeen: "", keepersSeen: [], stadiumsSeen: [], login: { lastDay: "", day: 0 },
+  directorSeen: "", keepersSeen: [], stadiumsSeen: [], login: { lastDay: "", day: 0 }, bestStreak: 0,
 });
 /** Discovery meter: "Seen N/60 moments · K/12 keepers · S/3 stadiums" (moments from the Director's seen code). */
 export const STADIUM_COUNT = 3;
@@ -53,7 +55,9 @@ export function loadProgress(storage: Pick<Storage, "getItem"> | null = safeStor
     const raw = storage?.getItem(STORAGE_KEY);
     if (!raw) return fresh();
     const value = JSON.parse(raw) as Partial<Progress>;
-    return value.version === 1 ? { ...fresh(), ...value, daily: { ...fresh().daily, ...value.daily }, best: { ...fresh().best, ...value.best }, login: { ...fresh().login, ...value.login } } : fresh();
+    if (value.version !== 1) return fresh();
+    const bestStreak = typeof value.bestStreak === "number" && Number.isFinite(value.bestStreak) && value.bestStreak >= 0 ? Math.min(999, Math.floor(value.bestStreak)) : 0; // stored before C2: 0
+    return { ...fresh(), ...value, daily: { ...fresh().daily, ...value.daily }, best: { ...fresh().best, ...value.best }, login: { ...fresh().login, ...value.login }, bestStreak };
   } catch { return fresh(); }
 }
 export function saveProgress(progress: Progress, storage: Pick<Storage, "setItem"> | null = safeStorage()) {

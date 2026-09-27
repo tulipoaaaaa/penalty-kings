@@ -683,3 +683,16 @@
 :where(.pk-attract-bottom) button.pk-primary { min-height: 44px; font-size: 16px; padding: 0 1.2em; } /* (0,1,1): beats `.pk button`, loses to the (0,2,0) phone rules */
 /* ── BQ-P1-10: tap targets >= 44 CSS px. "Skip intro" on landscape phones was 40px tall (the phone block above). ── */
 @container (orientation: landscape) and (max-height: 519px) { .pk-skip { min-height: 44px; } }
+/* ── C2 "Shots that feel amazing": the PERFECT flash, the instant replay caption / still card, BEST STREAK. ── */
+.pk-perfect { position: absolute; left: 50%; top: 58cqh; margin: 0; transform: translateX(-50%); font-size: clamp(18px, 4.4cqw, 40px); font-weight: 700; letter-spacing: 0.08em; color: #ffd23f; text-shadow: 2px 2px 0 #0b0d1a, -1px -1px 0 #0b0d1a; pointer-events: none; animation: pk-perfect 0.7s ease-out forwards; }
+@keyframes pk-perfect { 0% { transform: translateX(-50%) scale(1.5); opacity: 0; } 15% { transform: translateX(-50%) scale(1); opacity: 1; } 75% { opacity: 1; } 100% { transform: translateX(-50%) translateY(-8px); opacity: 0; } }
+.pk-replay-hint { position: absolute; left: 50%; bottom: 14cqh; margin: 0; transform: translateX(-50%); font-size: clamp(11px, 1.5cqw, 14px); color: #f7f7f2; background: #0b0d1ae6; border: 2px solid #ff3b1f; padding: 0.3em 0.8em; white-space: nowrap; pointer-events: none; }
+.pk-replay-card { position: absolute; left: 50%; top: 22cqh; transform: translateX(-50%); display: grid; justify-items: center; gap: 4px; min-width: 180px; min-height: 44px; padding: 10px 16px; color: #f7f7f2; background: #0b0d1af2; border: 3px solid #ff3b1f; box-shadow: 3px 3px 0 #000; }
+.pk-replay-card strong { font-size: clamp(14px, 2.4cqw, 22px); letter-spacing: 0.06em; }
+.pk-replay-card span { color: #ffd23f; font-weight: 700; }
+.pk-replay-card svg { width: 120px; height: 68px; color: #f7f7f2; }
+.pk-beststreak { margin: 6px 0; font-weight: 700; letter-spacing: 0.04em; }
+.pk-beststreak[data-new="true"] b { color: #ffd23f; }
+.pk-reduce-motion .pk-perfect { animation: pk-perfect-still 0.7s steps(1) forwards; }
+@keyframes pk-perfect-still { 0% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pk-perfect { animation: pk-perfect-still 0.7s steps(1) forwards; } }

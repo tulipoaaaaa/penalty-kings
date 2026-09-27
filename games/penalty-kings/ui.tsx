@@ -13,6 +13,7 @@ import { describe, type Level } from "./game/objectives.js";
 import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPrice } from "./game/price.js";
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
+import { SHOT_RULES } from "./game/shots.js";
 
 // One shared 90 ms ticker drives every spinning ball on screen (drawing = one drawImage from a cached strip).
 const spinners = new Set<(frame: number) => void>();
@@ -185,7 +186,7 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
 }
 
 export function ScoutingBook({ progress, discovery }: { progress: Progress; discovery?: { label: string } }) {
-  const streaks = [1, 2, 3, 4, 5].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
+  const streaks = [3, 5, 10].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
   return <div className="pk-book">
     {/* Discovery meter: Match Director moments seen, keepers met or scouted, stadiums played. */}
     {discovery && <p className="pk-discovery" data-testid="discovery">{discovery.label}</p>}
@@ -194,7 +195,8 @@ export function ScoutingBook({ progress, discovery }: { progress: Progress; disc
     <ul className="pk-scoring" data-testid="scoring">
       <li><b>Challenge level:</b> {rungName(progress.difficulty)} (it adjusts between rounds to how you play, from Sunday League to Legend).</li>
       <li><b>Where it goes in:</b> centre ×{ZONE_MULT.centre} (and usually saved), side ×{ZONE_MULT.side}, corner ×{ZONE_MULT.corner}, top bin ×{ZONE_MULT.bin}; in off the post +{Math.round((POST_IN_BONUS - 1) * 100)}%; a free-kick knuckleball ×2.</li>
-      <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}).</li>
+      <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}; points only, never RF or $GBOOT). <b data-testid="book-best-streak">BEST STREAK: {progress.bestStreak} in a row</b>.</li>
+      <li><b>PERFECT strike:</b> {SHOT_RULES.perfect}</li>
       <li><b>Keepers:</b> each card shows how often the keeper dives the right way (before your challenge level) and the points multiplier for scoring past them.</li>
       <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>
       <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
@@ -234,6 +236,8 @@ function KeeperFacts({ id }: { id: KeeperId }) {
 }
 
 export type SessionSummary = { title: string; kicks: number; goals: number; points: number; xp: number; stars?: number; stamp?: string; unlocked?: string[];
+  /** C2: the most goals in a row this session, and whether it beat the all-time BEST STREAK. */
+  bestStreak?: number; newBest?: boolean;
   /** A plain final-score line (Big Match). */
   final?: string;
   /** First session: the keeper-unlock card that flips into the Scouting Book, plus the next-mode teaser. */
@@ -251,6 +255,7 @@ export function Results({ summary, onAgain, onModes, next, onBook }: { summary: 
         {summary.xp > 0 && <Tile value={`+${summary.xp}`} label="XP earned" tone="sky" />}
       </div>}
     {summary.final && summary.xp > 0 && <p className="pk-note">You earned {summary.xp} XP.</p>}
+    {summary.bestStreak !== undefined && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
     {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
     {summary.scouted && <div className="pk-unlockcard" data-testid="unlock-card">
