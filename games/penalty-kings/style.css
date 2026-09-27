@@ -681,3 +681,5 @@
    @container blocks, so on frames taller than 519px "Kick off" was 73 × 24). Low specificity (:where), so the
    phone container blocks above still win; the title's own primary already has min-height 48px at base. ── */
 :where(.pk-attract-bottom) button.pk-primary { min-height: 44px; font-size: 16px; padding: 0 1.2em; } /* (0,1,1): beats `.pk button`, loses to the (0,2,0) phone rules */
+/* ── BQ-P1-10: tap targets >= 44 CSS px. "Skip intro" on landscape phones was 40px tall (the phone block above). ── */
+@container (orientation: landscape) and (max-height: 519px) { .pk-skip { min-height: 44px; } }

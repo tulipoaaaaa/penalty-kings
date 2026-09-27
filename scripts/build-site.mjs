@@ -59,7 +59,8 @@ async function addStadiumBar(outdir, tier, live) {
   const other = live ? `<a href="${root}">Simulated preview</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : liveTiers.size ? `<a href="${root}live/">Live — real RF</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : "";
   const practice = `<a class="practice" href="${root}practice/">Try a free practice kick</a>`;
   const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : "SIMULATED preview"}</span> ${links} ${other} ${practice}</nav>`;
-  const style = "<style>.pk-stadiums{max-width:var(--rf-game-max-width,960px);margin:0 auto;padding:6px 8px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font:12px ui-monospace,monospace}.pk-stadiums a{color:#111}.pk-stadiums span{padding:2px 6px;font-weight:700}.pk-stadiums .sim{background:#ffd23f}.pk-stadiums .live{background:#ff5a6e;color:#fff}.pk-stadiums .practice{margin-left:auto;font-weight:700}</style>";
+  // BQ-P1-10: the links are 44px tap targets (they were 14px-tall text links).
+  const style = "<style>.pk-stadiums{max-width:var(--rf-game-max-width,960px);margin:0 auto;padding:0 8px;display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;font:12px ui-monospace,monospace}.pk-stadiums a{color:#111;display:inline-flex;align-items:center;min-height:44px}.pk-stadiums span{padding:2px 6px;font-weight:700}.pk-stadiums .sim{background:#ffd23f}.pk-stadiums .live{background:#ff5a6e;color:#fff}.pk-stadiums .practice{margin-left:auto;font-weight:700}</style>";
   // BQ-P1-8: without a browser wallet the SDK can only say "No browser wallet found"; the host page offers the
   // free practice kick instead (shown by default; hidden as soon as a wallet is detected, like the runtime does it).
   // The runtime focuses its "Choose your Friend" dialog on load, which would scroll this panel away: undo

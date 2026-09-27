@@ -4,6 +4,7 @@
 //   - EVERY network request is recorded: all must be same-origin GETs for the page's own files
 //     (no RPC host, no provider, no wallet, nothing cross-origin, no POST);
 //   - no wallet/provider code in the bundle; the site root links to the practice page;
+//   - every tap target >= 44 x 44 CSS px (page, end card, and the game pages' stadium bar);
 //   - text >= 11 CSS px, no horizontal scroll, no console errors; works with storage blocked.
 // Screenshots: artifacts/practice-*.png (set PK_DOC_SHOTS=1 to refresh docs/screenshots/). `npm run test:practice` builds the site first.
 import assert from "node:assert/strict";
@@ -31,6 +32,21 @@ const server = await serveStatic(SITE);
 const origin = new URL(server.url).origin;
 const browser = await chromium.launch({ headless: true });
 const report = [];
+const MIN_TAP = 44; // BQ-P1-10: every tap target (buttons, links, fields; a checkbox by its label) is >= 44 x 44 CSS px
+
+/** Every visible interactive element inside `scope` on this page, smaller than MIN_TAP in either dimension. */
+const smallTargets = (page, scope = "body") => page.evaluate(([min, scope]) => {
+  const bad = [], seen = new Set();
+  for (let el of document.querySelectorAll(`${scope} :is(button, a[href], input, select, textarea, summary, [role=button])`)) {
+    if (el instanceof HTMLInputElement && ["checkbox", "radio"].includes(el.type)) el = el.closest("label") ?? el;
+    if (seen.has(el) || !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+    seen.add(el);
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    if (r.height < min - 0.5 || r.width < min - 0.5) bad.push(`${Math.round(r.width)}x${Math.round(r.height)} <${el.tagName.toLowerCase()} class="${el.className}"> "${el.textContent.trim().slice(0, 30)}"`);
+  }
+  return bad;
+}, [MIN_TAP, scope]);
 
 async function run({ width, height, name, mobile, blockStorage = false }) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, reducedMotion: "no-preference" });
@@ -56,6 +72,7 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
     return out;
   });
   assert.deepEqual(small, [], `${name}: text under 11px`);
+  assert.deepEqual(await smallTargets(page), [], `${name}: tap targets under ${MIN_TAP} CSS px`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert(overflow <= 0, `${name}: horizontal scroll of ${overflow}px`);
   // The whole pitch is on screen (landscape: no scrolling to reach the ball).
@@ -91,6 +108,7 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   assert.match(endText, /Rare Friends app/);
   assert(!/\bRF\b|\$GBOOT|GBOOT|prize|jackpot|\bpot\b/i.test(await page.locator("body").innerText()), `${name}: economy words on the practice page`);
   if (!blockStorage) await page.screenshot({ path: `${SHOTS}/practice-${name}-end.png` });
+  assert.deepEqual(await smallTargets(page, ".pp-end"), [], `${name}: end-card tap targets under ${MIN_TAP} CSS px`);
   const cardSmall = await page.evaluate(() => [...document.querySelectorAll(".pp-end *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(el).fontSize) < 11).map(el => el.tagName));
   assert.deepEqual(cardSmall, [], `${name}: end card text under 11px`);
 
@@ -112,6 +130,15 @@ try {
   await run({ width: 360, height: 640, name: "360x640", mobile: true });
   await run({ width: 1280, height: 800, name: "1280x800", mobile: false });
   await run({ width: 844, height: 390, name: "no-storage", mobile: true, blockStorage: true });
+  // The published game pages' stadium bar (trusted host page): its links are real tap targets too.
+  for (const [width, height, path] of [[390, 844, ""], [1280, 800, ""], [390, 844, "pro/"]]) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: width < 500, hasTouch: width < 500 });
+    const page = await context.newPage();
+    await page.goto(`${server.url}${path}`, { waitUntil: "load" });
+    assert.deepEqual(await smallTargets(page, ".pk-stadiums"), [], `stadium bar /${path} at ${width}x${height}: tap targets under ${MIN_TAP} CSS px`);
+    report.push({ name: `stadium bar /${path} ${width}x${height}`, results: "links >= 44px", goals: "-", keepers: "-", lines: 0, requests: "-" });
+    await context.close();
+  }
 } finally {
   await browser.close(); await server.close();
 }

@@ -79,3 +79,11 @@ button { font: inherit; }
 .pp-end-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .pp-cta { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; font-size: 14px; font-weight: 700; text-decoration: none; color: var(--pk-ink); background: var(--pk-volt); border: 2px solid #000; box-shadow: 3px 3px 0 #000; }
 .pp-cta-alt { background: var(--pk-gold); }
+
+/* ── BQ-P1-10: every tap target is at least 44 × 44 CSS px (buttons were 32–36px, the header link 17px).
+   The header grows to fit them, so --top (the pitch's height budget in landscape) grows with it. ── */
+:root { --top: 52px; }
+.pp-btn, .pp-top .pp-btn { min-height: 44px; }
+.pp-home, .pp-foot a { display: inline-flex; align-items: center; min-height: 44px; }
+.pp-rotate button { min-width: 44px; min-height: 44px; }
+@media (orientation: landscape) and (max-height: 560px) { :root { --top: 50px; } }
