@@ -7,7 +7,9 @@ import { spawnTargets, targetAt } from "../../games/penalty-kings/game/target.js
 import { Stage, CELEBRATIONS, RARITY_NAMES, STRIKE_AT } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
 import { THEMES, type StadiumId, type Weather } from "../../games/penalty-kings/gfx/stadium.js";
-import { drawKeeper } from "../../games/penalty-kings/gfx/keepers.js";
+import { drawKeeper, drawKeeperLook, keeperArms, KEEPER_DESIGNS, KEEPER_SHEET, PAD } from "../../games/penalty-kings/gfx/keepers.js";
+import { PENALTY_GOAL } from "../../games/penalty-kings/gfx/stadium.js";
+import { KEEPER_RIGS, type RigPose } from "@penalty-kings/engine";
 import { drawBall, drawBallSprite, drawBallShadow, ballSprite, ballSpriteCacheSize, BALL_FRAMES, BALL_IDENTITY, RARITY_FX, seasonFx, type Season } from "../../games/penalty-kings/gfx/ball.js";
 import { CROWD_TYPES } from "../../games/penalty-kings/gfx/crowd.js";
 import { COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
@@ -235,5 +237,66 @@ function drawBallSheet() {
 $<HTMLInputElement>("#balls-reduced").onchange = () => drawBallSheet();
 $<HTMLSelectElement>("#balls-zoom").onchange = () => drawBallSheet();
 (window as unknown as { __drawBallSheet: () => void }).__drawBallSheet = drawBallSheet;
+
+// ── Keeper sheet: 12 keepers × every frame, physics poses flagged, plus the in-game scale ──
+const KZ = 3, KCELL = (17 + 2 * PAD) * KZ, KROW = (16 + PAD) * KZ + 22, KLABEL = 128, KGAME = 76, KHEAD = 34;
+function drawKeeperSheet() {
+  const sheet = $<HTMLCanvasElement>("#keepers"), c = sheet.getContext("2d")!, masks = $<HTMLInputElement>("#keepers-masks").checked;
+  const lean = Number($<HTMLSelectElement>("#keepers-lean").value), zoom = Number($<HTMLSelectElement>("#keepers-zoom").value), g = PENALTY_GOAL.g;
+  const xGame = KLABEL + KEEPER_SHEET.length * KCELL + 8;
+  sheet.width = xGame + 2 * KGAME + 8; sheet.height = KHEAD + KEEPERS.length * KROW + 8;
+  sheet.style.width = `${sheet.width * zoom}px`;
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = "#12162b"; c.fillRect(0, 0, sheet.width, sheet.height);
+  c.font = "10px PixelifySans, monospace"; c.textBaseline = "middle"; c.textAlign = "center";
+  KEEPER_SHEET.forEach(({ label, physics }, i) => { c.fillStyle = physics ? "#ffd23f" : "#9aa3d0"; c.fillText(label, KLABEL + i * KCELL + KCELL / 2, 12); });
+  c.fillStyle = "#7fd3ff"; c.fillText("in game ×" + g.toFixed(2), xGame + KGAME, 12);
+  c.fillStyle = "#9aa3d0"; c.fillText(`sprite px × ${KZ}`, KLABEL + (KEEPER_SHEET.length * KCELL) / 2, 25);
+  c.fillText("idle", xGame + KGAME / 2, 25); c.fillText("dive", xGame + KGAME * 1.5, 25);
+  const physicsX = KEEPER_SHEET.findIndex(frame => frame.physics);
+  c.fillStyle = "#ffd23f22"; c.fillRect(KLABEL + physicsX * KCELL, KHEAD - 2, 3 * KCELL, KEEPERS.length * KROW);
+  KEEPERS.forEach((keeper, row) => {
+    const y = KHEAD + row * KROW, feet = y + KROW - 16, design = KEEPER_DESIGNS[keeper.id];
+    if (row % 2 === 0) { c.fillStyle = "#ffffff08"; c.fillRect(0, y, sheet.width, KROW); }
+    c.textAlign = "left"; c.fillStyle = "#ffffff"; c.fillText(keeper.name, 6, y + KROW / 2 - 10);
+    c.fillStyle = "#ffd23f"; c.fillText(`×${keeper.mult}${keeper.boss ? " · boss" : ""}`, 6, y + KROW / 2 + 4);
+    c.fillStyle = "#9aa3d0"; c.fillText(`${design.rows[0].length}×${design.rows.length} px @${design.scale}`, 6, y + KROW / 2 + 18);
+    c.textAlign = "center";
+    KEEPER_SHEET.forEach(({ look, phase, physics }, i) => {
+      const x = KLABEL + i * KCELL + KCELL / 2;
+      c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, feet + 1, design.rows[0].length * KZ * 0.45, 3, 0, 0, Math.PI * 2); c.fill();
+      drawKeeperLook(c, keeper.id, look, phase, x, feet, KZ, { lean: keeper.id === "peacock" ? lean : 0 });
+      if (masks && physics) {
+        const mask = KEEPER_RIGS[keeper.id].poses[look as RigPose], w = mask[0].length * KZ, h = mask.length * KZ;
+        c.fillStyle = "#00e5ff66";
+        mask.forEach((line, r) => [...line].forEach((ch, col) => { if (ch === "#") c.fillRect(Math.round(x - w / 2) + col * KZ, feet - h + r * KZ, KZ, KZ); }));
+      }
+    });
+    // In game: the whole keeper (arms, gloves) at the penalty view's scale, standing and mid-dive.
+    const ix = xGame + KGAME / 2, dx = xGame + KGAME * 1.5;
+    drawKeeper(c, keeper.id, { x: ix, y: feet, rotate: 0, stretch: 1, armL: 0.35, armR: 0.35, alpha: 1, scaleMul: g, mood: "idle", reduced: true }, 0);
+    drawKeeper(c, keeper.id, { x: dx, y: feet - 12, rotate: 1.05, stretch: 1, armL: -1.1, armR: -0.6, alpha: 1, scaleMul: g, mood: "dive", reduced: true }, 0);
+  });
+}
+// Live row: every keeper cycling idle → set → taunt → celebrate → sad at game scale, as in the match.
+let keepersLive = false;
+function drawKeepersLive(now: number) {
+  const live = $<HTMLCanvasElement>("#keepers-live"), c = live.getContext("2d")!, reduced = $<HTMLInputElement>("#keepers-reduced").checked;
+  const zoom = Number($<HTMLSelectElement>("#keepers-zoom").value), g = PENALTY_GOAL.g, t = now / 1000;
+  live.width = 12 * 56 + 8; live.height = 92; live.style.width = `${live.width * 2 * zoom}px`;
+  c.imageSmoothingEnabled = false; c.fillStyle = "#2e7d32"; c.fillRect(0, 0, live.width, live.height);
+  c.fillStyle = "#12162b"; c.fillRect(0, 0, live.width, 14);
+  const beat = t % 8, mood = beat < 3.5 ? "idle" : beat < 4.3 ? "set" : beat < 5.8 ? "taunt" : beat < 7 ? "celebrate" : "sad";
+  c.font = "8px PixelifySans, monospace"; c.textAlign = "left"; c.textBaseline = "middle"; c.fillStyle = "#ffd23f"; c.fillText(`${mood}${reduced ? " · reduced motion" : ""}`, 4, 7);
+  KEEPERS.forEach((keeper, i) => {
+    const x = 32 + i * 56, [armL, armR] = keeperArms(keeper.id, mood, t, 0, 0.4);
+    drawKeeper(c, keeper.id, { x, y: 80, rotate: 0, stretch: 1, armL, armR, alpha: keeper.id === "ghost" ? 0.85 : 1, scaleMul: g, mood, reduced, lean: Math.sin(t) }, t);
+  });
+  if (keepersLive) requestAnimationFrame(drawKeepersLive);
+}
+for (const id of ["#keepers-masks", "#keepers-lean", "#keepers-zoom"]) $<HTMLElement>(id).onchange = () => drawKeeperSheet();
+document.querySelector<HTMLButtonElement>("[data-tab=keepers]")!.addEventListener("click", () => { drawKeeperSheet(); if (!keepersLive) { keepersLive = true; requestAnimationFrame(drawKeepersLive); } });
+document.querySelectorAll<HTMLButtonElement>("[data-tab]:not([data-tab=keepers])").forEach(tab => tab.addEventListener("click", () => { keepersLive = false; }));
+(window as unknown as { __drawKeeperSheet: () => void }).__drawKeeperSheet = drawKeeperSheet;
 
 loadFriend("336583");

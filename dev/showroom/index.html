@@ -31,7 +31,7 @@
 </head>
 <body>
 <div class="devbar">DEV SHOWROOM — local only, never deployed. Outcomes come from the real engine.</div>
-<div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button><button data-tab="balls" data-testid="tab-balls">Balls</button></div>
+<div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button><button data-tab="balls" data-testid="tab-balls">Balls</button><button data-tab="keepers" data-testid="tab-keepers">Keepers</button></div>
 <div class="layout" data-panel="stage">
   <div class="screen"><canvas id="stage"></canvas><div id="meter"></div></div>
   <aside>
@@ -78,6 +78,15 @@
   <label>Zoom <select id="balls-zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option></select></label>
   <div><canvas id="balls" data-testid="ball-sheet" style="image-rendering: pixelated; border: 2px solid var(--line); background: #12162b"></canvas></div>
   <p class="muted" id="balls-info"></p>
+</div>
+<div data-panel="keepers" hidden style="padding: 12px">
+  <p class="muted">All 12 keepers × every frame. <b>SET / LAUNCH / STRETCH</b> (gold labels) are the physics poses: the only bodies drawn while a penalty is in flight, pixel-for-pixel the engine's hit masks (tick "Hit masks" to overlay them). Everything else is display-only: idle breathing, blinks, secondary motion (tails, crest, fan, tentacles, scarf, tassels, leaf, antenna, hem), the landing squash, celebration, taunt and slump. "In game" columns draw the full keeper (arms, gloves) at the penalty view's scale (goal unit 68 px ⇒ ×0.76).</p>
+  <label><input id="keepers-masks" type="checkbox"> Hit masks (physics poses)</label>
+  <label><input id="keepers-reduced" type="checkbox"> Reduced motion (live row)</label>
+  <label>Peacock lean <select id="keepers-lean"><option value="-1">left</option><option value="0" selected>centre</option><option value="1">right</option></select></label>
+  <label>Zoom <select id="keepers-zoom"><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+  <div><canvas id="keepers-live" data-testid="keeper-live" style="image-rendering: pixelated; border: 2px solid var(--line); background: #12162b; margin-bottom: 8px"></canvas></div>
+  <div><canvas id="keepers" data-testid="keeper-sheet" style="image-rendering: pixelated; border: 2px solid var(--line); background: #12162b"></canvas></div>
 </div>
 <script src="app.js"></script>
 </body>
