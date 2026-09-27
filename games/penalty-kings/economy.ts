@@ -37,8 +37,8 @@ export const RARITIES: readonly Rarity[] = [
   { name: "Golden Boot Ball", dropMult: 15, racePoints: 2, color: "#ffe680", accent: "#ff8c00", label: "Mythic" },
 ];
 
-/** Cup pot share of each ball: 50% of the 10% edge. */
-export const CUP_SHARE_OF_PRICE = 0.05;
+/** Cup pot share of each ball (tokenomics v2, docs/ECONOMY.md): 30% of the swept edge = 0.10 × 0.90 × 30%. */
+export const CUP_SHARE_OF_PRICE = 0.027;
 /** Simulated opening pot shown in the preview. */
 export const SIM_CUP_SEED_RF = 500_000;
 export const SIM_CUP_SEED_GBOOT = 10_000_000;

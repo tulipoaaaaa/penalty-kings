@@ -14,6 +14,7 @@ import {
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
 import { Stage, RARITY_NAMES } from "./gfx/stage.js";
+import { setBallReducedMotion } from "./gfx/ball.js";
 import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
@@ -278,7 +279,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, [screen, ready]);
 
   // Keep the Stage in sync with settings, cosmetics and prize displays.
-  useEffect(() => { stage.current?.setReduced(reducedMotion); }, [reducedMotion, ready]);
+  useEffect(() => { stage.current?.setReduced(reducedMotion); setBallReducedMotion(reducedMotion || null); }, [reducedMotion, ready]);
   useEffect(() => {
     const scene = stage.current; if (!scene) return;
     const colour = (kind: Cosmetic["kind"]) => ALL_COSMETICS.find(item => item.id === equipped[kind])?.color;

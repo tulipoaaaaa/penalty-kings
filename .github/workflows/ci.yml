@@ -78,6 +78,12 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.5.1 # pinned: matches local runs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the SDK contracts (BallVault tests compile the real ChanceGame from node_modules)
+        run: npm ci --ignore-scripts
       - name: Forge build + unit tests
         working-directory: contracts
         run: |
