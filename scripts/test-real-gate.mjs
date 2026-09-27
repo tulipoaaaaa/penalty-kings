@@ -68,7 +68,7 @@ try {
   // 2) A random address owns no Friend: the game never mounts.
   const random = `0x${[...crypto.getRandomValues(new Uint8Array(20))].map(b => b.toString(16).padStart(2, "0")).join("")}`;
   const rejected = await visit(random);
-  await rejected.page.getByText("No playable Friends found.", { exact: true }).waitFor({ timeout: 90_000 });
+  await rejected.page.getByText(/No Rare Friends Generations NFTs found in this wallet on Robinhood\.|No eligible Friends available in this wallet\.|No playable Friends found\./).first().waitFor({ timeout: 90_000 });
   assert.equal(await rejected.page.locator("iframe").count(), 0, "no game frame for a non-owner");
   console.log(`PASS real gate rejects random address ${random}`);
 } finally {
