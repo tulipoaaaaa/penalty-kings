@@ -41,7 +41,7 @@ The game pauses whenever the runtime menu is open.
    redemption value (kept in your Locker, no expiry), its $GBOOT drop and its score multiplier.
 3. **Shoot.** Deterministic pseudo-3D flight (aim, height, curl) resolves goal / save / post /
    over / wide against a seeded keeper dive.
-4. **Score** = 100 × keeper multiplier × ball multiplier × streak (×1, ×1.5, ×2 … capped at ×3).
+4. **Score** = 100 × keeper multiplier × ball multiplier × streak (×1.2 from 3 goals in a row, ×1.5 from 5, ×2 from 10; points only).
    A save or miss resets the streak. Rounds are 5 kicks; 3+ goals unlocks sudden death at ×2.
 
 ### Keepers (original 16 × 16 art)

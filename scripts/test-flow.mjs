@@ -171,10 +171,10 @@ await testGame("./games/penalty-kings", {
     await page.waitForTimeout(700);
     assert.equal(await game.locator(".pk-banner").count(), 0, "no TIME! after closing the menu");
     assert.equal(await kicks(), 0);
-    ok("menu open for 6.5 s during a 5 s shot clock: no timeout");
+    ok("menu open for 6.5 s during a 6 s shot clock: no timeout");
 
     // 5c. Round 6 C14: when the clock runs out the kick is lost OUT LOUD, with a pause before the next kick.
-    await game.locator(".pk-banner strong").filter({ hasText: "Time up — kick lost" }).waitFor({ timeout: 7000 });
+    await game.locator(".pk-banner strong").filter({ hasText: "Time up — kick lost" }).waitFor({ timeout: 8000 }); // C2: the penalty clock is 6 s (was 5 s)
     const lostAt = Date.now();
     await page.waitForTimeout(900);
     assert.equal(await game.locator(".pk-banner strong").textContent(), "Time up — kick lost", "the time-up banner stays up");
@@ -376,8 +376,14 @@ await testGame("./games/penalty-kings", {
     const timing = (await flow()).timing.filter(entry => entry.kind === "penalty" && entry.wait < 500);
     console.log(`  timing (ms, release→result/→ready, beacon kicks: release→strike): ${timing.map(entry => `${entry.toResult}/${entry.toReady}${entry.wait ? ` (${entry.wait})` : ""}`).join(" ")}`);
     assert.ok(timing.length >= 4, "enough penalty kicks timed");
-    for (const entry of timing) { assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`); }
-    ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after");
+    // C2 instant replay: after a great goal the Stage hands control back at the same moment ("done", toReady), but
+    // shows a 1.5 s replay first. A tap (or key) at that moment skips it AND starts the swipe, so toReady is measured
+    // to that skip point; the replay's own length is logged separately and must stay ≤ 1.5 s (+ a frame of slack).
+    for (const entry of timing) {
+      assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`);
+      if (entry.replay !== undefined) assert.ok(entry.replay <= 1600, `instant replay ${entry.replay} ms`);
+    }
+    ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after (instant replays ≤ 1.5 s, skippable)");
 
     // 14. BQ-P1-7: no $GBOOT is spent without a confirmation: Kit shop "try on" is a free preview (buying is a
     //     separate, confirmed step), and the Skill Cup entry (Cups) and its Results "Play again" both ask first.

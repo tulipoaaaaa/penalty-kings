@@ -37,6 +37,8 @@ const roundPoint = ({ x, y }: { x: number; y: number }) => ({ x: Math.round(x), 
 const STRIKER = roundPoint(runupStart(PENALTY_VIEW)), KICK_SPOT = roundPoint(plantSpot(PENALTY_VIEW));
 
 // ── Penalty flight ↔ physics (round 6 B4): one clock, one ball, one keeper ────────────
+/** C2 instant replay state: what to restore, real seconds played / allowed, and the camera's focus (where it went in). */
+type InstantReplay = { restore: { kind: Stage["kind"]; freeKick: Stage["freeKick"] }; t: number; limit: number; focus: { x: number; y: number } };
 /** Seconds the penalty flight takes on screen (round 6 B3: 0.35–0.55 s by pace; target.time 0.4–0.95). */
 export const penaltyFlight = (targetTime: number) => 0.35 + 0.2 * clamp01((targetTime - 0.4) / 0.55);
 /**
@@ -168,7 +170,7 @@ export class Stage {
   private walkOn: { from: KeeperId; t: number } | null = null;
   private walkOnFade = 0;
   /** A net-cam slow-mo replay of a stored outcome (skill-layer visual only: no events, stats or lines). */
-  private replaying: { slow: number; label: string; keeper: KeeperId } | null = null;
+  private replaying: { slow: number; label: string; keeper: KeeperId; instant?: InstantReplay } | null = null;
   /**
    * FD-3b: a wait for randomness. PENALTY: the shot is committed and the keeper has not decided yet (the
    * beacon seeds only his dive); PACK: the pack is sealed until its roll lands. Nothing about the outcome
@@ -293,7 +295,7 @@ export class Stage {
       // Next kick ready fast: a goal hands back control after 1.0 s while the celebration keeps
       // playing (the next strike cuts it); a miss after 1.3 s (the reaction beat has played).
       .at(STRIKE_AT + flight + (outcome.result === "goal" ? 1.0 : 1.3), () => {
-        if (this.replaying) { this.keeper = this.replaying.keeper; this.replaying = null; this.mode = "idle"; this.shot = null; this.ballVisible = false; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.onEvent("replay-done"); return; }
+        if (this.replaying) { this.endReplay(); return; }
         if (this.kind === "target" || outcome.result !== "goal") { this.finish(); return; }
         this.startCelebration(this.celebration); this.onEvent("done");
       });
@@ -311,6 +313,42 @@ export class Stage {
     this.play(outcome, curl);
   }
   get replayingNow() { return Boolean(this.replaying); }
+
+  // ── Instant replay (C2): a short slow-mo re-play of a great goal from the net-cam (helpers only) ─────────
+  /**
+   * Re-plays an already-resolved goal (a skill-layer visual: no strike/resolved/done events, stats or lines),
+   * from just before the strike, zoomed on where the ball went in, slowed so it lasts `seconds` of real time.
+   * A free kick is re-played with ITS setup; the live kind/setup/keeper come back when it ends. It is a Stage
+   * moment (nothing can shoot) until it ends or skipReplay() cuts it; both emit "replay-done".
+   */
+  instantReplay(options: { outcome: ShotOutcome; curl: number; keeper: KeeperId; freeKick?: { outcome: FreeKickOutcome; setup: FreeKickSetup }; label: string; seconds: number }) {
+    const restore = { kind: this.kind, freeKick: this.freeKick }, from = STRIKE_AT - 0.08;
+    const flight = options.freeKick ? freeKickFlight(options.freeKick.outcome) : penaltyFlight(options.outcome.target.time);
+    const slow = Math.min(1, Math.max(0.3, (STRIKE_AT + flight + 0.3 - from) / options.seconds));
+    this.replaying = { slow, label: options.label, keeper: this.keeper, instant: { restore, t: 0, limit: options.seconds, focus: { x: 0, y: 0 } } };
+    this.stats.replays++;
+    this.keeper = options.keeper;
+    if (options.freeKick) { this.kind = "freekick"; this.freeKick = { setup: options.freeKick.setup, wall: options.freeKick.outcome.wall }; this.playFreeKick(options.freeKick.outcome); }
+    else { this.kind = "penalty"; this.freeKick = null; this.play(options.outcome, options.curl); }
+    this.replaying.instant!.focus = this.goalPoint(toScreen(options.outcome.target.x, options.outcome.target.y));
+    this.modeTime = from; this.timeline.advance(from); // the run-up already played live: cut in just before the strike
+  }
+  /** Tap to skip: ends a replay now (emits "replay-done"). */
+  skipReplay() { if (this.replaying) this.endReplay(); }
+  private endReplay() {
+    const instant = this.replaying?.instant;
+    if (this.replaying) this.keeper = this.replaying.keeper;
+    if (instant) { this.kind = instant.restore.kind; this.freeKick = instant.restore.freeKick; this.fk = null; this.ballVisible = true; this.timeline.reset(); }
+    else this.ballVisible = false;
+    this.replaying = null; this.mode = "idle"; this.shot = null;
+    this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2;
+    this.onEvent("replay-done");
+  }
+  /** Real-time length of an instant replay (paused Stage: no time passes). */
+  private tickReplay(realDt: number) {
+    const instant = this.replaying?.instant;
+    if (instant && (instant.t += realDt) >= instant.limit) this.endReplay();
+  }
 
   /** Free kick: the engine's flight path is the animation; "wall" plays as a block. */
   playFreeKick(outcome: FreeKickOutcome) {
@@ -397,7 +435,7 @@ export class Stage {
 
   // ── Update ────────────────────────────────────────────────────────────────
   update(realDt: number) {
-    this.updateWait(realDt); this.clapT += realDt;
+    this.updateWait(realDt); this.clapT += realDt; this.tickReplay(realDt);
     if (this.camera.hitStop > 0) { this.camera.hitStop -= realDt; return; }
     // Slow-mo (skill layer only): a beat on the release, and near-misses (post, bar, just wide/over, fingertip saves).
     let slow = 1;
@@ -411,7 +449,7 @@ export class Stage {
     }
     if (this.replaying && this.mode === "shot") {
       slow = Math.min(slow, this.replaying.slow);
-      if (!this.reduced) { const goal = this.goalPoint(toScreen(0, 0.5)); this.camera.targetX = goal.x; this.camera.targetY = goal.y; this.camera.targetZoom = 1.5; }
+      if (!this.reduced) { const goal = this.replaying.instant?.focus ?? this.goalPoint(toScreen(0, 0.5)); this.camera.targetX = goal.x; this.camera.targetY = goal.y; this.camera.targetZoom = this.replaying.instant ? 1.7 : 1.5; }
     }
     const dt = realDt * this.camera.timeScale * slow;
     this.time += dt; this.modeTime += dt;

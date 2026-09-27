@@ -9,12 +9,12 @@ import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefr
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
   KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, shotTarget, clamp,
-  swipeToShot, aimedShot, WALL_HEIGHTS, SCREAMER_BONUS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
-  type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult, type ShotOutcome,
+  swipeToShot, aimedShot, WALL_HEIGHTS, SCREAMER_BONUS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL, isPerfectStrike, strikeWobble,
+  type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult, type ShotOutcome, type FreeKickOutcome,
 } from "@penalty-kings/engine";
 import { FREE_PLAY_MODES, type BallGlow, type TimeOfDay } from "@penalty-kings/game-director";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
-import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight, type WaitBeatEvent } from "./gfx/stage.js";
+import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight, freeKickShot, type WaitBeatEvent, type Sfx } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { ReelPlayer } from "./gfx/reelplayer.js";
 import { MONTAGE } from "./gfx/showreel.js";
@@ -48,6 +48,7 @@ import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js
 import { RotateOverlay } from "./layout.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
+import { SHOT_RULES, REPLAY_SECONDS, REPLAY_LABEL, replayReason, longestRun, withBestStreak, clockSeconds } from "./game/shots.js";
 import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
 import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
@@ -67,6 +68,8 @@ type Session = {
   suddenDeath?: boolean; ball?: { recordId: string; rarity: number };
   target?: { startedAt: number; round: number; targets: Target[]; combo: number; hits: number };
   earned: { rf: bigint; gboot: number; race: number };
+  /** C2: the all-time BEST STREAK when this session started (Results says "new record" when it is beaten). */
+  bestBefore?: number;
 };
 type SkillEntry = { id: number; name: string; score: number; mine: boolean };
 
@@ -153,8 +156,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, aimY: 0.5, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
   const aimStarted = useRef(0);
   const pendingKick = useRef<{ record: KickRecord & { golden?: boolean }; result: ShotResult | "wall" } | null>(null);
-  /** Runs when the Stage's net-cam replay ends (first session). */
+  /** Runs when the Stage's net-cam replay ends (first session, and the C2 instant replay). */
   const replayDone = useRef<(() => void) | null>(null);
+  /** C2: the last strike, kept for an instant replay of a great goal (the engine's stored outcome; nothing is re-decided). */
+  const lastStrike = useRef<{ outcome: ShotOutcome; curl: number; keeper: KeeperId; freeKick?: { outcome: FreeKickOutcome; setup: FreeKickSetup } } | null>(null);
+  /** C2: the instant replay on screen (animated on the Stage, or a still card under reduced motion) and how to skip it. */
+  const [instant, setInstant] = useState<{ reason: string; still: boolean; x: number; y: number } | null>(null);
+  const instantRef = useRef<{ skip: () => void; timer: number } | null>(null);
+  /** C2: the PERFECT flash (key = when it fired). */
+  const [perfectFlash, setPerfectFlash] = useState(0);
   /**
    * The Match Director (@penalty-kings/game-director, cosmetic only): keeper rotation in free play, a
    * moment every kick, a notable every 3–4, a set piece every round, and a no-repeat commentary line.
@@ -221,7 +231,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
   const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
-  const timing = useRef<{ release: number; resolved: number; wait: number; log: { kind: string; toResult: number; toReady: number; wait: number }[] }>({ release: 0, resolved: 0, wait: 0, log: [] });
+  const timing = useRef<{ release: number; resolved: number; wait: number; log: { kind: string; toResult: number; toReady: number; wait: number; replay?: number }[] }>({ release: 0, resolved: 0, wait: 0, log: [] });
   /**
    * FD-3b: the pending randomness waits. A penalty's keeper roll (the shot is committed; aborted, with no
    * scoring, by a mode switch, a pause or a redeem) and a pack's roll (aborted when the session ends).
@@ -230,7 +240,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** The pack reveal sequence's timers (Reveal all and closing the pack clear them). */
   const packTimers = useRef<number[]>([]);
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
-  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, onWait: (_e: WaitBeatEvent) => {}, haptics: true });
+  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, onStrike: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, onWait: (_e: WaitBeatEvent) => {}, haptics: true });
 
   const maxPrize = maximumPrize(definition);
   const pending = snapshot?.plays.find(play => play.outcomeId === null) ?? null;
@@ -347,7 +357,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const h = latest.current;
       if (event === "sfx") h.playSfx(data as string);
       if (event === "reveal") { const plan = data as ReturnType<typeof revealPlan>; crowd.current?.reveal(plan.pitch, plan.fullScreen); sound.current?.play(plan.tier >= 5 ? "reveal-legendary" : plan.tier >= 3 ? "reveal-rare" : "reveal-common"); }
-      if (event === "strike" && h.haptics) vibrate(15);
+      if (event === "strike") { if (h.haptics) vibrate(15); h.onStrike(); }
       if (event === "resolved") h.onResolved(data as ShotResult | "wall");
       if (event === "done") h.onKickDone();
       if (event === "replay-done") replayDone.current?.();
@@ -528,8 +538,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "tutorial") return { ...DIFFICULTY_LADDER[0], clock: 0 };
     return DIFFICULTY_LADDER[current.rung];
   }
-  /** Shot clock seconds (0 = off): off in the tutorial, Target Practice and the first 3 matches (the Skill Cup keeps the referee's rules). */
-  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" || (current.mode !== "skill" && !shotClockOn(progressRef.current)) ? 0 : difficultyFor(current).clock);
+  /**
+   * Shot clock seconds (0 = off): off in the tutorial, Target Practice and the first 3 matches (the Skill Cup keeps the referee's rules).
+   * C2: 6 s for a penalty, 8 s for a free kick; only the two hardest rungs tighten it, never below 5 s / 7 s (engine shotClockSeconds).
+   */
+  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" || (current.mode !== "skill" && !shotClockOn(progressRef.current)) ? 0 : clockSeconds(difficultyFor(current), current.kind));
   /** Aim assist strength for a penalty/target kick: the reticle and the kick both use it (WYSIWYG). */
   const kickAssist = (current: Session) => current.mode === "tutorial"
     ? FIRST_SESSION[Math.min(FIRST_SESSION.length - 1, current.kicks.length)].assist // the first-session plan (aim assist only)
@@ -558,7 +571,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const partial = swipe.current && swipe.current.length > 2 ? swipeToFreeKick(swipe.current, swipeOptions(s), s.setup) : null;
       const shot = partial ?? keyFreeKick({ ...am, power: am.charging ? am.power : 0.6 }, s.setup);
       // The REAL flight: this kick's seed (the knuckleball wobble) and the aim wobble, exactly as shootFreeKick strikes it.
-      const outcome = resolveFreeKick(kickSetup(s.setup, s.seed, s.kicks.length, s.keeper), { ...shot, aimX: shot.aimX + wobble / 1.6 }, keeperById(s.keeper), difficultyFor(s));
+      const outcome = resolveFreeKick(kickSetup(s.setup, s.seed, s.kicks.length, s.keeper), { ...shot, aimX: shot.aimX + strikeWobble(wobble, shot.power) / 1.6 }, keeperById(s.keeper), difficultyFor(s));
       scene.preview = { path: outcome.path, alpha: Math.max(assist, 0.25) };
     } else {
       const partial = swipe.current && swipe.current.length > 2 ? swipeToShot(swipe.current, swipeOptions(s)) : null;
@@ -599,6 +612,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     pendingRoll.current?.abort(); pendingRoll.current = null; setWaitNote(null); // a pending keeper roll never scores
     stage.current?.cancel(); pendingKick.current = null; afterBeat.current = null; inFlight.current = 0; kickId.current++; sessionEpoch.current++;
     window.clearTimeout(timeoutTimer.current); swipe.current = null; pointer.current = null; keyAim.current.charging = false; setBanner(null);
+    lastStrike.current = null;
+    if (instantRef.current) { window.clearTimeout(instantRef.current.timer); instantRef.current = null; replayDone.current = null; setInstant(null); } // the Stage's cancel() already cut the replay
   }
 
   function beginSession(start: Session) {
@@ -608,7 +623,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     // The Match Director opens the session (replaces the old round intro). It keeps the shell's keeper in
     // paid, ranked and scripted modes, and may rotate it in free play (Pro/Champions between sessions).
-    let next = start, opening: Beat | null = null;
+    let next: Session = { ...start, bestBefore: progressRef.current.bestStreak }, opening: Beat | null = null;
     const setup = { stadium: tier.id, weather: scene?.weather ?? "sun", timeOfDay: timeOfDay() } as const;
     if (next.mode === "tutorial") { tutorialShots.current = []; director().startSession({ ...setup, mode: "tutorial", keeper: next.keeper }); }
     else { opening = director().startSession({ ...setup, mode: next.mode, keeper: next.keeper }); if (opening.keeperChanged && next.kind !== "target") next = { ...next, keeper: opening.keeper }; }
@@ -719,7 +734,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const target = shotTarget(shot), t = targetMotion.current.t;
       const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo, STRIKE_AT + penaltyFlight(target.time));
       const result: ShotResult = Math.abs(target.x) > 1 ? "wide" : target.y > 1 ? "over" : hit.hit || hit.crossbar ? "goal" : "save";
-      pendingKick.current = { record: { result, zone: "centre", points: hit.points, x: target.x, y: target.y }, result };
+      pendingKick.current = { record: { result, zone: "centre", points: hit.points, x: target.x, y: target.y, ...(isPerfectStrike(shot.power) ? { perfect: true } : {}) }, result };
       direct(current, pendingKick.current.record);
       pendingTarget.current = { hit: hit.hit, combo: hit.combo };
       targetMotion.current.release = t;
@@ -783,7 +798,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // The chosen ball sets ONLY the skill-layer score multiplier (kickStyle); RF values never change.
     const ballMult = current.mode === "match" && current.ball ? kickStyle(bagRef.current.find(record => record.id === current.ball!.recordId) ?? null, RARITIES.map(r => r.dropMult)).scoreMult : 1;
     const points = outcome.result === "goal" ? goalPoints(profile, ballMult, current.streak + 1, Boolean(current.suddenDeath), outcome.zone, outcome.postIn) : 0;
-    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y }, result: outcome.result };
+    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y, ...(isPerfectStrike(shot.power) ? { perfect: true } : {}) }, result: outcome.result };
+    lastStrike.current = { outcome, curl: shot.curl, keeper: profile.id };
     direct(current, pendingKick.current.record);
     if (current.mode === "tutorial") tutorialShots.current.push({ outcome, curl: shot.curl, keeper: profile.id, result: outcome.result, points: pendingKick.current.record.points });
     if (usesBeacon(current.mode)) scene.tell = outcome.plan; // the dive now exists: its true tell shows in the run-up (fan, scan, wall)
@@ -795,14 +811,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (!current || !scene || !current.setup || !may("shoot")) return;
     inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now();
     const difficulty = difficultyFor(current);
-    const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak)) / 1.6;
+    const wobble = strikeWobble(aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak)), raw.power) / 1.6; // C2: a PERFECT strike sways half as much
     const shot = { ...raw, aimX: raw.aimX + wobble };
     const profile = keeperById(current.keeper);
     const outcome = resolveFreeKick(kickSetup(current.setup, current.seed, current.kicks.length, profile.id), shot, profile, difficulty);
     // Long range (28 m+): a goal is a SCREAMER, worth +50 %.
     const screamer = outcome.result === "goal" && outcome.longRange;
     const points = outcome.result === "goal" ? Math.round(goalPoints(profile, 1, current.streak + 1, false, outcome.zone) * (outcome.knuckle ? 2 : 1) * (screamer ? SCREAMER_BONUS : 1)) : 0;
-    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, x: outcome.target.x, y: outcome.target.y, spin: shot.spin, knuckle: outcome.knuckle, ...(screamer ? { screamer: true, distance: current.setup.distance } : {}), ...(outcome.tipOver ? { tipOver: true } : {}) }, result: outcome.result };
+    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, x: outcome.target.x, y: outcome.target.y, spin: shot.spin, knuckle: outcome.knuckle, ...(screamer ? { screamer: true, distance: current.setup.distance } : {}), ...(outcome.tipOver ? { tipOver: true } : {}), ...(isPerfectStrike(shot.power) ? { perfect: true } : {}) }, result: outcome.result };
+    lastStrike.current = { outcome: freeKickShot(outcome), curl: 0, keeper: profile.id, freeKick: { outcome, setup: kickSetup(current.setup, current.seed, current.kicks.length, profile.id) } };
     direct(current, pendingKick.current.record);
     scene.playFreeKick(outcome);
   }
@@ -826,7 +843,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function showClock(clock: { left: number; total: number } | null) {
     const bar = clockBar.current; if (!bar) return;
     bar.hidden = !clock;
-    if (clock) { bar.style.setProperty("--left", String(Math.max(0, Math.min(1, clock.left / clock.total)))); bar.dataset.urgent = String(clock.left < 1.5); bar.setAttribute("aria-valuenow", String(Math.ceil(clock.left))); }
+    if (clock) { bar.style.setProperty("--left", String(Math.max(0, Math.min(1, clock.left / clock.total)))); bar.dataset.urgent = String(clock.left < 1.5); bar.setAttribute("aria-valuenow", String(Math.ceil(clock.left))); bar.setAttribute("aria-valuemax", String(clock.total)); }
   }
 
   /** The shot clock ran out: never a silent loss. "Time up — kick lost" stays up for a short pause before the next kick. */
@@ -879,6 +896,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     }
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = goalRun; } // the scoreboard's "N IN A ROW" counts real goals
+    // C2 BEST STREAK (real goals in a row), kept the moment it is beaten so leaving mid-session never loses it.
+    if (current.kind !== "target" && goalRun > progressRef.current.bestStreak) updateProgress(p => withBestStreak(p, goalRun));
     // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
     let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${record.screamer ? ` · SCREAMER from ${record.distance} m: +50%` : ""}${goalRun >= 2 ? ` · ${goalRun} in a row` : ""}` : priorRun >= 2 ? `Your run of ${priorRun} goals ends` : "No goal this time";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
@@ -886,6 +905,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + (skillZone ? SKILL_ZONE_XP[skillZone] : XP.zoneBonus[record.zone]) : 0;
     if (xp) { addXp(xp); sessionXp.current += xp; } // the Results card counts it too (BQ-P1-5)
     if (skillZone) sub += ` · SKILL ZONE: ${SKILL_ZONE_LABEL[skillZone]} +${SKILL_ZONE_XP[skillZone]} XP, streak +2`;
+    if (record.perfect && !timedOut) sub += " · PERFECT strike";
     // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
       const regular = kicks.length <= 5 && !current.suddenDeath;
@@ -923,7 +943,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (done) { endSession(current); return; }
       // The same ball again (round 6 C12): the carousel only opens on "Change ball".
       const ball = current.ball, held = ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample);
-      if (held) { startAim(current); return; }
+      if (held) { aimNext(current); return; }
       setPhaseNow("idle"); return;
     }
     if (current.kicks.length >= current.total) {
@@ -945,9 +965,51 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const updated = { ...current, setup };
       setSessionNow(updated);
       if (stage.current) stage.current.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(current.keeper)).wall };
-      startAim(updated); return;
+      aimNext(updated); return;
     }
-    startAim(current);
+    aimNext(current);
+  }
+
+  /** The PERFECT flash and its sound at the moment of the strike (the Stage's "strike" event; never on a replay). */
+  function onStrike() {
+    if (!pendingKick.current?.record.perfect) return;
+    setPerfectFlash(performance.now());
+    const name: Sfx = "perfect"; playSfx(name);
+  }
+
+  /**
+   * The next kick, after an INSTANT REPLAY when the last kick was a great goal (C2: top bin, in off the post, 28 m+
+   * screamer, PERFECT strike): 1.5 s of slow-mo from the net-cam, or a still replay card under reduced motion.
+   * Nothing can shoot while it plays (a Stage moment), and a tap, a key or "Skip replay" skips it and aims at once;
+   * the tap that skips also starts the swipe. Not in the tutorial (it has its own replay) or Target Practice.
+   */
+  function aimNext(next: Session) {
+    const strike = lastStrike.current, record = next.kicks[next.kicks.length - 1], scene = stage.current;
+    lastStrike.current = null;
+    const reason = strike && record && next.mode !== "tutorial" && next.kind !== "target" ? replayReason(record) : null;
+    if (!reason || !strike || !scene || scene.moment) { startAim(next); return; }
+    const epochAt = sessionEpoch.current, started = performance.now();
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (instantRef.current) window.clearTimeout(instantRef.current.timer);
+      instantRef.current = null; replayDone.current = null; setInstant(null);
+      const entry = timing.current.log[timing.current.log.length - 1]; if (entry) entry.replay = Math.round(performance.now() - started);
+      if (sessionEpoch.current === epochAt) startAim(next);
+    };
+    instantRef.current = { skip: finish, timer: 0 };
+    setInstant({ reason, still: reducedMotion, x: record.x, y: record.y });
+    if (reducedMotion) instantRef.current.timer = window.setTimeout(finish, REPLAY_SECONDS * 1000);
+    else { replayDone.current = finish; scene.instantReplay({ ...strike, label: `${REPLAY_LABEL} · ${reason}`, seconds: REPLAY_SECONDS }); }
+  }
+  /** Tap to skip the instant replay (true when one was playing). */
+  function skipInstantReplay() {
+    const replay = instantRef.current;
+    if (!replay) return false;
+    if (stage.current?.replayingNow) stage.current.skipReplay(); // emits "replay-done" → finish
+    replay.skip();
+    return true;
   }
 
   function addXp(amount: number) {
@@ -967,6 +1029,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const scene = stage.current;
     if (scene) { scene.clock = null; scene.preview = null; scene.reticle = null; }
     let result: SessionSummary = { title: "Full time", kicks: current.kicks.length, goals, points: current.points, xp: 0 };
+    if (current.kind !== "target") { const run = longestRun(current.kicks); result.bestStreak = run; result.newBest = run > 0 && run > (current.bestBefore ?? 0); } // C2 BEST STREAK
     {
       const p = progressRef.current;
       let updated: Progress = { ...p };
@@ -1245,6 +1308,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current;
       if (current.paused || current.menu || current.screen !== "play") return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) event.preventDefault();
+      skipInstantReplay(); // C2: any key skips the instant replay (and then aims as normal)
       if (!canShoot(flow())) return;
       keys.current.add(event.key);
       const am = keyAim.current;
@@ -1283,10 +1347,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, []);
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
-  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed) }; };
+  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed), replay: Boolean(instantRef.current) }; };
   // QA hook (read-only): the Director's seen moments, the moments played and keepers faced (seconds since load), the Discovery meter.
   (window as unknown as { __pkDirector?: () => unknown }).__pkDirector = () => ({ seen: dir.current?.seenIds() ?? [], discovery: dir.current?.discovery().label ?? "", played: qaLog.current.moments, keepers: qaLog.current.keepers, debug: dir.current?.debugState() ?? null });
-  latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), onWait, haptics };
+  latest.current = { tickAim, tickTargets, onResolved, onKickDone, onStrike, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), onWait, haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
   function swipeOptions(current: Session) {
@@ -1339,6 +1403,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       <canvas ref={canvas} className="pk-canvas" width={W} height={H} tabIndex={0}
         aria-label="Swipe up from the ball to shoot: where you release decides the shot. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power."
         onPointerDown={event => {
+          skipInstantReplay(); // C2: a tap skips the instant replay; the same touch can start the swipe
           // One gesture at a time: a second finger (or mouse + touch together) never hijacks the swipe.
           if (!may("start-swipe") || pointer.current !== null || keyAim.current.charging) return;
           const point = toLogical(event);
@@ -1364,11 +1429,19 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </header>
         <header className="pk-hud pk-hud-right">
           <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel}{s.kind !== "target" && goalsInARow(s.kicks) >= 2 ? ` · ${goalsInARow(s.kicks)} in a row` : ""}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
-          <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={5}><span>Shot clock</span><i /></div>
+          <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={6}><span>Shot clock</span><i /></div>
         </header>
       </>}
 
       {banner && <div className={`pk-banner pk-${banner.tone}`} role="status"><strong>{banner.text}</strong><span>{banner.sub}</span></div>}
+      {perfectFlash > 0 && screen === "play" && <p key={perfectFlash} className="pk-perfect" aria-hidden="true" data-testid="perfect-flash" onAnimationEnd={() => setPerfectFlash(0)}>PERFECT!</p>}
+      {instant && !instant.still && <p className="pk-replay-hint" role="status" data-testid="instant-replay">{REPLAY_LABEL} · {instant.reason} · tap to skip</p>}
+      {instant?.still && <button type="button" className="pk-replay-card" data-testid="instant-replay" data-still="true" onClick={skipInstantReplay} aria-label={`${REPLAY_LABEL}: ${instant.reason}. Tap to continue.`}>
+        <strong>{REPLAY_LABEL}</strong><span>{instant.reason}</span>
+        {/* A still of where it went in: the goal frame and the crossing point (goal units, posts at ±1, bar at 1). */}
+        <svg viewBox="-1.2 -1.25 2.4 1.35" aria-hidden="true"><path d="M-1 0V-1H1V0" fill="none" stroke="currentColor" strokeWidth="0.06" /><circle cx={Math.max(-1.1, Math.min(1.1, instant.x))} cy={-Math.max(0.03, Math.min(1.15, instant.y))} r="0.07" fill="#ffd23f" stroke="#0b0d1a" strokeWidth="0.02" /></svg>
+        <small>tap to continue</small>
+      </button>}
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
       {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
@@ -1378,6 +1451,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
         {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}
+        {instant && <button type="button" className="pk-primary" onClick={skipInstantReplay} data-testid="skip-replay">Skip replay</button>}
         {phase === "aim" && s && !pack && !carousel && <button type="button" onClick={() => (s.kind === "freekick" && s.setup ? shootFreeKick(keyFreeKick({ ...keyAim.current, power: 0.55, curl: keyAim.current.curl || 0.6, top: 0.5 }, s.setup)) : shootPenalty({ aimX: keyAim.current.aimX, aimY: keyAim.current.aimY, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
         <div className="pk-actions-row">
           <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
@@ -1502,8 +1576,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <p><b>{RULE}</b></p>
         <ol>
           <li>Swipe up from the ball. Where you release decides the shot; speed is power; a curved swipe bends it. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power.</li>
-          <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. Streaks multiply up to ×3.</li>
-          <li>After your first 3 matches, a shot clock (4–5 seconds, shown as a bar) keeps the pressure on; if it runs out, that kick is lost. It is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
+          <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. {SHOT_RULES.streak}</li>
+          <li>{SHOT_RULES.perfect}</li>
+          <li>{SHOT_RULES.replay}</li>
+          <li>{SHOT_RULES.clock} It is shown as a bar, and it is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
           <li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
           <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome, 90% average return), and keep them in your Bag. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
           <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>

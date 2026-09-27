@@ -15,7 +15,7 @@ game and the Skill Cup referee.
 | `reaction` | seconds added to the keeper's reaction (negative = sharper) |
 | `reach` | multiplier on the keeper's arm length (drawn: the arms you see are the arms that save) |
 | `read` | added to the keeper's own read probability (the chance it dives the right way) |
-| `clock` | shot clock, seconds (5 s; 4 s on the hardest rungs; off in the tutorial) |
+| `clock` | penalty shot clock, seconds (C2: 6 s; 5.5 s and 5 s on the two hardest rungs; free kicks +2 s: 8 s, never under 7 s; off in the tutorial, Target Practice and the first 3 matches) |
 | `wobble` | aim-wobble amplitude; it grows +20 % per streak goal (max +100 %) |
 | `assist` | invisible aim assist, only on the three easiest rungs |
 
@@ -40,15 +40,15 @@ The ladder (`DIFFICULTY_LADDER`, easiest → hardest):
 
 | Rung | reaction | reach | read | clock | wobble | assist |
 |---|---|---|---|---|---|---|
-| 0 | +0.30 s | ×0.55 | −0.30 | 5 s | 0 | 0.9 |
-| 1 | +0.22 s | ×0.65 | −0.20 | 5 s | 0.02 | 0.6 |
-| 2 | +0.15 s | ×0.75 | −0.10 | 5 s | 0.04 | 0.3 |
-| 3 (start) | +0.08 s | ×0.85 | 0 | 5 s | 0.06 | 0 |
-| 4 | +0.03 s | ×0.95 | +0.05 | 5 s | 0.08 | 0 |
-| 5 | 0 | ×1.00 | +0.10 | 5 s | 0.10 | 0 |
-| 6 | −0.03 s | ×1.10 | +0.20 | 4.5 s | 0.12 | 0 |
-| 7 | −0.06 s | ×1.20 | +0.30 | 4 s | 0.14 | 0 |
-| 8 | −0.10 s | ×1.30 | +0.40 | 4 s | 0.16 | 0 |
+| 0 | +0.30 s | ×0.55 | −0.30 | 6 s (FK 8 s) | 0 | 0.9 |
+| 1 | +0.22 s | ×0.65 | −0.20 | 6 s (FK 8 s) | 0.02 | 0.6 |
+| 2 | +0.15 s | ×0.75 | −0.10 | 6 s (FK 8 s) | 0.04 | 0.3 |
+| 3 (start) | +0.08 s | ×0.85 | 0 | 6 s (FK 8 s) | 0.06 | 0 |
+| 4 | +0.03 s | ×0.95 | +0.05 | 6 s (FK 8 s) | 0.08 | 0 |
+| 5 | 0 | ×1.00 | +0.10 | 6 s (FK 8 s) | 0.10 | 0 |
+| 6 | −0.03 s | ×1.10 | +0.20 | 5.5 s (FK 7.5 s) | 0.12 | 0 |
+| 7 | −0.06 s | ×1.20 | +0.30 | 5 s (FK 7 s) | 0.14 | 0 |
+| 8 | −0.10 s | ×1.30 | +0.40 | 5 s (FK 7 s) | 0.16 | 0 |
 
 ## The director
 
@@ -167,7 +167,7 @@ of 5 has a non-empty band of crossing heights that scores (≥ 0.2 goal units at
   keyboard players drag the same way.
 - **Aim assist + trajectory preview**: shown in the tutorial, the first 3 matches and at Park,
   then faded out.
-- **Pressure**: 5 s shot clock (a timeout counts as a miss; off in the tutorial), streak
+- **Pressure**: shot clock of 6 s for penalties and 8 s for free kicks (a timeout counts as a miss; off in the tutorial, Target Practice and the first 3 matches), streak
   wobble, crowd noise.
 - **Feel**: 2-frame hit-stop, slow-mo on the release and near-misses (skill layer only),
   `navigator.vibrate` on Android (skipped where unsupported). No energy or lives in any free mode.
