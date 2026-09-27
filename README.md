@@ -20,6 +20,31 @@ npm run dev            # http://localhost:4173
 npm run build:site     # static site in site/ (Park /, Pro /pro/, Champions /champions/)
 ```
 
+## Dev mode (local only)
+
+Two local pages for playing and inspecting the game. Neither is ever published: `dev/` is not
+part of `npm run build:site`, and CI fails if dev code reaches `site/` (`npm run check:no-dev`).
+
+| Page | URL | What it is |
+|---|---|---|
+| Play | http://localhost:5199/ | The real game in the real SDK runtime, with the simulated preview economy. A **read-only** mock wallet (red DEV bar) impersonates the public owner of a Friend you pick, so the real ownership gate runs against Robinhood mainnet. It cannot sign; every signing method is refused. |
+| Showroom | http://localhost:5199/showroom/ | The scene engine on demand. Triggers for goal/save/post/over/wide (produced by the real engine), 8 celebrations, reactions, every rarity reveal including the Golden Boot, walk-out, streak fire, Mexican wave and all commentary. Pickers for keeper (12), stadium, weather and ball. Speed 0.1–2×, pause and frame-step, reduced motion, a 360 px phone frame, a frame-time overlay and a Cast tab. |
+
+**Windows + WSL, step by step**
+
+1. Open the Ubuntu (WSL) terminal.
+2. Go to the project: `cd ~/penalty-kings` (or wherever you cloned it; if needed, clone it first with
+   `git clone https://github.com/tulipoaaaaa/penalty-kings.git`).
+3. Get the latest code: `git pull`
+4. Install dependencies (the first time, and after `package-lock.json` changes): `npm ci`
+5. Start dev mode: `npm run play:dev`
+6. In Windows Chrome, open **http://localhost:5199/** (play) or **http://localhost:5199/showroom/**
+   (Showroom). WSL forwards `localhost` to Windows automatically.
+7. Edits rebuild automatically; refresh the page. Stop the server with `Ctrl+C`.
+
+If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instead. The server binds
+`0.0.0.0` so Windows can reach it; it only serves the game build, the Showroom and fonts.
+
 ## Repository map
 
 | Path | What it is |

@@ -20,7 +20,7 @@
     "typescript": "^7.0.2",
     "viem": "^2.56.9"
   },
-  "description": "Penalty Kings — a Rare Friends penalty shootout. FriendSDK v0.1.2 game, RF-priced balls, $GBOOT economy.",
+  "description": "Penalty Kings \u2014 a Rare Friends penalty shootout. FriendSDK v0.1.2 game, RF-priced balls, $GBOOT economy.",
   "license": "Apache-2.0",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
@@ -40,6 +40,8 @@
     "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning",
     "local:playwright": "npm install --no-save --legacy-peer-deps playwright@1.56.1",
     "test:real-gate": "node scripts/test-real-gate.mjs",
-    "check:selectors": "node scripts/check-selectors.mjs"
+    "check:selectors": "node scripts/check-selectors.mjs",
+    "play:dev": "node dev/server.mjs",
+    "check:no-dev": "node scripts/check-no-dev.mjs"
   }
 }

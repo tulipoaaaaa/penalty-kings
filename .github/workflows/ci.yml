@@ -25,6 +25,8 @@ jobs:
       - name: Engine copy matches packages/engine
         run: npm run check:engine-sync
       - run: npm run typecheck
+      - name: Site builds with no dev-only code (mock wallet, Showroom)
+        run: npm run build:site && npm run check:no-dev
       - name: Hand-written selectors match their signatures
         run: npm run check:selectors
       - name: Odds (sum 10000 bps, EV 90.00% for every tier)

@@ -24,6 +24,7 @@ jobs:
       # Root = Park (simulated submission preview); /pro/, /champions/ simulated;
       # /live/ only when public deployment manifests exist in games/penalty-kings/deployments/.
       - run: npm run build:site
+      - run: npm run check:no-dev
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

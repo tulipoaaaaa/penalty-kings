@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Penalty Kings — Showroom (DEV)</title>
+<style>
+  @font-face { font-family: PixelifySans; src: url("pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: PixelifySans; src: url("pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+  :root { color-scheme: dark; --bg: #0b0d1a; --panel: #151a33; --line: #2a3160; --text: #e8ecff; --muted: #9aa3d0; --gold: #ffd23f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 PixelifySans, system-ui, sans-serif; }
+  .devbar { background: #b00020; color: #fff; padding: 4px 12px; font-weight: 700; letter-spacing: .04em; }
+  .layout { display: grid; grid-template-columns: minmax(0, 960px) 360px; gap: 12px; padding: 12px; }
+  .screen { position: relative; }
+  canvas#stage { width: 100%; aspect-ratio: 3 / 2; image-rendering: pixelated; display: block; border: 2px solid var(--line); background: #000; }
+  body.phone .screen { width: 360px; }
+  body.phone .layout { grid-template-columns: 360px 360px; }
+  #meter { position: absolute; top: 6px; left: 6px; background: #000a; padding: 2px 6px; font: 11px monospace; color: #7fffa0; }
+  aside { background: var(--panel); border: 1px solid var(--line); padding: 10px; max-height: calc(100vh - 60px); overflow: auto; }
+  h3 { margin: 12px 0 6px; font-size: 13px; color: var(--gold); }
+  button, select, input { font: inherit; color: var(--text); background: #222a55; border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; margin: 2px; min-height: 30px; cursor: pointer; }
+  button:hover { background: #2e3a78; }
+  .tabs button.active { background: var(--gold); color: #111; }
+  label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 8px 2px 0; }
+  .muted { color: var(--muted); font-size: 12px; }
+  pre#log { background: #000; color: #9f9; font-size: 11px; height: 160px; overflow: auto; padding: 6px; margin: 8px 0 0; white-space: pre-wrap; }
+  canvas#cast { width: 100%; max-width: 960px; image-rendering: pixelated; border: 2px solid var(--line); }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="devbar">DEV SHOWROOM — local only, never deployed. Outcomes come from the real engine.</div>
+<div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button></div>
+<div class="layout" data-panel="stage">
+  <div class="screen"><canvas id="stage"></canvas><div id="meter"></div></div>
+  <aside>
+    <h3>Friend</h3>
+    <input id="friend-id" value="336583" size="8" aria-label="Friend ID"><button id="friend-load">Load</button>
+    <div>Samples: <button data-sample="336583">336583 (burner)</button><button data-sample="7730">7730</button><button data-sample="3412">3412</button><button data-sample="15008">15008</button><button data-sample="78784">78784</button><button data-sample="86300">86300</button></div>
+    <div class="muted" id="friend-status"></div>
+    <h3>Scene</h3>
+    <label>Keeper <select id="keeper"></select></label>
+    <div class="muted" id="keeper-info"></div>
+    <label>Stadium <select id="stadium"></select></label>
+    <label>Weather <select id="weather"></select></label>
+    <label>Ball <select id="rarity"></select></label>
+    <h3>Shot outcomes</h3><div id="outcomes"></div>
+    <h3>Celebrations (8)</h3><div id="celebrations"></div>
+    <h3>Reactions</h3><div id="reactions"></div>
+    <h3>Rarity reveals</h3><div id="rarities"></div>
+    <h3>Moments</h3><div id="moments"></div>
+    <h3>Commentary (<span id="line-count"></span> lines)</h3><div id="commentary"></div>
+    <h3>Time</h3>
+    <label>Speed <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1"> <span id="speed-value">1.00×</span></label>
+    <button id="pause">Pause</button><button id="step">Step frame</button>
+    <h3>View</h3>
+    <label><input id="reduced" type="checkbox"> Reduced motion</label>
+    <label><input id="phone" type="checkbox"> 360 px phone frame</label>
+    <label><input id="fps" type="checkbox" checked> Frame-time overlay</label>
+    <h3>Event log</h3><pre id="log"></pre>
+  </aside>
+</div>
+<div data-panel="cast" hidden style="padding: 12px">
+  <canvas id="cast"></canvas>
+  <p class="muted" id="crowd-types"></p>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
