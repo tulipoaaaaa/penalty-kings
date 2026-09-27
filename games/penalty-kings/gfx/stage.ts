@@ -105,6 +105,8 @@ export class Stage {
   clock: { left: number; total: number } | null = null;
   /** Jumbotron text (Pro / Champions), from game/prizes.ts jumbotronSlides. */
   jumbotron = "";
+  /** Ad-board texts (null = the stadium's usual jokes). The free practice page passes its own. */
+  boardText: readonly string[] | null = null;
   /** The chosen Big Match ball: lucky trail and its seasonal edition print (skill layer only). */
   lucky = false;
   season: "S0" | "S1" = "S1";
@@ -369,7 +371,7 @@ export class Stage {
     drawBackdrop(c, this.stadium, this.weather, this.time, pan, backdropEvents);
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
-    drawBoards(c, this.stadium, this.time, pan);
+    drawBoards(c, this.stadium, this.time, pan, this.boardText ?? undefined);
     drawPitch(c, this.stadium, this.weather);
     drawStadiumFx(c, this.stadium, this.weather, this.time, pan, backdropEvents); // round 6 E22: stadium set pieces behind the goal
     c.restore();

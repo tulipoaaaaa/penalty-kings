@@ -485,14 +485,15 @@ function drawReplay(c: CanvasRenderingContext2D, x: number, y: number, t: number
 }
 
 /** LED / wooden advertising boards with in-game jokes only. */
-const BOARD_TEXT = ["PENALTY KINGS", "$GBOOT", "GOLDEN BOOT CUP", "KEEPERS HATE THIS ONE TRICK", "NO REFUNDS ON SHIN PADS", "TOP BINS MONTHLY", "NUTMEG INSURANCE CO.", "HALF-TIME ORANGES"];
-export function drawBoards(c: CanvasRenderingContext2D, stadium: StadiumId, time: number, pan: number) {
+export const BOARD_TEXT: readonly string[] = ["PENALTY KINGS", "$GBOOT", "GOLDEN BOOT CUP", "KEEPERS HATE THIS ONE TRICK", "NO REFUNDS ON SHIN PADS", "TOP BINS MONTHLY", "NUTMEG INSURANCE CO.", "HALF-TIME ORANGES"];
+/** `texts` replaces the jokes (the free practice page shows no token or cup names). */
+export function drawBoards(c: CanvasRenderingContext2D, stadium: StadiumId, time: number, pan: number, texts: readonly string[] = BOARD_TEXT) {
   const y = 90;
   c.fillStyle = "#0b0d1a"; c.fillRect(0, y, W, 12);
   c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle";
   const speed = stadium === "park" ? 14 : 26, offset = (time * speed + pan * 0.6) % 160;
   for (let i = -1; i < 5; i++) {
-    const x = i * 160 - offset, text = BOARD_TEXT[(i + 16 + Math.floor((time * speed) / 160)) % BOARD_TEXT.length];
+    const x = i * 160 - offset, text = texts[(i + 16 + Math.floor((time * speed) / 160)) % texts.length];
     if (stadium === "pro") { c.fillStyle = "#05070f"; c.fillRect(x + 1, y + 1, 158, 10); c.fillStyle = (Math.floor(time * 4) + i) % 2 ? "#c6ff1a" : "#29e0ff"; }
     else if (stadium === "champions") { c.fillStyle = "#120c04"; c.fillRect(x + 1, y + 1, 158, 10); c.fillStyle = "#d4a52a"; c.fillRect(x + 1, y + 1, 158, 1); c.fillRect(x + 1, y + 10, 158, 1); c.fillStyle = "#ffd23f"; }
     else { c.fillStyle = THEMES[stadium].boards[(i + 8) % THEMES[stadium].boards.length]; c.fillRect(x + 1, y + 1, 158, 10); c.fillStyle = "#0b0d1a"; }

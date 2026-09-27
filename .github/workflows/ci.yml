@@ -53,6 +53,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: FriendSDK smoke test (960px and 360px)
         run: npm run test:smoke
+      - name: Free practice page (site/practice/, 5 kicks → CTA at 844x390, 360x640, 1280x800; no wallet/RPC requests)
+        run: npm run test:practice
       - name: Interaction test (buy → place → reveal → shoot → HUD)
         run: npm run test:game
       - name: Every free mode played in the real runtime (tutorial, free kicks, target, tour, daily)
