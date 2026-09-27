@@ -59,8 +59,19 @@ async function visit(account) {
 try {
   // 1) The real owner of a hardwired Friend is admitted after the runtime's fresh on-chain check.
   const admitted = await visit(owner);
-  await admitted.page.getByRole("button", { name: new RegExp(`^Friend #${friendId}\\b`) }).click({ timeout: 90_000 });
-  await admitted.page.frameLocator("iframe").getByText("PARK · SIMULATED").waitFor({ timeout: 90_000 });
+  const picker = admitted.page.getByRole("button", { name: new RegExp(`^Friend #${friendId}\\b`) });
+  try {
+    await picker.waitFor({ timeout: 60_000 });
+  } catch {
+    // The SDK's Friend discovery reads the public RPC; one reload rides out a slow or rate-limited read.
+    console.log(`picker not shown after 60 s; page says: ${(await admitted.page.locator("body").innerText()).slice(0, 400).replace(/\s+/g, " ")}`);
+    await admitted.page.reload();
+    await admitted.page.getByRole("button", { name: /^Connect (wallet|Browser wallet)$/ }).click();
+    await picker.waitFor({ timeout: 90_000 });
+  }
+  await picker.click();
+  // The game mounted inside the SDK frame (its title screen: cold open + Kick off button).
+  await admitted.page.frameLocator("iframe").getByTestId("play").waitFor({ timeout: 90_000 });
   assert.deepEqual(admitted.refused, [], "no signing or transaction requests");
   console.log(`PASS real gate admits the owner of hardwired Friend #${friendId}`);
   await admitted.page.close();
