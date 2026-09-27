@@ -167,8 +167,16 @@ negligible next to the capacity limit.
   - reaction keepers;
   - a published outlier-review rule before payout;
   - a pot cap of 250k $GBOOT per week until v2.
-- **Status:** simulated in the preview. See [DEPLOYMENT.md](DEPLOYMENT.md) for whether the
-  referee is live.
+- **Status:** simulated in the preview. The referee (`verifier/`) is built and tested, but a live
+  Skill Cup needs two things SDK v0.1.2 does not supply:
+  1. The game sandbox's CSP allows network calls only to the Robinhood RPC, so the game cannot
+     reach a referee.
+  2. The fixed bridge (read / buy / play / settle / redeem) cannot carry kick inputs or wallet
+     signatures to the trusted host.
+
+  Going live therefore needs a small bridge extension from Rare Friends (a "submit skill entry"
+  action), or a custom trusted host. This is recorded as a capability gap for the publishing
+  review, not worked around.
 
 ## $GBOOT pool
 

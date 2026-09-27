@@ -10,6 +10,7 @@
 | $GBOOT/RF Uniswap v4 pool | not created |
 | LiquidityLock | not deployed |
 | Live build `/live/` | not published |
+| Skill Cup referee (Cloudflare Worker) | built and tested, not deployed. A live Skill Cup also needs an SDK bridge action for kick inputs and signatures (the sandbox CSP allows only the Robinhood RPC); see ECONOMY.md |
 
 ## Rehearsals (mainnet fork, nothing broadcast)
 
