@@ -16,7 +16,7 @@
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "playwright": "1.56.1",
+    "playwright": "1.63.0",
     "typescript": "^7.0.2",
     "viem": "^2.56.9"
   },
@@ -36,6 +36,7 @@
     "sync:engine": "rm -rf node_modules/@penalty-kings/engine && npm install ./packages/engine --no-audit --no-fund",
     "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src",
     "test:verifier": "node --experimental-strip-types --test verifier/test/*.test.ts",
-    "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning"
+    "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning",
+    "local:playwright": "npm install --no-save --legacy-peer-deps playwright@1.56.1"
   }
 }
