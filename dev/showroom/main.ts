@@ -208,7 +208,22 @@ refreshDirector();
 
 select<KeeperId>("#keeper", KEEPERS.map(keeper => ({ value: keeper.id, label: keeper.name })), value => { stage.keeper = value; const k = keeperById(value); $("#keeper-info").textContent = `${k.bio} Tell: ${k.tell}`; });
 ($<HTMLSelectElement>("#keeper")).value = "squirrel";
-select<StadiumId>("#stadium", (Object.keys(THEMES) as StadiumId[]).map(id => ({ value: id, label: THEMES[id].label })), value => stage.setStadium(value));
+const STADIUM_NOTES: Record<StadiumId, string> = {
+  park: "Cosy Sunday league: benches, trees, kites, sparse crowd, warm grade, birdsong ambience.",
+  pro: "Floodlit bowl: two tiers, glass boxes, LED ribbons, TV gantry, ultras tifos + coloured smoke, drizzle and wet sheen, cool grade, drums + floodlight hum.",
+  champions: "Golden arena: retractable roof, 4-sided jumbotron, card mosaic, champions stage, pyro line, confetti cannons, fireworks on a goal, gold grade, anthem pad + claps.",
+};
+function setStadium(value: StadiumId) {
+  stage.setStadium(value); ($<HTMLSelectElement>("#stadium")).value = value;
+  document.querySelectorAll<HTMLButtonElement>("#stadiums button[data-stadium]").forEach(b => b.classList.toggle("active", b.dataset.stadium === value));
+  $("#stadium-info").textContent = STADIUM_NOTES[value];
+}
+select<StadiumId>("#stadium", (Object.keys(THEMES) as StadiumId[]).map(id => ({ value: id, label: THEMES[id].label })), value => setStadium(value));
+for (const id of Object.keys(THEMES) as StadiumId[]) button("#stadiums", id === "park" ? "Park" : id === "pro" ? "Pro" : "Champions", () => setStadium(id)).dataset.stadium = id;
+button("#stadiums", "Goal finale", () => { toPenalty(); shoot("goal"); });
+setStadium("park");
+// Screenshot hook for scripts/stadium-shots (DEV only).
+(window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); } };
 select<Weather>("#weather", (["sun", "rain", "snow", "fog", "sunset"] as const).map(value => ({ value, label: value })), value => { stage.weather = value; });
 select<string>("#rarity", RARITY_NAMES.map((name, index) => ({ value: String(index), label: name })), value => { stage.rarity = Number(value); });
 ($<HTMLSelectElement>("#rarity")).value = "7";
