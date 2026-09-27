@@ -14,7 +14,8 @@
 | `FriendsAirdrop.sol` | 10M pre-laced airdrop to Friends (Merkle); unclaimed tokens go to Cups after 180 days |
 | `EdgeSplitter.sol` | The 10% edge split: 40% RF burned / 30% $GBOOT bought back and burned / 30% Golden Boot Cup |
 | `LiquidityLock.sol` | Locks the launch liquidity; anyone's `collect` splits the 1% LP fees, per side, 50% burned / 50% to the Golden Boot Cup pot |
-| `KitShop.sol`, `SkillCup.sol`, `Wildcards.sol` | $GBOOT sinks (50% burned / 50% pot) |
+| `KitShop.sol` | $GBOOT sink for cosmetics: 100% burned |
+| `SkillCup.sol`, `Wildcards.sol` | $GBOOT sinks (50% burned / 50% pot) |
 | `RewardsDistributor.sol` | Farm-proofed $GBOOT rewards: a referee EIP-712 signature, a hardwired Friend of generation ≤ 4, a real Skill Cup entry, per-entry and per-day caps, a season budget |
 | `GBootFixedPrice.sol` | Launch-default price source: a fixed 0.1 RF per $GBOOT for the sinks and rewards (no hook, so no TWAP) |
 | `GBootFeeHook.sol`, `GBootPriceFeed.sol` | **Off by default.** Fee-burn hook plus a 30-minute TWAP (time-weighted average price) oracle, used to price sinks in RF after an audit |
@@ -35,7 +36,7 @@
 | **Perk tiers** | Tier 2 at **50%**, tier 3 at **85%** | See the plain-words line below |
 | **TWAP window / guard** | 30 minutes; a claim is refused if spot is more than 1,000 ticks (~10.5%) from the TWAP | Relevant only with the audited hook |
 
-**What "50% / 85%" are percentages of, in one line:** they are percentages of the way to the **maximum lacing commitment**, which is 10,000 $GBOOT locked for 52 weeks, measured on a log scale of ($GBOOT × weeks). So 50% (tier 2) needs only about 720 $GBOOT-weeks, e.g. 72 $GBOOT for 10 weeks, and 85% (tier 3) needs about 72,000 $GBOOT-weeks, e.g. 1,400 $GBOOT for 52 weeks.
+**What "50% / 85%" are percentages of, in one line:** they are percentages of the way to the **maximum lacing commitment**, which is 10,000 $GBOOT locked for 52 weeks, measured on a log scale of x = ($GBOOT, capped at 10,000) × weeks: `progressBps = 10,000 × log2(1 + x) ÷ log2(1 + 520,000)` (`Bootroom.progressBps`). Tier 1 is any live lace below 50%, e.g. 72 $GBOOT for 10 weeks (x = 720, just under). Tier 2 (50%) needs x ≥ 721 (√520,001 − 1 ≈ 720.1), e.g. 103 $GBOOT for 7 weeks or 100 for 8. Tier 3 (85%) needs x ≥ 72,211 (520,001^0.85 − 1 ≈ 72,210.03), e.g. 1,400 $GBOOT for 52 weeks (72,800) or 10,000 for 8 weeks; 7,221 for 10 weeks (72,210) is still tier 2.
 
 ## Reviving the upgrade later (checklist)
 
