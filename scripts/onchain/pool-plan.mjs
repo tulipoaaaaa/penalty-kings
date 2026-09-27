@@ -55,7 +55,35 @@ export function planPool(gboot, floorRf = 0n) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/** Exact-input RF → $GBOOT output at the start price, inside position A (1% fee), rounded down. */
+export function gbootOutForRf(plan, rfIn) {
+  const Q96 = 1n << 96n, L = plan.positionA.liquidity, s = plan.sqrtPriceX96, dx = (rfIn * 99n) / 100n;
+  if (!plan.gbootIsToken0) { // RF is token0: price (token1/token0) falls; out = L·(√P − √P')
+    const next = (L * s) / (L + (dx * s) / Q96);
+    return (L * (s - next)) / Q96;
+  }
+  // RF is token1: √P rises by dx/L; out(token0) = L·(1/√P − 1/√P')·Q96
+  const next = s + (dx * Q96) / L;
+  return (L * Q96 * (next - s)) / (s * next);
+}
+
+/** Env lines for contracts/script/Launch.s.sol, for both orderings. */
+export function launchEnv(floorRf, smokeRf) {
+  const lines = [];
+  for (const [prefix, probe] of [["PLAN_T1_", "0xffffffffffffffffffffffffffffffffffffffff"], ["PLAN_T0_", "0x0000000000000000000000000000000000000001"]]) {
+    const plan = planPool(probe, floorRf);
+    lines.push(`${prefix}SQRT_START=${plan.sqrtPriceX96}`, `${prefix}A_LOWER=${plan.positionA.tickLower}`, `${prefix}A_UPPER=${plan.positionA.tickUpper}`, `${prefix}A_LIQUIDITY=${plan.positionA.liquidity}`);
+    if (plan.positionB) lines.push(`${prefix}B_LOWER=${plan.positionB.tickLower}`, `${prefix}B_UPPER=${plan.positionB.tickUpper}`, `${prefix}B_LIQUIDITY=${plan.positionB.liquidity}`);
+    if (smokeRf > 0n) lines.push(`${prefix}SMOKE_MIN_GBOOT=${(gbootOutForRf(plan, smokeRf * E18) * 97n) / 100n}`);
+  }
+  if (floorRf > 0n) lines.push(`FLOOR_RF_WEI=${floorRf * E18}`);
+  if (smokeRf > 0n) lines.push(`SMOKE_RF=${smokeRf * E18}`);
+  return lines;
+}
+
+if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === "--env") {
+  console.log(launchEnv(BigInt(process.argv[3] ?? "0"), BigInt(process.argv[4] ?? "0")).join("\n"));
+} else if (import.meta.url === `file://${process.argv[1]}`) {
   const json = value => JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2);
   const floor = BigInt(process.argv[3] ?? "250000");
   const examples = process.argv[2] ? [process.argv[2]] : ["0xffffffffffffffffffffffffffffffffffffffff", "0x0000000000000000000000000000000000000001"];

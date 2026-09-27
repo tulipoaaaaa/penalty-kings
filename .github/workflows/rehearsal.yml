@@ -1,0 +1,46 @@
+name: Mainnet-fork rehearsal
+# Runs every launch step against an anvil fork of Robinhood mainnet with a throwaway key created
+# at runtime and funded ON THE FORK ONLY. Nothing is broadcast to mainnet; no secrets are used.
+on:
+  push:
+    paths: ["contracts/**", "scripts/onchain/**", "scripts/lib/**", "games/penalty-kings/tiers/**", ".github/workflows/rehearsal.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci
+      - name: Throwaway runtime key (never stored)
+        run: |
+          KEY=$(node -e 'const {generatePrivateKey}=require("viem/accounts");process.stdout.write(generatePrivateKey())')
+          echo "::add-mask::$KEY"
+          echo "REHEARSAL_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "REHEARSAL_ADDR=$(cast wallet address --private-key $KEY)" >> "$GITHUB_ENV"
+      - name: $GBOOT launch (Launch.s.sol) on an anvil fork
+        working-directory: contracts
+        run: |
+          anvil --fork-url "$ROBINHOOD_RPC_URL" --chain-id 4663 --port 8545 --silent &
+          sleep 6
+          cast rpc anvil_setBalance "$REHEARSAL_ADDR" 0x8ac7230489e80000 --rpc-url http://127.0.0.1:8545 >/dev/null
+          SLOT=$(cast index address "$REHEARSAL_ADDR" 0)
+          cast rpc anvil_setStorageAt 0x0779369854d3EcdEA927206718FFD7730C67B71f "$SLOT" $(cast to-uint256 1000000000000000000000000) --rpc-url http://127.0.0.1:8545 >/dev/null
+          set -a; eval "$(node ../scripts/onchain/pool-plan.mjs --env 250000 1000)"; set +a
+          forge script script/Launch.s.sol --rpc-url http://127.0.0.1:8545 --private-key "$REHEARSAL_KEY" --broadcast -vv | tee launch.log
+          grep -q "positionA" launch.log
+      - name: Park stadium (SDK ChanceGame deploy + fund) on a fork
+        run: |
+          export FORK_FUND_RF=40000
+          export BURNER_MNEMONIC="$(node -e 'const {generateMnemonic,english}=require("viem/accounts");process.stdout.write(generateMnemonic(english))')"
+          echo "::add-mask::$BURNER_MNEMONIC"
+          node scripts/onchain/stadium.mjs park 20000

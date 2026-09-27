@@ -172,6 +172,11 @@
     {
       "path": "openzeppelin-contracts/contracts/utils/math/SafeCast.sol",
       "sha256": "5779bc848bde39f1ad7bc02b4f708a0040888e0083b1a33f119cd94639350134"
+    },
+    {
+      "path": "forge-std/src/Script.sol",
+      "sha256": "cfb5be01f4ddbc037a3502dac3d487d629a4c8b58aa9e2ec48c9fa1b334d96ec",
+      "note": "Added by Penalty Kings from forge-std commit 5cf980eefbf8a54050628334163127ed35453558 (same commit as the SDK subset)"
     }
   ]
 }

@@ -5,7 +5,7 @@ an anvil fork of Robinhood mainnet with the same script and arguments. The entry
 **before** sending (purpose, target, function, arguments, value, gas estimate), then completed
 with the hash, receipt status and a Blockscout link.
 
-| # | Time (UTC) | Purpose | To | Function / args | Value | Gas est. | Fork rehearsal | Tx hash | Status |
-|---|---|---|---|---|---|---|---|---|---|
+Status: **no transactions sent yet** (rows are appended below by `scripts/onchain/lib.mjs`).
 
-No transactions have been sent.
+| Time (UTC) | Purpose | To | Function / args | Value | Gas est. | Fork rehearsal | Tx hash | Status |
+|---|---|---|---|---|---|---|---|---|
