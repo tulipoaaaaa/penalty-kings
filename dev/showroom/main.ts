@@ -24,6 +24,8 @@ import { rollKeeper, packCommitment, packRevealSequence, isAbort } from "../../g
 import { CATALOGUE, MOMENT_STAGE, createGameDirector, applyBeat, playMoment, type Moment, type Beat } from "../../games/penalty-kings/game/director.js";
 import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
 import type { PlayMode } from "@penalty-kings/game-director";
+import { ReelPlayer } from "../../games/penalty-kings/gfx/reelplayer.js";
+import { MONTAGE, ATTRACT } from "../../games/penalty-kings/gfx/showreel.js";
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 const canvas = $<HTMLCanvasElement>("#stage"), context = canvas.getContext("2d")!;
@@ -251,10 +253,20 @@ function setStadium(value: StadiumId) {
 select<StadiumId>("#stadium", (Object.keys(THEMES) as StadiumId[]).map(id => ({ value: id, label: THEMES[id].label })), value => setStadium(value));
 for (const id of Object.keys(THEMES) as StadiumId[]) button("#stadiums", id === "park" ? "Park" : id === "pro" ? "Pro" : "Champions", () => setStadium(id)).dataset.stadium = id;
 button("#stadiums", "Goal finale", () => { toPenalty(); shoot("goal"); });
+// The showreel (gfx/showreel.ts) played on this Stage, with its overlay (titles, captions, cut dissolves).
+let reel: ReelPlayer | null = null;
+function playReel(which: "montage" | "attract" | "off") {
+  reel = which === "off" ? null : new ReelPlayer(stage, which === "montage" ? MONTAGE : ATTRACT, { loop: which === "attract", friendName: stage.friendName || "Your Friend" });
+  if (reel) toPenalty();
+}
+button("#stadiums", "Showreel", () => playReel("montage"));
+button("#stadiums", "Attract loop", () => playReel("attract"));
+button("#stadiums", "Stop reel", () => playReel("off"));
 setStadium("park");
 // Screenshot hook for scripts/stadium-shots (DEV only).
 (window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); },
   crowd: (mood: CrowdMood) => stage.crowd.react(mood), census: () => stage.crowd.census, drop: BACKDROP_DROP, loadSample: (id: string) => loadSample(id),
+  reel: (which: "montage" | "attract" | "off") => playReel(which), reelTime: () => reel?.time ?? -1,
   friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); } };
 select<Weather>("#weather", (["sun", "rain", "snow", "fog", "sunset"] as const).map(value => ({ value, label: value })), value => { stage.weather = value; });
 select<string>("#rarity", RARITY_NAMES.map((name, index) => ({ value: String(index), label: name })), value => { stage.rarity = Number(value); });
@@ -343,9 +355,10 @@ function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   walkFrame.value = Math.floor(now / 140) % 4;
   const started = performance.now();
-  if (!paused || stepOnce) { stage.update(stepOnce ? 1 / 60 : dt); stepOnce = false; }
+  if (!paused || stepOnce) { const step = stepOnce ? 1 / 60 : dt; reel?.update(step); if (reel?.done) reel = null; stage.update(step); stepOnce = false; }
   if (freezeAtStrike && (stage.kickClock ?? 0) >= STRIKE_AT) { freezeAtStrike = false; paused = true; $("#pause").textContent = "Resume"; }
   stage.render(context);
+  reel?.drawOverlay(context);
   meter.push(performance.now() - started);
   if (!zoomCanvas.hidden) zoomContext.drawImage(canvas, Number($<HTMLInputElement>("#crowd-zoom-x").value), Number($<HTMLInputElement>("#crowd-zoom-y").value), 120, 40, 0, 0, 480, 160);
   $("#meter").textContent = `frame ${meter.average.toFixed(2)} ms avg · ${meter.p95.toFixed(2)} ms p95 · particles ${stage.particles.count ?? "?"}`;

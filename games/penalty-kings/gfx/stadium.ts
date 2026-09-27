@@ -2,7 +2,7 @@
  * Stadium backdrops (Park / Pro / Champions), weather, pitch and goal frame.
  * Static layers are painted once into cached canvases; animated details are drawn per frame.
  */
-import { W, H, hash01, type Particles } from "./core.js";
+import { W, H, hash01, pixelStar, type Particles } from "./core.js";
 
 export type StadiumId = "park" | "pro" | "champions";
 export type Weather = "sun" | "rain" | "snow" | "fog" | "sunset";
@@ -328,6 +328,20 @@ function drawRoofFlags(c: CanvasRenderingContext2D, stadium: StadiumId, time: nu
 // ── Animated stadium set pieces (drawn after the crowd, boards and grass; behind the goal) ─────
 let lastFlash = 0, goalAt = -1e9;
 const PRO_CONES = [70, 190, 330, 470] as const;
+
+/** A floodlight lens flare: cached bloom, a long faint horizontal streak, then a white pixel star. */
+function lensFlare(c: CanvasRenderingContext2D, x: number, y: number, len: number, strength: number) {
+  const r = Math.round(8 + len * 1.4);
+  c.globalAlpha = 0.55 * strength; c.drawImage(puff("rgba(255,248,214,0.9)"), x - r, y - r, r * 2, r * 2);
+  c.globalAlpha = 0.28 * strength; c.fillStyle = "#dfe8ff"; c.fillRect(Math.round(x - len * 4), y, Math.round(len * 8) + 1, 1);
+  c.globalAlpha = 0.9 * strength; pixelStar(c, x, y, Math.round(len), "#ffffff");
+  c.globalAlpha = 1;
+}
+/** Champions stars that twinkle: bright ones in the open roof, clear of the truss panels (layer px, backdrop y). */
+const TWINKLE_STARS: readonly { x: number; y: number; gold: boolean }[] = Array.from({ length: 90 }, (_, i) => ({
+  x: Math.floor(hash01(i + 1201) * LAYER_W), y: -SKY_TOP + Math.floor(hash01(i + 2203) * (SKY_TOP - 28)), s: hash01(i + 3001),
+})).filter(star => star.x > 222 && star.x < LAYER_W - 222 && star.y > -SKY_TOP + 4 && star.y < -40 && (star.s < 0.15 || star.s > 0.45))
+  .slice(0, 9).map(star => ({ x: star.x, y: star.y, gold: star.s < 0.15 }));
 /** Soft light beams under the Pro roof (cached; drawn over the crowd as haze). */
 const proHaze = () => layer("pro-haze", c => {
   c.translate(0, SKY_TOP);
@@ -398,6 +412,12 @@ function drawProFx(c: CanvasRenderingContext2D, weather: Weather, time: number, 
   c.globalAlpha = 1;
   // Haze beams and drizzle in the light (heavier in rain).
   c.drawImage(proHaze(), ox, -SKY_TOP);
+  // Lens flares on the four floodlight clusters that throw the beams: a soft bloom, a long anamorphic
+  // streak and a pixel star. They breathe slowly out of phase and flare up on a goal (static under reduced motion).
+  for (let k = 0; k < PRO_CONES.length; k++) {
+    const boost = goal ? 1 - since / 3 : 0, len = reduced ? 6 : 5 + 2 * Math.sin(time * 2.1 + k * 1.9) + 5 * boost;
+    lensFlare(c, Math.round(ox + PRO_CONES[k]), -40, len, weather === "fog" ? 0.6 : 1);
+  }
   if (!reduced) {
     const drops = weather === "rain" ? 70 : 32;
     c.fillStyle = "rgba(210,232,255,0.45)";
@@ -409,6 +429,15 @@ function drawProFx(c: CanvasRenderingContext2D, weather: Weather, time: number, 
 }
 
 function drawChampionsFx(c: CanvasRenderingContext2D, time: number, pan: number, ox: number, since: number, reduced: boolean, drop: number, events: BackdropEvents) {
+  // Star twinkle through the open roof and glints running along the crown ring (never under reduced motion).
+  if (!reduced && active.weather !== "fog") {
+    for (let k = 0; k < TWINKLE_STARS.length; k++) {
+      const star = TWINKLE_STARS[k], cycle = (time / 2.6 + k * 0.37) % 1;
+      if (cycle < 0.22) pixelStar(c, Math.round(ox + star.x), star.y, Math.round(1 + 2.4 * Math.sin((cycle / 0.22) * Math.PI)), star.gold ? "#ffe89a" : "#ffffff");
+    }
+    // The crown's lamp pips (every 24 px from x 4) chase: every sixth pip glints, stepping 5 times a second.
+    for (let j = Math.floor(time * 5) % 6; 4 + j * 24 < LAYER_W; j += 6) pixelStar(c, Math.round(ox + 8 + j * 24), -30, 2, "#fffbe6");
+  }
   // Firework finale in the night sky over the arena (never under reduced motion).
   if (!reduced && since >= 0.4 && since < 6) drawFireworks(c, since - 0.4, drop);
   // The 4-sided centre-hung jumbotron: centred under the HUD in the penalty view; to the left

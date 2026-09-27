@@ -8,7 +8,7 @@ import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.j
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
-import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
+import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, GLINT_SECONDS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { freshCommentary, drawCommentator, type CommentaryContext } from "./commentary.js";
@@ -138,6 +138,8 @@ export class Stage {
   private reveal: { rarity: number; t: number; plan: RevealPlan } | null = null;
   private scoreFlip = { from: 0, t: 1 };
   private reaction: "miss" | "save" | "post" = "miss";
+  /** Reused glove-glint point (no per-frame allocation). */
+  private glint = { t: 0, x: 0, y: 0 };
   private fanCatch: { x: number; t: number } | null = null;
   private ballKid: { t: number; x: number } | null = null;
   private lastRealFrame = 0;
@@ -581,9 +583,14 @@ export class Stage {
     if (this.keeper === "finalwall") { c.fillStyle = `rgba(255,59,31,${0.1 + 0.06 * Math.sin(this.time * 4)})`; c.fillRect(centre.x - 40, GOAL.bar, 80, GOAL.line - GOAL.bar); }
     if (frame.wall) this.drawMimeWall(c, frame.wall, after >= 0 && shot.outcome.touch === "wall" ? clamp01(1 - after / 0.8) : 0);
     const mood = after > 0.2 ? (shot.outcome.result === "goal" ? "sad" : "celebrate") : null;
+    // A glove save glints on the glove that made it (a flourish on top: never part of the hitbox).
+    let glint: { t: number; x: number; y: number } | undefined;
+    if (shot.outcome.result === "save" && shot.outcome.touch === "glove" && after >= 0 && after < GLINT_SECONDS) {
+      const ball = penaltyBallArt(shot.outcome.target, shot.curl, 1); glint = this.glint; glint.t = after; glint.x = ball.x; glint.y = ball.y;
+    }
     drawKeeperFrame(c, frame, {
       alpha: this.keeperAlpha(), arms: mood ? keeperArms(this.keeper, mood, this.time, shot.outcome.plan.x, shot.outcome.plan.y) : undefined,
-      after: after >= 0 ? after : undefined, mood: mood ?? undefined, time: flightT, reduced: this.reduced,
+      after: after >= 0 ? after : undefined, mood: mood ?? undefined, time: flightT, reduced: this.reduced, glint,
     });
     // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
     const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
