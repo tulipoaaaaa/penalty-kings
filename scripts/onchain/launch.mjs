@@ -17,7 +17,9 @@ import { RPC_URL, clients, logPlanned, logSent, EXPLORER } from "./lib.mjs";
 const [floorArg, smokeArg] = process.argv.slice(2);
 if (!/^\d+$/.test(floorArg ?? "") || !/^\d+$/.test(smokeArg ?? "")) throw new Error("usage: launch.mjs <floorRF> <smokeRF> [--send]");
 const send = process.argv.includes("--send");
-const { account, client } = clients(RPC_URL);
+const { client } = { client: (await import("viem")).createPublicClient({ transport: (await import("viem")).http(RPC_URL) }) };
+// Dry runs may simulate as REHEARSE_AS (no key needed); --send always uses the loaded burner key.
+const account = !send && process.env.REHEARSE_AS ? { address: process.env.REHEARSE_AS } : clients(RPC_URL).account;
 const env = { ...process.env, ...Object.fromEntries(launchEnv(BigInt(floorArg), BigInt(smokeArg)).map(line => line.split("="))) };
 const CONTRACTS = new URL("../../contracts/", import.meta.url).pathname;
 const forge = args => execFileSync("forge", ["script", "script/Launch.s.sol", "--sender", account.address, ...args], { cwd: CONTRACTS, env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
