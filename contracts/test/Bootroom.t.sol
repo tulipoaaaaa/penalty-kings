@@ -1,0 +1,350 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.36;
+
+import { Test } from "forge-std/Test.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { GBoot } from "../src/GBoot.sol";
+import { Bootroom, IBootroomGenerations } from "../src/Bootroom.sol";
+
+/// Minimal Generations stand-in: owner + token-bound account per Friend.
+contract BootroomMockGenerations is IBootroomGenerations {
+    mapping(uint256 => address) public ownerOf;
+    mapping(uint256 => address) public tokenBoundAccount;
+    function set(uint256 id, address owner, address tba) external { ownerOf[id] = owner; tokenBoundAccount[id] = tba; }
+}
+
+contract BootroomTest is Test {
+    GBoot internal gboot;
+    BootroomMockGenerations internal gens;
+    Bootroom internal room;
+
+    address internal owner = address(0xA11CE);
+    address internal tba = address(0x7BA);
+    address internal gifter = address(0x6F7);
+    address internal stranger = address(0xBAD);
+    uint256 internal constant FRIEND = 7730;
+    uint256 internal constant BPS = 10_000;
+
+    event Laced(uint256 indexed friendId, address indexed from, uint256 amount, uint256 lockWeeks, uint256 unlockAt);
+    event Unlaced(uint256 indexed friendId, address indexed to, uint256 returned, uint256 burned);
+
+    function setUp() public {
+        gboot = new GBoot();
+        gens = new BootroomMockGenerations();
+        room = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(address(gens)));
+        gens.set(FRIEND, owner, tba);
+        address[3] memory users = [owner, gifter, stranger];
+        for (uint256 i; i < users.length; ++i) {
+            gboot.transfer(users[i], 1_000_000e18);
+            vm.prank(users[i]);
+            gboot.approve(address(room), type(uint256).max);
+        }
+        gboot.approve(address(room), type(uint256).max); // the test contract itself (fuzz lacing)
+    }
+
+    function _lace(address from, uint256 id, uint256 amount, uint256 lockWeeks) internal {
+        vm.prank(from);
+        room.lace(id, amount, lockWeeks);
+    }
+
+    function _lace(uint256 id, uint256 amount, uint256 lockWeeks) internal {
+        room.lace(id, amount, lockWeeks);
+    }
+
+    // ------------------------------------------------------------------ lace
+
+    function testLaceStoresAndEmits() public {
+        uint256 unlockAt = block.timestamp + 12 weeks;
+        vm.expectEmit(true, true, false, true, address(room));
+        emit Laced(FRIEND, owner, 1_000e18, 12, unlockAt);
+        _lace(owner, FRIEND, 1_000e18, 12);
+        (uint128 amount, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(amount, 1_000e18);
+        assertEq(unlockAt_, unlockAt);
+        assertEq(lockWeeks, 12);
+        assertEq(gboot.balanceOf(address(room)), 1_000e18);
+        assertEq(gboot.balanceOf(owner), 1_000_000e18 - 1_000e18);
+    }
+
+    function testLaceRejectsBadWeeksAndZero() public {
+        vm.startPrank(owner);
+        vm.expectRevert(Bootroom.BadWeeks.selector);
+        room.lace(FRIEND, 1e18, 0);
+        vm.expectRevert(Bootroom.BadWeeks.selector);
+        room.lace(FRIEND, 1e18, 53);
+        vm.expectRevert(Bootroom.NothingLaced.selector);
+        room.lace(FRIEND, 0, 1);
+        room.lace(FRIEND, 1e18, 1);
+        room.lace(FRIEND, 1e18, 52);
+        vm.stopPrank();
+    }
+
+    function testLaceNeedsAllowanceAndBalance() public {
+        address broke = address(0xB0B);
+        vm.prank(broke);
+        vm.expectRevert();
+        room.lace(FRIEND, 1e18, 1);
+    }
+
+    /// Anyone may lace for any Friend (gifts); the lace is keyed to the friendId, not the payer.
+    function testGiftLaceAndTopUpKeepsLaterUnlock() public {
+        _lace(owner, FRIEND, 1_000e18, 52);
+        uint256 firstUnlock = block.timestamp + 52 weeks;
+        vm.warp(block.timestamp + 1 weeks);
+        // Shorter top-up: amount adds, unlock/weeks stay.
+        vm.expectEmit(true, true, false, true, address(room));
+        emit Laced(FRIEND, gifter, 500e18, 52, firstUnlock);
+        _lace(gifter, FRIEND, 500e18, 4);
+        (uint128 amount, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(amount, 1_500e18);
+        assertEq(unlockAt_, firstUnlock);
+        assertEq(lockWeeks, 52);
+    }
+
+    function testTopUpWithLaterUnlockTakesNewWeeks() public {
+        _lace(owner, FRIEND, 1_000e18, 4);
+        vm.warp(block.timestamp + 1 weeks);
+        _lace(owner, FRIEND, 1_000e18, 8);
+        (uint128 amount, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(amount, 2_000e18);
+        assertEq(unlockAt_, block.timestamp + 8 weeks);
+        assertEq(lockWeeks, 8);
+    }
+
+    /// FINDING (documented, not changed): the NatSpec says "the boost uses the longer of the two
+    /// commitments", but the code takes the weeks of whichever lace unlocks LATER. A later-ending but
+    /// shorter top-up (possible from any address, for 1 wei) therefore lowers lockWeeks, and so the
+    /// boost, and extends the owner's lock (early unlace then burns 50%).
+    function testThirdPartyDustTopUpLowersWeeksAndExtendsLock() public {
+        _lace(owner, FRIEND, 10_000e18, 52);
+        assertEq(room.boostBps(FRIEND), 2 * BPS);
+        uint256 originalUnlock = block.timestamp + 52 weeks;
+        vm.warp(block.timestamp + 10 weeks);
+        _lace(stranger, FRIEND, 1, 43); // 1 wei, ends 1 week after the original lace
+        (, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(lockWeeks, 43, "weeks of the later-ending (shorter) lace");
+        assertEq(unlockAt_, originalUnlock + 1 weeks, "owner's lock extended by a stranger");
+        assertLt(room.boostBps(FRIEND), 2 * BPS, "boost lowered by a dust gift");
+    }
+
+    // ---------------------------------------------------------------- unlace
+
+    function testUnlaceAfterExpiryReturnsAll() public {
+        _lace(gifter, FRIEND, 3_000e18, 2);
+        vm.warp(block.timestamp + 2 weeks); // exactly at unlockAt: no burn
+        uint256 supply = gboot.totalSupply();
+        vm.expectEmit(true, true, false, true, address(room));
+        emit Unlaced(FRIEND, owner, 3_000e18, 0);
+        vm.prank(owner);
+        room.unlace(FRIEND);
+        assertEq(gboot.balanceOf(owner), 1_000_000e18 + 3_000e18, "gift goes to the Friend's owner");
+        assertEq(gboot.totalSupply(), supply);
+        assertEq(gboot.balanceOf(address(room)), 0);
+        (uint128 amount, uint64 unlockAt_, uint64 lockWeeks) = room.laces(FRIEND);
+        assertEq(amount, 0); assertEq(unlockAt_, 0); assertEq(lockWeeks, 0);
+    }
+
+    function testEarlyUnlaceBurnsHalf() public {
+        _lace(owner, FRIEND, 1_000e18, 52);
+        vm.warp(block.timestamp + 52 weeks - 1);
+        uint256 supply = gboot.totalSupply();
+        vm.expectEmit(true, true, false, true, address(room));
+        emit Unlaced(FRIEND, owner, 500e18, 500e18);
+        vm.prank(owner);
+        room.unlace(FRIEND);
+        assertEq(gboot.totalSupply(), supply - 500e18, "half really burned");
+        assertEq(gboot.balanceOf(owner), 1_000_000e18 - 500e18);
+        assertEq(gboot.balanceOf(address(room)), 0);
+    }
+
+    /// Odd amounts: burn rounds down, the caller gets the extra wei.
+    function testEarlyUnlaceRoundingOddAmount() public {
+        _lace(owner, FRIEND, 3, 1);
+        uint256 supply = gboot.totalSupply();
+        vm.prank(owner);
+        room.unlace(FRIEND);
+        assertEq(gboot.totalSupply(), supply - 1);
+        assertEq(gboot.balanceOf(owner), 1_000_000e18 - 1);
+        _lace(owner, FRIEND, 1, 1); // 1 wei: nothing burned, 1 wei back
+        vm.expectEmit(true, true, false, true, address(room));
+        emit Unlaced(FRIEND, owner, 1, 0);
+        vm.prank(owner);
+        room.unlace(FRIEND);
+    }
+
+    function testTokenBoundAccountCanUnlace() public {
+        _lace(owner, FRIEND, 100e18, 1);
+        vm.warp(block.timestamp + 1 weeks);
+        vm.prank(tba);
+        room.unlace(FRIEND);
+        assertEq(gboot.balanceOf(tba), 100e18, "paid to the caller (the TBA)");
+    }
+
+    function testOnlyOwnerOrTbaCanUnlace() public {
+        _lace(owner, FRIEND, 100e18, 1);
+        vm.warp(block.timestamp + 1 weeks);
+        vm.prank(gifter);
+        vm.expectRevert(Bootroom.NotFriend.selector);
+        room.unlace(FRIEND);
+        vm.prank(stranger);
+        vm.expectRevert(Bootroom.NotFriend.selector);
+        room.unlace(FRIEND);
+        // Ownership moves with the Friend.
+        gens.set(FRIEND, stranger, address(0));
+        vm.prank(owner);
+        vm.expectRevert(Bootroom.NotFriend.selector);
+        room.unlace(FRIEND);
+        vm.prank(stranger);
+        room.unlace(FRIEND);
+        assertEq(gboot.balanceOf(stranger), 1_000_000e18 + 100e18);
+    }
+
+    function testUnlaceNothingAndTwice() public {
+        vm.prank(owner);
+        vm.expectRevert(Bootroom.NothingLaced.selector);
+        room.unlace(FRIEND);
+        _lace(owner, FRIEND, 1e18, 1);
+        vm.warp(block.timestamp + 1 weeks);
+        vm.startPrank(owner);
+        room.unlace(FRIEND);
+        vm.expectRevert(Bootroom.NothingLaced.selector);
+        room.unlace(FRIEND);
+        vm.stopPrank();
+    }
+
+    // ----------------------------------------------------------------- boost
+
+    function testNoLaceIsX1() public view {
+        assertEq(room.boostBps(FRIEND), BPS);
+        assertEq(room.dropBps(FRIEND), BPS);
+    }
+
+    function testMaxBoostAtMaxLaceFor52Weeks() public {
+        _lace(owner, FRIEND, 10_000e18, 52);
+        assertEq(room.boostBps(FRIEND), 20_000);
+        assertEq(room.dropBps(FRIEND), 15_000);
+    }
+
+    /// Only MAX_LACE counts: 1M GBOOT for 52 weeks is still ×2 / ×1.5.
+    function testBoostCappedAboveMaxLace() public {
+        _lace(owner, FRIEND, 1_000_000e18, 52);
+        assertEq(room.boostBps(FRIEND), 20_000);
+        assertEq(room.dropBps(FRIEND), 15_000);
+    }
+
+    /// Reference values from 1 + log2(1 + x) / log2(1 + 520000) (computed off-chain in float).
+    function testBoostCurveReferencePoints() public {
+        uint256[6] memory amounts = [uint256(1e18), 10_000e18, 5_000e18, 10_000e18, 10_000e18, 9_999e18];
+        uint256[6] memory weeks_ = [uint256(1), 1, 52, 26, 12, 52];
+        uint256[6] memory expected = [uint256(10_526), 16_997, 19_473, 19_473, 18_885, 19_999];
+        for (uint256 i; i < 6; ++i) {
+            uint256 id = 100 + i;
+            _lace(owner, id, amounts[i], weeks_[i]);
+            assertApproxEqAbs(room.boostBps(id), expected[i], 1, "boost reference");
+        }
+    }
+
+    /// x counts whole GBOOT only: below 1 GBOOT the boost is ×1 while locked.
+    function testSubWholeTokenLaceGivesNoBoost() public {
+        _lace(owner, FRIEND, 1e18 - 1, 52);
+        assertEq(room.boostBps(FRIEND), BPS);
+    }
+
+    function testBoostExpiresAtUnlock() public {
+        _lace(owner, FRIEND, 10_000e18, 12);
+        uint256 locked = room.boostBps(FRIEND);
+        assertGt(locked, BPS);
+        vm.warp(block.timestamp + 12 weeks - 1);
+        assertEq(room.boostBps(FRIEND), locked, "no decay during the lock");
+        vm.warp(block.timestamp + 1);
+        assertEq(room.boostBps(FRIEND), BPS, "x1 from unlockAt");
+        assertEq(room.dropBps(FRIEND), BPS);
+    }
+
+    function testLog2WadKnownValues() public view {
+        assertEq(room.log2Wad(1e18), 0);
+        assertEq(room.log2Wad(2e18), 1e18);
+        assertEq(room.log2Wad(1024e18), 10e18);
+        assertApproxEqAbs(room.log2Wad(3e18), 1_584_962_500_721_156_181, 2e9);
+        assertApproxEqAbs(room.log2Wad(520_001e18), 18_988_154_872_101_413_000, 1e10); // log2(520001)
+    }
+
+    // ------------------------------------------------------------------ fuzz
+
+    function testFuzzBoostBounded(uint256 amount, uint256 lockWeeks, uint256 elapsed) public {
+        amount = bound(amount, 1, 50_000_000e18);
+        lockWeeks = bound(lockWeeks, 1, 52);
+        elapsed = bound(elapsed, 0, 60 weeks);
+        _lace(FRIEND, amount, lockWeeks);
+        vm.warp(block.timestamp + elapsed);
+        uint256 b = room.boostBps(FRIEND);
+        assertGe(b, BPS);
+        assertLe(b, 2 * BPS);
+        uint256 d = room.dropBps(FRIEND);
+        assertGe(d, BPS);
+        assertLe(d, 15_000);
+        assertEq(d, BPS + (b - BPS) / 2);
+    }
+
+    function testFuzzBoostMonotonicInAmount(uint256 a1, uint256 a2, uint256 lockWeeks) public {
+        a1 = bound(a1, 1, 30_000e18);
+        a2 = bound(a2, a1, 30_000e18);
+        lockWeeks = bound(lockWeeks, 1, 52);
+        _lace(1, a1, lockWeeks);
+        _lace(2, a2, lockWeeks);
+        assertLe(room.boostBps(1), room.boostBps(2));
+    }
+
+    function testFuzzBoostMonotonicInWeeks(uint256 amount, uint256 w1, uint256 w2) public {
+        amount = bound(amount, 1, 30_000e18);
+        w1 = bound(w1, 1, 52);
+        w2 = bound(w2, w1, 52);
+        _lace(1, amount, w1);
+        _lace(2, amount, w2);
+        assertLe(room.boostBps(1), room.boostBps(2));
+    }
+
+    /// Stacking many laces on one Friend never beats ×2.
+    function testFuzzStackedLacesCapped(uint256[5] memory amounts, uint256[5] memory ws, uint256[5] memory gaps) public {
+        for (uint256 i; i < 5; ++i) {
+            vm.warp(block.timestamp + bound(gaps[i], 0, 20 weeks));
+            _lace(FRIEND, bound(amounts[i], 1, 5_000_000e18), bound(ws[i], 1, 52));
+            assertLe(room.boostBps(FRIEND), 2 * BPS);
+            assertLe(room.dropBps(FRIEND), 15_000);
+        }
+    }
+
+    function testFuzzLog2WadMonotonic(uint256 x, uint256 y) public view {
+        x = bound(x, 1e18, 1e40);
+        y = bound(y, x, 1e40);
+        assertLe(room.log2Wad(x), room.log2Wad(y));
+    }
+
+    /// Checks log2Wad against 2^result ≈ x via the defining inequality on whole bits and a tight
+    /// relative tolerance on the fractional part (compared with integer powers).
+    function testFuzzLog2WadIntegerPart(uint256 n, uint256 frac) public view {
+        n = bound(n, 0, 100);
+        frac = bound(frac, 0, 1e18 - 1);
+        uint256 x = (1e18 + frac) << n; // in [2^n, 2^(n+1))
+        uint256 r = room.log2Wad(x);
+        assertEq(r / 1e18, n, "integer part");
+    }
+
+    /// Early unlace: returned + burned == laced, burned == floor(amount / 2), caller gets the rest.
+    function testFuzzEarlyUnlaceConservation(uint256 amount, uint256 lockWeeks, uint256 elapsed) public {
+        amount = bound(amount, 1, 1_000_000e18);
+        lockWeeks = bound(lockWeeks, 1, 52);
+        elapsed = bound(elapsed, 0, 60 weeks);
+        _lace(gifter, FRIEND, amount, lockWeeks);
+        vm.warp(block.timestamp + elapsed);
+        uint256 supply = gboot.totalSupply();
+        uint256 before = gboot.balanceOf(owner);
+        vm.prank(owner);
+        room.unlace(FRIEND);
+        uint256 burned = supply - gboot.totalSupply();
+        uint256 returned = gboot.balanceOf(owner) - before;
+        assertEq(burned + returned, amount);
+        assertEq(burned, elapsed < lockWeeks * 1 weeks ? amount / 2 : 0);
+        assertEq(gboot.balanceOf(address(room)), 0);
+    }
+}
