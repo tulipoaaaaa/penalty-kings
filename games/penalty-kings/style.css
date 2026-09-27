@@ -143,6 +143,14 @@
 .pk-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
 .pk-levels button { display: grid; gap: 1px; padding: 6px 8px; }
 .pk-levels small { opacity: 0.8; }
+/* World Tour path (round 6 C16): cities in order, a line joining each city's levels, the next level lit. */
+.pk-path { list-style: none; margin: 0; padding: 0; }
+.pk-city { position: relative; margin-bottom: 10px; padding-left: 14px; border-left: 3px solid var(--pk-line); }
+.pk-city[data-open="true"] { border-left-color: var(--pk-volt); }
+.pk-city[data-open="false"] h3 { opacity: 0.6; }
+.pk-city h3 small { font-weight: 400; opacity: 0.8; }
+.pk-levelpath button[data-next] { outline: 3px solid var(--pk-gold); outline-offset: 1px; }
+.pk-nexttag { font-style: normal; color: var(--pk-gold); }
 .pk-brief { line-height: 1.6; }
 .pk-scoring { margin: 0.3em 0 0.8em; padding-left: 1.2em; }
 .pk-scoring li { margin: 0.2em 0; }

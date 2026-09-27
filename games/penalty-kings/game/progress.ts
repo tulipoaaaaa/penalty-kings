@@ -62,7 +62,7 @@ export type ModeId = "penalties" | "freekicks" | "tour" | "daily" | "target" | "
 export const MODES: ReadonlyArray<{ id: ModeId; name: string; blurb: string; level: number; paid?: boolean }> = [
   { id: "penalties", name: "Penalties", blurb: "Tutorial, then climb the keeper ladder.", level: 1 },
   { id: "freekicks", name: "Free Kicks", blurb: "18–32 m. Curl it, dip it, knuckle it.", level: 2 },
-  { id: "tour", name: "World Tour", blurb: "30 levels, 3 stars each.", level: 2 },
+  { id: "tour", name: "World Tour", blurb: "6 cities × 5 levels, 3 stars each.", level: 2 },
   { id: "daily", name: "Daily Challenge", blurb: "Same scenario for everyone. 3 attempts.", level: 2 },
   { id: "target", name: "Target Practice", blurb: "60 seconds. Bins, bar, combos.", level: 2 },
   { id: "match", name: "Big Match", blurb: "Open packs, build your Bag, kick with your best balls. Optional.", level: 1, paid: true },
@@ -87,6 +87,4 @@ export function assistLevel(progress: Progress, stadium: "park" | "pro" | "champ
 export const SHOT_CLOCK_FREE_MATCHES = 3;
 export const shotClockOn = (progress: Progress) => progress.tutorialDone && progress.matches >= 1 + SHOT_CLOCK_FREE_MATCHES;
 
-/** Stars needed to open each stadium in the World Tour (10 levels × 3 stars per stadium). */
-export const STADIUM_STARS = { park: 0, pro: 12, champions: 30 } as const;
 export const totalStars = (progress: Progress) => Object.values(progress.stars).reduce((sum, value) => sum + value, 0);

@@ -7,7 +7,8 @@ import { RARITIES, TIERS, TOKEN_LINES, formatNumber, type Tier } from "./economy
 import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { MODES, isUnlocked, levelFromXp, totalStars, STADIUM_STARS, LADDER, type Progress, type ModeId } from "./game/progress.js";
+import { MODES, isUnlocked, levelFromXp, totalStars, LADDER, type Progress, type ModeId } from "./game/progress.js";
+import { CITIES, LEVELS_PER_CITY, cityLevels, cityOpen, cityStars, nextLevel, starsToOpen } from "./game/tour.js";
 import { describe, type Level } from "./game/objectives.js";
 import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPrice } from "./game/price.js";
@@ -114,21 +115,26 @@ export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (
   </div>;
 }
 
+/** World Tour (round 6 C16): a path of 6 cities × 5 levels; the next level is highlighted; stars open the next city. */
 export function TourMap({ levels, progress, onPick }: { levels: readonly Level[]; progress: Progress; onPick: (level: Level) => void }) {
-  const stars = totalStars(progress);
+  const stars = totalStars(progress), next = nextLevel(levels, progress);
   return <div className="pk-tour">
-    <p>★ {stars} / {levels.length * 3}. Stars open the next stadium, and 3-star finals unlock cosmetics.</p>
-    {(["park", "pro", "champions"] as const).map(stadium => {
-      const open = stars >= STADIUM_STARS[stadium];
-      return <section key={stadium}><h3>{stadium === "park" ? "Park" : stadium === "pro" ? "Pro" : "Champions"}{open ? "" : ` · needs ★ ${STADIUM_STARS[stadium]}`}</h3>
-        <div className="pk-levels">{levels.filter(level => level.stadium === stadium).map((level, index) => {
-          const got = progress.stars[level.id] ?? 0, keeper = keeperById(level.keeper).name;
-          return <button key={level.id} type="button" disabled={!open} onClick={() => onPick(level)} title={level.objectives.map(o => describe(o, keeper)).join(" · ")} data-testid={`level-${level.id}`}>
-            <b>{index + 1}. {level.name}</b><small>{level.mode === "freekick" ? `Free kick ${level.setup?.distance} m` : `Penalties vs ${keeper.split(" ")[0]}`}</small>
-            <span className="pk-stars" aria-label={`${got} of 3 stars`}>{"★".repeat(got)}{"☆".repeat(3 - got)}</span>
+    <p>★ {stars} / {levels.length * 3} · {CITIES.length} cities, {LEVELS_PER_CITY} levels each. Earn {starsToOpen()} of a city's {LEVELS_PER_CITY * 3} stars to open the next city; 3-star finals unlock cosmetics.</p>
+    <ol className="pk-path">{CITIES.map(city => {
+      const list = cityLevels(levels, city.chapter), open = cityOpen(levels, city.chapter, progress), got = cityStars(levels, city.chapter, progress);
+      const before = CITIES.find(item => item.chapter === city.chapter - 1);
+      const need = before ? starsToOpen(cityLevels(levels, before.chapter).length) : 0, have = before ? cityStars(levels, before.chapter, progress) : 0;
+      return <li key={city.chapter} className="pk-city" data-open={open} data-testid={`city-${city.chapter}`}>
+        <h3>{city.chapter}. {city.name} <small>{city.stadium === "park" ? "Park" : city.stadium === "pro" ? "Pro" : "Champions"} stadium · ★ {got}/{list.length * 3}</small></h3>
+        {!open && before && <p className="pk-note">Locked: get ★ {need} in {before.name} to open (you have {have}).</p>}
+        <div className="pk-levels pk-levelpath">{list.map((level, index) => {
+          const done = progress.stars[level.id] ?? 0, keeper = keeperById(level.keeper).name, isNext = next?.id === level.id;
+          return <button key={level.id} type="button" disabled={!open} onClick={() => onPick(level)} autoFocus={isNext} data-next={isNext || undefined} title={level.objectives.map(o => describe(o, keeper)).join(" · ")} data-testid={`level-${level.id}`}>
+            <b>{city.chapter}-{index + 1}. {level.name}{isNext ? <em className="pk-nexttag"> Next</em> : null}</b><small>{level.mode === "freekick" ? `Free kick ${level.setup?.distance} m` : `Penalties vs ${keeper.split(" ")[0]}`}</small>
+            <span className="pk-stars" aria-label={`${done} of 3 stars`}>{"★".repeat(done)}{"☆".repeat(3 - done)}</span>
           </button>;
-        })}</div></section>;
-    })}
+        })}</div></li>;
+    })}</ol>
   </div>;
 }
 
@@ -193,7 +199,8 @@ export type SessionSummary = { title: string; kicks: number; goals: number; poin
   /** A plain final-score line (Big Match). */
   final?: string;
   match?: { rf: string; gboot: string; race: string; toTop10: string } };
-export function Results({ summary, onAgain, onModes }: { summary: SessionSummary; onAgain: () => void; onModes: () => void }) {
+export function Results({ summary, onAgain, onModes, next }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null }) {
+  const hasNext = Boolean(next && "onNext" in next);
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
     <p>{summary.final ?? <>You scored <b>{summary.goals}</b> of {summary.kicks} kick{summary.kicks === 1 ? "" : "s"} for <b>{formatNumber(summary.points)}</b> points.</>}{summary.xp > 0 ? ` You earned ${summary.xp} XP.` : ""}</p>
@@ -201,7 +208,11 @@ export function Results({ summary, onAgain, onModes }: { summary: SessionSummary
     {summary.stamp && <p>Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item}>Unlocked: <b>{item}</b></p>)}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
-    <div className="pk-buyrow"><button type="button" className="pk-primary" onClick={onAgain} autoFocus>Play again</button><button type="button" onClick={onModes}>Modes</button></div>
+    {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
+    <div className="pk-buyrow">
+      {next && "onNext" in next && <button type="button" className="pk-primary" onClick={next.onNext} autoFocus data-testid="next-level">Next level</button>}
+      <button type="button" className={hasNext ? undefined : "pk-primary"} onClick={onAgain} autoFocus={!hasNext}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+    </div>
   </div>;
 }
 

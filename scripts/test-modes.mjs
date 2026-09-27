@@ -73,6 +73,10 @@ await testGame("./games/penalty-kings", {
 
     // World Tour: Park level 1.
     await game.getByTestId("mode-tour").click();
+    // Round 6 C16: a path of 6 cities; the next level is highlighted; city 2 is closed until 9 stars in city 1.
+    assert.equal(await game.locator("[data-testid^=city-]").count(), 6);
+    assert.equal(await game.getByTestId("level-park-1").getAttribute("data-next"), "true", "the next level is highlighted");
+    assert.equal(await game.getByTestId("level-park-6").isDisabled(), true, "city 2 waits for stars");
     await game.getByTestId("level-park-1").click();
     await button("Kick off").click();
     for (let i = 1; i <= 5; i++) await kick(`tour park-1 kick ${i}`, { dx: [0.45, -0.45, 0.4, -0.35, 0.5][i - 1] });
@@ -81,7 +85,13 @@ await testGame("./games/penalty-kings", {
     console.log(`tour result: ${tour.replace(/\s+/g, " ").slice(0, 120)}`);
     assert.match(tour, /First Touch/);
     await frame.screenshot({ path: `${out}/tour-results-${width}.png` });
-    await button("Modes").click();
+    // "Next level" opens the following level's brief (Pick a Corner, same city).
+    await game.getByTestId("next-level").click();
+    await game.getByRole("heading", { name: "Pick a Corner" }).waitFor();
+    await button("Back").click();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await button("Change mode").click();
 
     // Daily Challenge: today's scenario (penalties or a free kick), attempt counter.
     await game.getByTestId("mode-daily").click();

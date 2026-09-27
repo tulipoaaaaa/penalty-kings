@@ -8,6 +8,7 @@ import { loadProgress, saveProgress, fresh, levelFromXp, assistLevel, isUnlocked
 import { dailyScenario, dailyStreak, dailyState, utcDate } from "../../games/penalty-kings/game/daily.ts";
 import { spawnTargets, resolveTargetShot, targetAt, MAX_COMBO } from "../../games/penalty-kings/game/target.ts";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.ts";
+import { CITIES, LEVELS_PER_CITY, cityLevels, cityOpen, levelAfter, nextLevel, starsToOpen } from "../../games/penalty-kings/game/tour.ts";
 import { potBanner, prizeLine, jumbotronSlides, cupEndsAt, PRICE_MAX_AGE_MS } from "../../games/penalty-kings/game/prizes.ts";
 import { ALL_COSMETICS, COSMETICS, TOKEN_LINES } from "../../games/penalty-kings/economy.ts";
 
@@ -124,6 +125,31 @@ test("token explainer (round 6 C11): the five lines word for word, RF + $GBOOT o
   }
   const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
   assert.match(index, /setConfirmWildcard\(true\)/, "the Wildcard button only opens a confirmation");
+});
+
+test("World Tour (round 6 C16): 6 cities × 5 levels in order, ids unchanged; ~60% of a city's stars opens the next", () => {
+  assert.equal(CITIES.length, 6);
+  for (const city of CITIES) {
+    const list = cityLevels(levels, city.chapter);
+    assert.equal(list.length, LEVELS_PER_CITY, city.name);
+    assert.ok(list.every(level => level.stadium === city.stadium), `${city.name} keeps its stadium`);
+  }
+  assert.deepEqual(levels.map(level => level.id), [...["park", "pro", "champions"].flatMap(s => Array.from({ length: 10 }, (_, i) => `${s}-${i + 1}`))], "ids and order are stable");
+  assert.equal(starsToOpen(), 9, "60% of 15 stars");
+  const none = { stars: {} as Record<string, number> };
+  assert.equal(cityOpen(levels, 1, none), true); assert.equal(cityOpen(levels, 2, none), false);
+  assert.equal(nextLevel(levels, none)?.id, "park-1");
+  const eight = { stars: { "park-1": 3, "park-2": 3, "park-3": 2 } };
+  assert.equal(cityOpen(levels, 2, eight), false, "8 stars is not enough");
+  assert.equal(nextLevel(levels, eight)?.id, "park-4", "next = first open level without a star");
+  const after = levelAfter(levels, levels[4], eight);
+  assert.ok(after && "locked" in after && /1 more ★ in Lisbon to open Buenos Aires/.test(after.locked), JSON.stringify(after));
+  const nine = { stars: { ...eight.stars, "park-4": 1 } };
+  assert.equal(cityOpen(levels, 2, nine), true, "9 stars opens city 2");
+  assert.equal(cityOpen(levels, 3, nine), false);
+  const opened = levelAfter(levels, levels[4], nine);
+  assert.ok(opened && "level" in opened && opened.level.id === "park-6");
+  assert.equal(levelAfter(levels, levels[29], nine), null, "no level after the final");
 });
 
 test("HUD jargon (round 6 C15): rung names, ×N multipliers and keeper reads live in the Scouting Book, not on the pitch", () => {

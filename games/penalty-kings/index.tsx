@@ -21,6 +21,7 @@ import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
 import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
+import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
@@ -885,6 +886,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const s = session, inMatch = s?.mode === "match";
   const skillTable = [...skill].sort((a, b) => b.score - a.score || a.id - b.id);
   const scenario = dailyScenario(today);
+  // World Tour results (round 6 C16): "Next level" opens the following level's brief, or says what opens its city.
+  const after = menu === "results" && s?.mode === "tour" && s.level ? levelAfter(LEVELS, s.level, progress) : null;
+  const tourNext = after && "level" in after ? { onNext: () => { setPendingLevel(after.level); setMenu("tour"); } } : after;
   const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
   const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
@@ -1070,7 +1074,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </div>
       </div>}
 
-      {menu === "results" && summary && <Results summary={summary} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
         onAgain={() => { const last = session; setMenu(null); if (!last) { setScreen("modes"); return; }
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "skill") enterSkillCup(); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
