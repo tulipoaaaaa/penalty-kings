@@ -49,6 +49,8 @@
   font-size: clamp(11px, 1.15cqw, 12px); padding: 0.25em 0.6em; background: #3d2600e6 !important; border-color: var(--pk-gold) !important; color: var(--pk-gold) !important; overflow: hidden; }
 .pk-pot span { white-space: nowrap; }
 .pk-pot .pk-pot-usd { color: var(--pk-paper); }
+.pk-pot .pk-pot-age { font-size: max(11px, 0.75em); color: var(--pk-sky); white-space: nowrap; }
+.pk-pot .pk-age-short { display: none; }
 .pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: max(11px, 0.85em); }
 .pk-pot small { opacity: 0.8; }
 
@@ -595,6 +597,8 @@
   .pk-hud > * { text-overflow: clip; }
   .pk-pot { top: 4px; font-size: 11px; padding: 0.2em 0.5em; column-gap: 0.4em; max-width: min(46cqw, calc(270 * var(--pk-s))); }
   .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
+  .pk-pot .pk-age-long { display: none; }
+  .pk-pot .pk-age-short { display: inline; }
   .pk-actions { right: 6px; bottom: calc(var(--pk-tb) + 4px); gap: 4px; width: clamp(88px, calc(var(--pk-pl) - 12px), 140px); min-width: 0; }
   .pk-actions button { font-size: 12px; min-height: 44px; padding: 0 0.5em; }
   .pk-toast { box-sizing: border-box; left: 6px; bottom: calc(var(--pk-tb) + 4px); font-size: 11px; line-height: 1.25; padding: 0.35em 0.6em;
@@ -635,6 +639,8 @@
   }
   .pk-pot { top: 6px; max-width: calc(100cqw - 12px); font-size: 12px; padding: 0.25em 0.5em; column-gap: 0.4em; }
   .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
+  .pk-pot .pk-age-long { display: none; }
+  .pk-pot .pk-age-short { display: inline; }
   .pk-hud { top: 54px; gap: 4px; font-size: 12px; }
   .pk-hud-left { left: 6px; max-width: calc(60cqw - 9px); }
   .pk-hud-right { right: 6px; top: 54px; max-width: calc(40cqw - 9px); }

@@ -7,7 +7,7 @@
  * USD always comes from the live RF/USD read (RF/WETH × WETH/USDG pools); no read → "—".
  * Never "you will win", never a guaranteed return, never USD without "≈".
  */
-import { NO_PRICE, priceAgeLabel, usdForRf, type RfPrice } from "./price.js";
+import { NO_PRICE, priceAgeLabel, priceFreshness, usdForRf, type RfPrice } from "./price.js";
 
 export const PRICE_MAX_AGE_MS = 60_000;
 
@@ -16,7 +16,8 @@ export type PrizeSource =
   | { kind: "live"; potRF: number | null; topPrizeRF: number | null; freeStakeRF: number | null; readAt: number | null; price?: RfPrice };
 
 /** usd: "≈ $X" at the live RF price, or "—"; priceNote: "live · Xs ago", or "—". */
-export type PrizeLine = { value: string; usd: string; priceNote: string; tag: "SIMULATED" | "LIVE"; note: string };
+/** usdAge: "live · updated Xs ago" / "on-chain snapshot" next to the USD figure ("" with no price). */
+export type PrizeLine = { value: string; usd: string; usdAge: string; usdAgeShort: string; priceNote: string; tag: "SIMULATED" | "LIVE"; note: string };
 
 const rfText = (value: number) => `${Math.round(value).toLocaleString("en-US")} RF`;
 
@@ -26,15 +27,15 @@ function fresh(source: Extract<PrizeSource, { kind: "live" }>, now: number) {
 
 /** One figure (pot, top prize or free stake) ready to render. */
 export function prizeLine(source: PrizeSource, field: "potRF" | "topPrizeRF" | "freeStakeRF", now: number): PrizeLine {
-  const price = source.price ?? NO_PRICE, priceNote = priceAgeLabel(price, now);
+  const price = source.price ?? NO_PRICE, priceNote = priceAgeLabel(price, now), usdAge = priceFreshness(price, now), usdAgeShort = priceFreshness(price, now, true);
   if (source.kind === "simulated") {
     const value = source[field];
-    return { value: rfText(value), usd: usdForRf(value, price, now), priceNote, tag: "SIMULATED", note: "simulated preview figures" };
+    return { value: rfText(value), usd: usdForRf(value, price, now), usdAge, usdAgeShort, priceNote, tag: "SIMULATED", note: "simulated preview figures" };
   }
   const value = source[field];
-  if (value === null || !fresh(source, now)) return { value: "—", usd: "—", priceNote, tag: "LIVE", note: "read unavailable" };
+  if (value === null || !fresh(source, now)) return { value: "—", usd: "—", usdAge: "", usdAgeShort: "", priceNote, tag: "LIVE", note: "read unavailable" };
   const seconds = Math.max(0, Math.round((now - source.readAt!) / 1000));
-  return { value: rfText(value), usd: usdForRf(value, price, now), priceNote, tag: "LIVE", note: `updated ${seconds}s ago` };
+  return { value: rfText(value), usd: usdForRf(value, price, now), usdAge, usdAgeShort, priceNote, tag: "LIVE", note: `updated ${seconds}s ago` };
 }
 
 /** Next weekly Cup close: Monday 00:00 UTC (docs/WEEKLY.md). */

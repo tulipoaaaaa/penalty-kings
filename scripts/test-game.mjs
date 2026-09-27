@@ -66,6 +66,8 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     await game.getByTestId("pot").waitFor();
     assert.equal(await game.getByTestId("pot").getAttribute("data-tag"), "SIMULATED", "pot banner is tagged SIMULATED in the preview");
+    assert.match(await game.getByTestId("pot-age").innerText(), /^(on-chain snapshot|snapshot)$/, "the USD figure says where its price comes from");
+    assert.ok(await game.getByTestId("pot-age").isVisible(), "the price tag is visible next to the USD value");
     // USD is converted with the live RF price (recorded pool reads in the test fixture), not a constant.
     await game.getByTestId("pot-usd").filter({ hasText: /^≈ \$[\d,.]+$/ }).waitFor({ timeout: 10_000 });
     console.log(`pot banner at ${width}px: ${(await game.getByTestId("pot").innerText()).replace(/\s+/g, " ")}`);

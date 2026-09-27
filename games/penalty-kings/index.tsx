@@ -1268,7 +1268,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
       <button type="button" className="pk-pot" data-testid="pot" data-tag={pot.tag} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
-        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span><span className="pk-pot-extra">{pot.priceNote} · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
+        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra">{pot.priceNote} · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
       </button>
 
       {screen === "play" && s && <>

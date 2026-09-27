@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
+import { priceFreshness, snapshotPrice,
   priceFromSqrtX96, wethPerRf, usdPerWeth, usdPerRfFromPools, decodeSqrtPriceX96, slot0Call, priceAgeLabel, formatUsd, usdForRf,
   rfPriceText, isShowable, fetchRfPrice, NO_PRICE, PRICE_STALE_MS, RF_WETH_POOL_ID, WETH_USDG_POOL_ID, STATE_VIEW, RPC_URL, type RfPrice,
 } from "../../games/penalty-kings/game/price.ts";
@@ -87,4 +87,15 @@ test("the SDK preview uses the labelled on-chain snapshot (no network), matching
   assert.ok(Math.abs(snap.usdPerRf! - 0.0014565) < 0.000005, `snapshot ${snap.usdPerRf}`);
   assert.equal(priceAgeLabel(snap, Date.now()), `on-chain snapshot · block ${SNAPSHOT_BLOCK.toLocaleString("en-US")}`);
   assert.equal(usdForRf(500_000, snap, Date.now()), "≈ $728");
+});
+
+test("the freshness tag next to every USD figure: live age, snapshot, or nothing", () => {
+  const now = 1_000_000;
+  assert.equal(priceFreshness({ usdPerRf: 0.0015, fetchedAt: now - 7_000, status: "live" }, now), "live · updated 7s ago");
+  assert.equal(priceFreshness(snapshotPrice(), now), "on-chain snapshot");
+  assert.equal(priceFreshness({ usdPerRf: null, fetchedAt: null, status: "error" }, now), "");
+});
+test("short freshness tag for phones", () => {
+  assert.equal(priceFreshness({ usdPerRf: 0.0015, fetchedAt: 993_000, status: "live" }, 1_000_000, true), "live · 7s");
+  assert.equal(priceFreshness(snapshotPrice(), 0, true), "snapshot");
 });

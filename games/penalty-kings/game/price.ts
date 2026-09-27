@@ -81,6 +81,14 @@ export function priceAgeLabel(price: RfPrice, now: number) {
   return `live · ${Math.max(0, Math.round((now - price.fetchedAt!) / 1000))}s ago`;
 }
 
+/** The short freshness tag shown next to every USD figure, so a moving price reads as live, not as a bug. */
+export function priceFreshness(price: RfPrice, now: number, short = false) {
+  if (!isShowable(price, now)) return "";
+  if (price.status === "snapshot") return short ? "snapshot" : "on-chain snapshot";
+  const seconds = Math.max(0, Math.round((now - price.fetchedAt!) / 1000));
+  return short ? `live · ${seconds}s` : `live · updated ${seconds}s ago`;
+}
+
 /** A USD amount with "≈": whole dollars from $100, cents below, "< $0.01" for dust. */
 export function formatUsd(usd: number) {
   if (!Number.isFinite(usd) || usd < 0) return "—";
