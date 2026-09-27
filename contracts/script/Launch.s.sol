@@ -152,9 +152,16 @@ contract Launch is Script {
     }
 
     function _allocate(address operator) internal {
-        bootroom = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(GENERATIONS));
         drops = new EmissionVault(IERC20(address(gboot)), operator, block.timestamp, 2_500_000e18, 4);   // 10M per 4-week season, halving
         cups = new EmissionVault(IERC20(address(gboot)), operator, block.timestamp, 100_000e18, 0);      // flat: 100k per week
+        // The Bootroom whitelists the FriendsAirdrop (the only non-Friend caller that may start a lock)
+        // as an immutable, so the airdrop's CREATE address is predicted: it is the operator's very next
+        // deployment after the Bootroom. Checked right after both exist.
+        address predictedAirdrop = vm.computeCreateAddress(operator, vm.getNonce(operator) + 1);
+        bootroom = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(GENERATIONS), predictedAirdrop);
+        airdrop = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(bootroom)), address(cups));
+        require(address(airdrop) == predictedAirdrop && bootroom.airdrop() == address(airdrop), "airdrop whitelist");
+        require(address(airdrop.bootroom()) == address(bootroom), "airdrop bootroom");
         // Rewards: the distributor creates and alone operates its vault (50k/week, halving every 52 weeks).
         address[] memory sinkList = new address[](3);
         (sinkList[0], sinkList[1], sinkList[2]) = (address(shop), address(skillCup), address(wildcards));
@@ -163,7 +170,6 @@ contract Launch is Script {
             vm.envOr("REFEREE_SIGNER", operator), start, 50_000e18, 52, sinkList
         );
         bounty = rewards.vault();
-        airdrop = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(bootroom)), address(cups));
         splitter = new EdgeSplitter(IERC20(RF), IERC20(address(gboot)), ISplitterSwapper(address(swapper)), key, operator, operator);
         gboot.transfer(address(drops), DROPS_GBOOT);
         gboot.transfer(address(cups), CUPS_GBOOT);

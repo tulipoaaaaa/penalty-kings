@@ -49,13 +49,20 @@ contract FriendsAirdropTest is Test {
         vm.warp(1_700_000_000);
         gboot = new GBoot();
         gens = new BootroomMockGenerations();
-        room = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(address(gens)));
-        vm.prank(setter);
-        drop = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(room)), cupsVault);
+        (room, drop) = _deployPair();
         gboot.transfer(address(drop), FUNDED);
         for (uint256 i; i < 4; ++i) leaves[i] = _leaf(ids[i], amounts[i]);
         root = _hashPair(_hashPair(leaves[0], leaves[1]), _hashPair(leaves[2], leaves[3]));
         gens.set(7730, owner, address(0));
+    }
+
+    /// A Bootroom that whitelists the FriendsAirdrop the setter deploys next (as Launch.s.sol does).
+    function _deployPair() internal returns (Bootroom room_, FriendsAirdrop drop_) {
+        address predicted = vm.computeCreateAddress(setter, vm.getNonce(setter));
+        room_ = new Bootroom(IERC20(address(gboot)), IBootroomGenerations(address(gens)), predicted);
+        vm.prank(setter);
+        drop_ = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(room_)), cupsVault);
+        assertEq(room_.airdrop(), address(drop_), "airdrop whitelisted");
     }
 
     function _setRoot() internal {
@@ -169,13 +176,12 @@ contract FriendsAirdropTest is Test {
 
     /// Single-leaf tree: root == leaf, empty proof.
     function testSingleLeafRoot() public {
-        vm.prank(setter);
-        FriendsAirdrop single = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(room)), cupsVault);
+        (Bootroom singleRoom, FriendsAirdrop single) = _deployPair();
         gboot.transfer(address(single), 5e18);
         vm.prank(setter);
         single.setRoot(_leaf(5, 5e18));
         single.claim(5, 5e18, new bytes32[](0));
-        (uint128 amount,,) = room.laces(5);
+        (uint128 amount,,) = singleRoom.laces(5);
         assertEq(amount, 5e18);
     }
 
@@ -209,13 +215,82 @@ contract FriendsAirdropTest is Test {
 
     /// An underfunded airdrop fails the claim atomically (no claimed flag set).
     function testUnderfundedClaimReverts() public {
-        vm.prank(setter);
-        FriendsAirdrop poor = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(room)), cupsVault);
+        (, FriendsAirdrop poor) = _deployPair();
         vm.prank(setter);
         poor.setRoot(root);
         vm.expectRevert();
         poor.claim(ids[0], amounts[0], _proof(0));
         assertFalse(poor.claimed(ids[0]));
+    }
+
+    // ------------------------------------------------- BQ-P1-12: lock hijack
+
+    function _ownerLaces(uint256 amount, uint256 lockWeeks) internal {
+        gboot.transfer(owner, amount);
+        vm.startPrank(owner);
+        gboot.approve(address(room), amount);
+        room.lace(7730, amount, lockWeeks, block.timestamp + lockWeeks * 1 weeks);
+        vm.stopPrank();
+    }
+
+    /// A stranger cannot pre-start the Friend's lock, so the claim always gets its own 12 weeks.
+    function testStrangerCannotPreLaceBeforeClaim() public {
+        _setRoot();
+        gboot.transfer(anyone, 1e18);
+        vm.startPrank(anyone);
+        gboot.approve(address(room), 1e18);
+        vm.expectRevert(Bootroom.NoLiveLock.selector);
+        room.lace(7730, 1, 52, type(uint256).max);
+        vm.expectRevert(Bootroom.NoLiveLock.selector);
+        room.lace(7730, 1, 1, type(uint256).max);
+        vm.stopPrank();
+        drop.claim(ids[0], amounts[0], _proof(0));
+        (, uint64 unlockAt, uint64 lockWeeks) = room.laces(7730);
+        assertEq(unlockAt, block.timestamp + 12 weeks);
+        assertEq(lockWeeks, 12);
+        assertEq(room.perkTier(7730), 3);
+    }
+
+    /// The claim joins the owner's own longer lock (the owner chose it), unchanged.
+    function testClaimJoinsOwnersLongerLock() public {
+        _setRoot();
+        _ownerLaces(1e18, 20);
+        drop.claim(ids[0], amounts[0], _proof(0));
+        (uint128 amount, uint64 unlockAt, uint64 lockWeeks) = room.laces(7730);
+        assertEq(amount, 10_001e18);
+        assertEq(unlockAt, block.timestamp + 20 weeks);
+        assertEq(lockWeeks, 20);
+    }
+
+    /// The (permissionless) claim never extends the owner's shorter lock or re-locks an expired lace:
+    /// it reverts, unclaimed, until the owner extends or unlaces.
+    function testClaimNeverExtendsOwnersLock() public {
+        _setRoot();
+        _ownerLaces(1e18, 4);
+        vm.expectRevert(Bootroom.LockTooShort.selector);
+        drop.claim(ids[0], amounts[0], _proof(0));
+        assertFalse(drop.claimed(7730));
+        vm.warp(block.timestamp + 5 weeks); // expired
+        vm.expectRevert(Bootroom.LockTooShort.selector);
+        drop.claim(ids[0], amounts[0], _proof(0));
+        vm.prank(owner);
+        room.unlace(7730);
+        drop.claim(ids[0], amounts[0], _proof(0));
+        (, uint64 unlockAt, uint64 lockWeeks) = room.laces(7730);
+        assertEq(unlockAt, block.timestamp + 12 weeks);
+        assertEq(lockWeeks, 12);
+    }
+
+    /// Only the whitelisted airdrop gets the airdrop's rights: another FriendsAirdrop pointed at the
+    /// same Bootroom is a stranger and cannot start a lock.
+    function testUnlistedAirdropCannotStartALock() public {
+        vm.prank(setter);
+        FriendsAirdrop rogue = new FriendsAirdrop(IERC20(address(gboot)), IBootroomLace(address(room)), cupsVault);
+        gboot.transfer(address(rogue), 5e18);
+        vm.prank(setter);
+        rogue.setRoot(_leaf(5, 5e18));
+        vm.expectRevert(Bootroom.NoLiveLock.selector);
+        rogue.claim(5, 5e18, new bytes32[](0));
     }
 
     // ----------------------------------------------------------------- sweep
