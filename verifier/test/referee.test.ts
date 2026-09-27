@@ -86,3 +86,20 @@ test("leaderboard: best score first, ties to the earlier entry", async () => {
   const board = await ref.leaderboard();
   assert.deepEqual(board.map(row => row.entryId), [7, 8], "equal scores: earlier on-chain entry wins");
 });
+
+test("round 6 B4: the referee saves only on visible contact, and replays identically", async () => {
+  const { scoreKick, SKILL_KEEPER } = await import("../src/core.ts");
+  const { keeperFrame, keeperTouch, GOAL_ASPECT } = await import("../../packages/engine/src/index.ts");
+  let saves = 0;
+  for (let seed = 0; seed < 300; seed++) {
+    const input = { aimX: ((seed * 37) % 190) / 100 - 0.95, aimY: ((seed * 53) % 95) / 100, power: 0.4 + ((seed * 29) % 60) / 100, curl: 0 };
+    const kickIndex = seed % 5, previous = [kickInput(0), kickInput(1)].slice(0, kickIndex % 3);
+    const a = scoreKick(input, seed * 7919, 0, kickIndex, previous), b = scoreKick(input, seed * 7919, 0, kickIndex, previous);
+    assert.deepEqual(a, b, "deterministic");
+    const outcome = resolveShot(input, SKILL_KEEPER, seed * 7919, { kickIndex, history: previous.map(shot => shotTarget(shot).x) });
+    const touch = keeperTouch(keeperFrame("finalwall", outcome.plan, outcome.target.time), { x: outcome.target.x, y: outcome.target.y * GOAL_ASPECT });
+    if (a.result === "save") { saves++; assert.ok(touch, `seed ${seed}: a save with no contact`); }
+    if (a.result === "goal") assert.equal(touch, null, `seed ${seed}: a goal through the keeper`);
+  }
+  assert.ok(saves > 20, `boss saves ${saves}/300`);
+});

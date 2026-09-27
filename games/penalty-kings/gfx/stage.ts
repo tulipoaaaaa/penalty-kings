@@ -3,12 +3,12 @@
  * Layers: sky → stands → crowd → boards → pitch → net → keeper → goal frame → ball → striker → FX → canvas UI.
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
-import { keeperById, keeperAt, flightAt, WALL_DISTANCE, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
+import { keeperById, keeperAt, keeperFrame, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
 import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
-import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
+import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
@@ -29,6 +29,25 @@ const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball",
 /** Penalty: the run-up starts 3 m behind and 1.3 m left of the plant (gfx/kick.ts); the Friend plants just left of the ball. */
 const roundPoint = ({ x, y }: { x: number; y: number }) => ({ x: Math.round(x), y: Math.round(y) });
 const STRIKER = roundPoint(runupStart(PENALTY_VIEW)), KICK_SPOT = roundPoint(plantSpot(PENALTY_VIEW));
+
+// ── Penalty flight ↔ physics (round 6 B4): one clock, one ball, one keeper ────────────
+/** Seconds the penalty flight takes on screen (round 6 B3: 0.35–0.55 s by pace; target.time 0.4–0.95). */
+export const penaltyFlight = (targetTime: number) => 0.35 + 0.2 * clamp01((targetTime - 0.4) / 0.55);
+/**
+ * Keeper plan-time shown `flightT` seconds after the strike. The on-screen flight is a uniform
+ * time-lapse of the engine's, so at the crossing (flightT = flight) the Stage draws
+ * keeperFrame(plan, target.time): the frame resolveShot tested the ball against.
+ */
+export const keeperClock = (targetTime: number, flight: number, flightT: number) => Math.min(targetTime + 0.3, (flightT / flight) * targetTime);
+/** The keeper the Stage draws `flightT` seconds after a penalty strike (Stage.keeperFrameNow). */
+export const penaltyKeeperFrame = (id: KeeperId, outcome: ShotOutcome, flight: number, flightT: number): KeeperFrame =>
+  keeperFrame(id, outcome.plan, keeperClock(outcome.target.time, flight, flightT));
+/** The penalty ball in goal-art px at flight progress p: from the spot (p = 0) to the engine's crossing point at BALL_RADIUS (p = 1). */
+export function penaltyBallArt(target: { x: number; y: number }, curl: number, p: number) {
+  const xf = PENALTY_GOAL, home = { x: GOAL.cx + (SPOT.x - xf.x) / xf.g, y: GOAL.line + (SPOT.y - xf.y) / xf.g };
+  const end = artPoint({ x: target.x, y: target.y * GOAL_ASPECT }), bow = p >= 1 ? 0 : (flightAt(target, curl, p).x - target.x * p) * GOAL.unit;
+  return { x: home.x + (end.x - home.x) * p + bow, y: home.y + (end.y - home.y) * p - (p >= 1 ? 0 : Math.sin(Math.PI * p) * 12 / xf.g), r: lerp(4.5 / xf.g, BALL_RADIUS * GOAL.unit, p) };
+}
 
 export class Stage {
   camera = new Camera();
@@ -68,6 +87,8 @@ export class Stage {
   season: "S0" | "S1" = "S1";
   /** The Match Director's line for the next resolve (else the plain result line). */
   cue: CommentaryContext | null = null;
+  /** DEV (Showroom): draw the keeper hitbox and the ball at arrival over the scene. */
+  debugHitbox = false;
   /** What the viewer actually saw (the 90-second QA reads this). */
   stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0 };
 
@@ -75,6 +96,8 @@ export class Stage {
   private modeTime = 0;
   private timeline = new Timeline();
   private shot: { outcome: ShotOutcome; curl: number; flight: number; strikeAt: number } | null = null;
+  /** The most recent kick (kept after it ends, for the hitbox overlay). */
+  private lastShot: { outcome: ShotOutcome; curl: number; flight: number; strikeAt: number } | null = null;
   private fk: FreeKickOutcome | null = null;
   private ball = { x: SPOT.x, y: SPOT.y, r: 4.5, spin: 0, squash: 0 };
   private flash = 0; private ring: { x: number; y: number; t: number } | null = null;
@@ -122,8 +145,8 @@ export class Stage {
     this.stats.shots++; if (this.kind !== "target") this.stats.keepers.add(this.keeper);
     if (flightOverride === undefined) this.fk = null;
     // Snappy (round 6 B3): strike 0.4 s after release, flight 0.35–0.55 s by power (target.time 0.4–0.95).
-    const flight = flightOverride ?? 0.35 + 0.2 * clamp01((outcome.target.time - 0.4) / 0.55);
-    this.shot = { outcome, curl, flight, strikeAt: STRIKE_AT };
+    const flight = flightOverride ?? penaltyFlight(outcome.target.time);
+    this.shot = this.lastShot = { outcome, curl, flight, strikeAt: STRIKE_AT };
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
     this.sfx("heartbeat"); if (!this.said || this.said.t > 1.5) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
@@ -340,24 +363,44 @@ export class Stage {
     if (this.tell && this.mode !== "shot") { gx += this.tell.lean * 0.15; if (this.keeper === "peacock" || this.keeper === "squirrel") mood = "taunt"; }
     if (shot && this.mode === "shot") {
       const flightT = this.modeTime - shot.strikeAt;
-      if (flightT < 0) { mood = this.modeTime < 0.7 ? "taunt" : "idle"; gx += shot.outcome.plan.lean * 0.12; }
-      else {
-        const hands = keeperAt(shot.outcome.plan, Math.min(shot.outcome.target.time + 0.3, (flightT / shot.flight) * shot.outcome.target.time));
-        gx = this.fk ? start + (shot.outcome.plan.x - start) * hands.progress * 0.85 : hands.x * 0.85; gy = Math.max(0, hands.y - 0.45) * 0.7 * hands.progress; lift = gy * 60;
+      if (flightT < 0) {
+        mood = this.modeTime < 0.7 ? "taunt" : "idle"; gx += shot.outcome.plan.lean * 0.12;
+        // Penalties: settle onto the line during the run-up, so the dive starts from the physics' standing frame.
+        if (!this.fk) { const settle = 1 - clamp01(this.modeTime / shot.strikeAt); gx *= settle; lift *= settle; }
+      } else {
+        // Free kicks (penalties draw the engine's KeeperFrame instead, see drawKeeperLayer).
+        const hands = keeperAt(shot.outcome.plan, keeperClock(shot.outcome.target.time, shot.flight, flightT));
+        gx = start + (shot.outcome.plan.x - start) * hands.progress * 0.85; gy = Math.max(0, hands.y - 0.45) * 0.7 * hands.progress; lift = gy * 60;
         rotate = Math.atan2(hands.x, 0.9) * hands.progress * 1.3; stretch = 1 + hands.progress * 0.15; mood = hands.progress > 0.05 ? "dive" : "idle";
         if (flightT > shot.flight + 0.2) mood = shot.outcome.result === "goal" ? "sad" : "celebrate";
         if (shot.outcome.plan.teleport && hands.progress > 0) rotate = 0;
       }
     }
-    if (this.keeper === "ghost") alpha = 0.7 + 0.2 * Math.sin(this.time * 8);
-    if (this.keeper === "chameleon") alpha = shot && this.modeTime >= shot.strikeAt ? 1 : 0.12 + 0.06 * Math.sin(this.time * 3);
+    alpha = this.keeperAlpha();
     const [armL, armR] = keeperArms(this.keeper, mood, this.time, shot?.outcome.plan.x ?? 0, shot?.outcome.plan.y ?? 0.4);
     const { x } = toScreen(gx, 0);
     void design;
     return { x, y: GOAL.line - lift, rotate, stretch, armL, armR, alpha, scaleMul, mood };
   }
 
+  private keeperAlpha() {
+    const shot = this.shot;
+    if (this.keeper === "ghost") return 0.7 + 0.2 * Math.sin(this.time * 8);
+    if (this.keeper === "chameleon") return shot && this.mode === "shot" && this.modeTime >= shot.strikeAt ? 1 : 0.12 + 0.06 * Math.sin(this.time * 3);
+    return 1;
+  }
+
+  /** The keeper during a penalty flight: the engine's KeeperFrame (null outside a penalty in flight). */
+  keeperFrameNow(): KeeperFrame | null {
+    const shot = this.shot;
+    if (!shot || this.mode !== "shot" || this.fk || this.kind !== "penalty") return null;
+    const flightT = this.modeTime - shot.strikeAt;
+    return flightT < 0 ? null : penaltyKeeperFrame(this.keeper, shot.outcome, shot.flight, flightT);
+  }
+
   private drawKeeperLayer(c: CanvasRenderingContext2D) {
+    const frame = this.keeperFrameNow();
+    if (frame) { this.drawDivingKeeper(c, frame); this.drawHitboxOverlay(c, frame); return; }
     const pose = this.keeperPose();
     // Signature FX behind the keeper.
     if (this.keeper === "peacock") { c.fillStyle = "#2a6fdb"; const lean = this.tell?.lean ?? 0; for (let i = -3; i <= 3; i++) { const a = -Math.PI / 2 + i * 0.28 + lean * 0.35; c.fillRect(Math.round(pose.x + Math.cos(a) * 26), Math.round(pose.y - 34 + Math.sin(a) * 24), 4, 4); c.fillStyle = i % 2 ? "#1d8a8a" : "#ffd23f"; } }
@@ -366,8 +409,70 @@ export class Stage {
     const drawn = drawKeeper(c, this.keeper, pose, this.time);
     // Tells in front.
     if (this.keeper === "robot" && this.tell?.scan) { c.fillStyle = "#ff5a6e88"; const sx = GOAL.cx + this.tell.scan * 60; c.fillRect(sx - 30, GOAL.bar + ((this.time * 60) % (GOAL.line - GOAL.bar)), 60, 2); }
-    if (this.keeper === "mime" && this.tell?.wall) { c.fillStyle = `rgba(255,255,255,${0.08 + 0.05 * Math.sin(this.time * 5)})`; const [a, b] = this.tell.wall; const x1 = toScreen(Math.max(-1, a), 0).x, x2 = toScreen(Math.min(1, b), 0).x; c.fillRect(x1, GOAL.bar, x2 - x1, GOAL.line - GOAL.bar); }
+    if (this.keeper === "mime" && this.tell?.wall) this.drawMimeWall(c, this.tell.wall, 0);
     void drawn;
+    this.drawHitboxOverlay(c, null);
+  }
+
+  /** Mime's wall: the faint shimmer tell; it flashes solid when it stops the ball. */
+  private drawMimeWall(c: CanvasRenderingContext2D, wall: readonly [number, number], flash: number) {
+    const x1 = toScreen(Math.max(-1, wall[0]), 0).x, x2 = toScreen(Math.min(1, wall[1]), 0).x;
+    c.fillStyle = `rgba(255,255,255,${0.08 + 0.05 * Math.sin(this.time * 5) + 0.35 * flash})`; c.fillRect(x1, GOAL.bar, x2 - x1, GOAL.line - GOAL.bar);
+    c.fillStyle = `rgba(255,255,255,${0.2 + 0.5 * flash})`; c.fillRect(x1, GOAL.bar, 1, GOAL.line - GOAL.bar); c.fillRect(x2 - 1, GOAL.bar, 1, GOAL.line - GOAL.bar);
+  }
+
+  /** A penalty dive, drawn from the same KeeperFrame the physics resolved (sprite, arms, gloves, trailing leg, wall). */
+  private drawDivingKeeper(c: CanvasRenderingContext2D, frame: KeeperFrame) {
+    const shot = this.shot!, flightT = this.modeTime - shot.strikeAt, after = flightT - shot.flight, centre = artPoint(frame);
+    if (this.keeper === "disco" && !this.reduced) { const colors = ["#ff4fd8", "#ccff00", "#7fd3ff"]; for (let i = 0; i < 6; i++) { c.fillStyle = colors[(Math.floor(this.time * 4) + i) % 3] + "55"; c.fillRect(GOAL.left + i * 30, GOAL.bar + ((i * 13 + Math.floor(this.time * 8)) % 60), 20, 3); } }
+    if (this.keeper === "finalwall") { c.fillStyle = `rgba(255,59,31,${0.1 + 0.06 * Math.sin(this.time * 4)})`; c.fillRect(centre.x - 40, GOAL.bar, 80, GOAL.line - GOAL.bar); }
+    if (frame.wall) this.drawMimeWall(c, frame.wall, after >= 0 && shot.outcome.touch === "wall" ? clamp01(1 - after / 0.8) : 0);
+    const mood = after > 0.2 ? (shot.outcome.result === "goal" ? "sad" : "celebrate") : null;
+    drawKeeperFrame(c, frame, { alpha: this.keeperAlpha(), arms: mood ? keeperArms(this.keeper, mood, this.time, shot.outcome.plan.x, shot.outcome.plan.y) : undefined });
+    // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
+    const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
+    if (frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
+      const foot = artPoint(frame.leg.foot), made = legMade;
+      c.font = "10px PixelifySans, monospace"; c.textAlign = "center";
+      c.fillStyle = made ? "#0b0d1a" : "#0b0d1a99"; c.fillText(made ? "LEG!" : "leg!", foot.x + 1, foot.y - 8);
+      c.fillStyle = made ? "#ffd23f" : "#ffffffaa"; c.fillText(made ? "LEG!" : "leg!", foot.x, foot.y - 9);
+      c.textAlign = "left";
+    }
+  }
+
+  /**
+   * Showroom debug overlay (stage.debugHitbox): the keeper hitbox now (cyan), the keeper at the
+   * ball's arrival (magenta) and the ball at arrival (red = save, green = goal). Goal-art coords.
+   */
+  private drawHitboxOverlay(c: CanvasRenderingContext2D, now: KeeperFrame | null) {
+    if (!this.debugHitbox || this.kind !== "penalty") return;
+    const shot = this.lastShot;
+    if (now) this.strokeFrame(c, now, "#00e5ff");
+    if (!shot || this.fk) return;
+    const arrival = keeperFrame(this.keeper, shot.outcome.plan, shot.outcome.target.time);
+    this.strokeFrame(c, arrival, "#ff4fd8");
+    const ball = penaltyBallArt(shot.outcome.target, shot.curl, 1), save = shot.outcome.result === "save";
+    c.strokeStyle = save ? "#ff3b1f" : "#39ff14"; c.lineWidth = 1; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2); c.stroke();
+    c.font = "8px PixelifySans, monospace"; c.fillStyle = "#ffffff";
+    c.fillText(`${shot.outcome.result}${shot.outcome.touch ? ` (${shot.outcome.touch})` : ""} @ ${shot.outcome.target.time.toFixed(2)} s`, GOAL.left, GOAL.bar - 4);
+  }
+
+  private strokeFrame(c: CanvasRenderingContext2D, frame: KeeperFrame, color: string) {
+    const g = rigGeometry(frame.id), centre = artPoint(frame), u = GOAL.unit;
+    c.save(); c.strokeStyle = color; c.lineWidth = 0.75;
+    if (frame.wall) { const x1 = GOAL.cx + Math.max(-1, frame.wall[0]) * u, x2 = GOAL.cx + Math.min(1, frame.wall[1]) * u; c.strokeRect(x1, GOAL.line - GOAL_ASPECT * u, x2 - x1, GOAL_ASPECT * u); }
+    if (frame.leg) {
+      const hip = artPoint(frame.leg.hip), foot = artPoint(frame.leg.foot), r = LEG_RADIUS * u, a = Math.atan2(foot.y - hip.y, foot.x - hip.x);
+      c.beginPath(); c.arc(hip.x, hip.y, r, a + Math.PI / 2, a - Math.PI / 2); c.arc(foot.x, foot.y, r, a - Math.PI / 2, a + Math.PI / 2); c.closePath(); c.stroke();
+    }
+    c.translate(centre.x, centre.y); c.rotate(frame.rotate);
+    for (const [x0, y0, x1, y1] of g.runs) c.strokeRect(x0 * u, -y1 * u, (x1 - x0) * u, (y1 - y0) * u);
+    for (const { shoulder, hand } of frame.arms) {
+      const s = { x: shoulder.x * u, y: -shoulder.y * u }, h = { x: hand.x * u, y: -hand.y * u }, r = (frame.armWidth * u) / 2, a = Math.atan2(h.y - s.y, h.x - s.x);
+      c.beginPath(); c.arc(s.x, s.y, r, a + Math.PI / 2, a - Math.PI / 2); c.arc(h.x, h.y, r, a - Math.PI / 2, a + Math.PI / 2); c.closePath(); c.stroke();
+      c.strokeRect(h.x - (frame.glove * u) / 2, h.y - (frame.glove * u) / 2, frame.glove * u, frame.glove * u);
+    }
+    c.restore();
   }
 
   private friendBeat() {
@@ -429,10 +534,9 @@ export class Stage {
     }
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt) {
       // Penalties: the flight is computed in goal-art units from the spot, then placed with the goal transform.
-      const xf = this.goalXf(), homeArt = { x: GOAL.cx + (home.x - xf.x) / xf.g, y: GOAL.line + (home.y - xf.y) / xf.g };
+      const xf = this.goalXf();
       const p = clamp01((this.modeTime - shot.strikeAt) / shot.flight), target = shot.outcome.target, end = toScreen(target.x, target.y);
-      const f = flightAt(target, shot.curl, p), bow = (f.x - target.x * p) * GOAL.unit;
-      x = homeArt.x + (end.x - homeArt.x) * p + bow; y = homeArt.y + (end.y - homeArt.y) * p - Math.sin(Math.PI * p) * 12 / xf.g; r = (4.5 - 2 * p) / xf.g; spin = this.time * 14 * (shot.curl || 0.4);
+      ({ x, y, r } = penaltyBallArt(target, shot.curl, p)); spin = this.time * 14 * (shot.curl || 0.4);
       if (p >= 1) {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
         if (result === "goal") { x = end.x + (240 - end.x) * 0.1 * q; y = end.y + ease.outBounce(q) * (GOAL.line - 4 - end.y); r = 2.3; }

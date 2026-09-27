@@ -60,6 +60,11 @@
     <label><input id="reduced" type="checkbox"> Reduced motion</label>
     <label><input id="phone" type="checkbox"> 360 px phone frame</label>
     <label><input id="fps" type="checkbox" checked> Frame-time overlay</label>
+    <h3>Keeper hitbox (physics = render)</h3>
+    <label><input id="hitbox" type="checkbox" data-testid="hitbox-toggle"> Hitbox overlay</label>
+    <label><input id="freeze" type="checkbox"> Pause at the crossing</label>
+    <div id="hitbox-shots"></div>
+    <div class="muted">Cyan: the keeper now. Magenta: the keeper when the ball arrives. Circle: the ball at arrival (red = save, green = goal). A save needs contact.</div>
     <h3>Event log</h3><pre id="log"></pre>
   </aside>
 </div>
