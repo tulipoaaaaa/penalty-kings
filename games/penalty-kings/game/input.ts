@@ -1,28 +1,27 @@
 /**
- * One gesture for every mode. Penalties use the engine's forgiving swipe directly; free kicks add
- * lift (how far up the swipe travels) and topspin (a flick that speeds up at the end). Keyboard and
- * mouse drag produce the same inputs.
+ * One gesture for every mode. The release point on the goal face is the aim (WYSIWYG: the reticle
+ * follows the finger), swipe speed in CSS px/s is pace (calibrated per input), a deliberate bend is
+ * curl. Free kicks add a flick-at-the-end topspin and SOLVE the lift so an unspun, windless shot
+ * crosses at the aimed height. Keyboard and mouse produce the same inputs.
  */
-import { swipeToShot, clamp, RELEASE_BUFFER_MS, type SwipePoint, type ShotInput, type FreeKickShot } from "@penalty-kings/engine";
+import { swipeToShot, solveLift, clamp, RELEASE_BUFFER_MS, type SwipePoint, type SwipeOptions, type ShotInput, type FreeKickShot, type FreeKickSetup } from "@penalty-kings/engine";
 
-export function swipeToFreeKick(points: readonly SwipePoint[], size: { width: number; height: number }): FreeKickShot | null {
-  const base = swipeToShot(points, size);
+export function swipeToFreeKick(points: readonly SwipePoint[], options: SwipeOptions, setup: FreeKickSetup): FreeKickShot | null {
+  const base = swipeToShot(points, options);
   if (!base) return null;
   const first = points[0], last = points[points.length - 1];
-  const up = (first.y - last.y) / size.height;
   const recent = points.filter(point => last.t - point.t <= RELEASE_BUFFER_MS);
   const from = recent.length >= 2 ? recent[0] : points[points.length - 2];
   const releaseSpeed = (from.y - last.y) / Math.max(1, last.t - from.t), averageSpeed = (first.y - last.y) / Math.max(1, last.t - first.t);
-  return {
-    aimX: clamp(base.aimX / 1.6, -1.2, 1.2),
-    lift: clamp((up - 0.12) / 0.55, 0, 1),
-    power: base.power,
-    spin: base.curl,
-    top: clamp((releaseSpeed / Math.max(0.01, averageSpeed) - 1.1) * 1.2, 0, 1),
-  };
+  const top = clamp((releaseSpeed / Math.max(0.01, averageSpeed) - 1.1) * 1.2, 0, 1);
+  const aimX = clamp(base.aimX, -1.3, 1.3), aimY = clamp(base.aimY, 0, 1.4);
+  return { aimX, lift: solveLift(setup, { aimX, aimY, power: base.power, top }), power: base.power, spin: base.curl, top };
 }
 
-/** Keyboard aim state → the same shot types. */
-export type KeyAim = { aimX: number; loft: number; lift: number; curl: number; top: number; power: number };
-export const keyShot = (aim: KeyAim): ShotInput => ({ aimX: aim.aimX, loft: aim.loft, power: aim.power, curl: aim.curl });
-export const keyFreeKick = (aim: KeyAim): FreeKickShot => ({ aimX: aim.aimX / 1.6, lift: aim.lift, power: aim.power, spin: aim.curl, top: aim.top });
+/** Keyboard aim state → the same shot types (arrows aim across and up, A/D curl, W/S topspin, Space pace). */
+export type KeyAim = { aimX: number; aimY: number; curl: number; top: number; power: number };
+export const keyShot = (aim: KeyAim): ShotInput => ({ aimX: aim.aimX, aimY: aim.aimY, power: aim.power, curl: aim.curl });
+export function keyFreeKick(aim: KeyAim, setup: FreeKickSetup): FreeKickShot {
+  const aimX = clamp(aim.aimX, -1.3, 1.3);
+  return { aimX, lift: solveLift(setup, { aimX, aimY: aim.aimY, power: aim.power, top: aim.top }), power: aim.power, spin: aim.curl, top: aim.top };
+}

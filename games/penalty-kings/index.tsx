@@ -27,7 +27,8 @@ import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
 import { MatchDirector, type KickFacts } from "./game/director.js";
-import { windLabel } from "./gfx/setpieces.js";
+import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
+import { SPOT, GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
@@ -100,12 +101,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const sound = useRef<FriendSoundKit | null>(null), crowd = useRef<Crowd | null>(null);
   const locked = useRef(false), epoch = useRef(0);
   const swipe = useRef<SwipePoint[] | null>(null);
+  /** Display scale (CSS px per canvas unit) and the input kind of the current gesture. */
+  const gestureInfo = useRef<{ pxPerUnit: number; input: "touch" | "mouse" | "trackpad" }>({ pxPerUnit: 1, input: "touch" });
   const keys = useRef(new Set<string>());
-  const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, loft: 0, lift: 0.55, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
+  const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, aimY: 0.5, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
   const aimStarted = useRef(0);
   const pendingKick = useRef<{ record: KickRecord; result: ShotResult | "wall" } | null>(null);
   const director = useRef(new MatchDirector(Number(friendId % 997n)));
   const pendingWave = useRef(false);
+  const kicksTaken = useRef(0);
   const progressRef = useRef(progress); progressRef.current = progress;
   const bagRef = useRef(bag); bagRef.current = bag;
   /** Every progress change goes through here so later reads in the same tick see it. */
@@ -227,7 +231,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.kind = "penalty"; scene.freeKick = null; scene.hints = 0;
       const find = (want: ShotResult) => {
         for (let i = 0; i < 3000; i++) {
-          const shot = { aimX: Math.random() * 2.6 - 1.3, loft: 0, power: 0.35 + Math.random() * 0.6, curl: Math.random() * 1.6 - 0.8 };
+          const shot = { aimX: Math.random() * 2.6 - 1.3, aimY: Math.random() * 1.1, power: 0.35 + Math.random() * 0.55, curl: Math.random() * 1.6 - 0.8 };
           const outcome = resolveShot(shot, keeperById(scene.keeper), Math.floor(Math.random() * 2 ** 31));
           if (outcome.result === want && (want !== "goal" || outcome.zone === "bin" || outcome.zone === "corner")) return { outcome, curl: shot.curl };
         }
@@ -299,8 +303,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const s = current.session, k = keys.current, am = keyAim.current;
     if (k.has("ArrowLeft")) am.aimX = clamp(am.aimX - dt * 1.2, -1.4, 1.4);
     if (k.has("ArrowRight")) am.aimX = clamp(am.aimX + dt * 1.2, -1.4, 1.4);
-    if (k.has("ArrowUp")) { am.loft = clamp(am.loft + dt * 0.5, -0.3, 0.3); am.lift = clamp(am.lift + dt * 0.6, 0, 1); }
-    if (k.has("ArrowDown")) { am.loft = clamp(am.loft - dt * 0.5, -0.3, 0.3); am.lift = clamp(am.lift - dt * 0.6, 0, 1); }
+    if (k.has("ArrowUp")) am.aimY = clamp(am.aimY + dt * 0.6, 0, 1.2);
+    if (k.has("ArrowDown")) am.aimY = clamp(am.aimY - dt * 0.6, 0, 1.2);
     if (am.charging) am.power = clamp((performance.now() - am.chargeStart) / 1100, 0, 1);
     // Shot clock: a timeout counts as a miss.
     const total = clockFor(s);
@@ -312,15 +316,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // Live aim display: reticle (penalties/target) or trajectory preview (free kicks), faded by assist.
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficultyFor(s), s.streak));
     if (s.kind === "freekick" && s.setup) {
-      const partial = swipe.current && swipe.current.length > 2 ? swipeToFreeKick(swipe.current, { width: W, height: H }) : null;
-      const shot = partial ?? keyFreeKick({ ...am, power: am.charging ? am.power : 0.6 });
+      const partial = swipe.current && swipe.current.length > 2 ? swipeToFreeKick(swipe.current, swipeOptions(s), s.setup) : null;
+      const shot = partial ?? keyFreeKick({ ...am, power: am.charging ? am.power : 0.6 }, s.setup);
       const outcome = resolveFreeKick(s.setup, { ...shot, aimX: shot.aimX + wobble / 1.6 }, keeperById(s.keeper), difficultyFor(s));
       scene.preview = { path: outcome.path, alpha: Math.max(assist, 0.25) };
     } else {
-      const partial = swipe.current && swipe.current.length > 2 ? swipeToShot(swipe.current, { width: W, height: H }) : null;
+      const partial = swipe.current && swipe.current.length > 2 ? swipeToShot(swipe.current, swipeOptions(s)) : null;
       const shot = partial ?? keyShot({ ...am, power: am.charging ? am.power : 0.7 });
       const target = shotTarget({ ...shot, aimX: shot.aimX + wobble });
-      scene.reticle = { x: target.x - shot.curl * 0.3, y: target.y, power: shot.power, curl: shot.curl, active: Boolean(partial) || am.charging };
+      // WYSIWYG: the reticle is the landing point (curl drift included) for the WHOLE drag; full for the first 5 kicks, then faint.
+      scene.reticle = { x: target.x, y: target.y, power: shot.power, curl: shot.curl, active: Boolean(partial) || am.charging, alpha: kicksTaken.current < 5 ? 1 : Math.max(0.35, assist) };
     }
     if (s.kind === "target" && s.target) {
       const t = (performance.now() - s.target.startedAt) / 1000;
@@ -363,7 +368,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     void unlockAudio(); setError("");
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
-    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Where you release decides the shot. The coloured zones show the multipliers."); return; }
+    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe from the ball to where you want it to go, and the target follows your finger. Faster means more pace; only a huge overhit can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
     if (mode === "skill") { enterSkillCup(); return; }
     if (mode === "match") { if (bag.some(ball => !ball.sample)) { setScreen("play"); beginSession(newSession("match")); setSelectedBall(selectedBall ?? bag.find(ball => !ball.sample)!.id); setCarousel(true); } else setMenu("balls"); return; }
     beginSession(newSession(mode));
@@ -385,7 +390,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   function startAim(current: Session | null = live.current.session) {
     const scene = stage.current;
-    keyAim.current = { ...keyAim.current, power: 0, charging: false, loft: 0, curl: 0, top: 0 };
+    keyAim.current = { ...keyAim.current, power: 0, charging: false, curl: 0, top: 0 };
     aimStarted.current = performance.now();
     if (scene && current) {
       scene.ballVisible = true;
@@ -471,6 +476,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const record = kick.record, goal = record.result === "goal";
     if (current.mode === "match" && current.ball) { const id = current.ball.recordId; setBag(list => list.map(ball => (ball.id === id ? recordKick(ball, { goal, zone: record.zone }) : ball))); }
     if (pendingWave.current) { pendingWave.current = false; stage.current?.wave(); }
+    kicksTaken.current++;
     if (goal && haptics) vibrate([40, 30, 40]);
     const streak = goal ? current.streak + 1 : 0;
     const kicks = [...current.kicks, record], points = current.points + record.points;
@@ -694,7 +700,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (event.key === " " && am.charging) {
         am.charging = false;
         if (current.phase === "aim" && !current.paused && !current.menu && current.session) {
-          if (current.session.kind === "freekick") latest.current.shootFreeKick(keyFreeKick(am)); else latest.current.shootPenalty(keyShot(am));
+          if (current.session.kind === "freekick" && current.session.setup) latest.current.shootFreeKick(keyFreeKick(am, current.session.setup)); else latest.current.shootPenalty(keyShot(am));
         }
       }
     };
@@ -706,17 +712,28 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   latest.current = { tickAim, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
 
+  /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
+  function swipeOptions(current: Session) {
+    const base = { width: W, height: H, pxPerUnit: gestureInfo.current.pxPerUnit, input: gestureInfo.current.input };
+    if (current.kind === "freekick" && current.setup) {
+      const xf = goalTransform(current.setup), ball = fkBall(current.setup);
+      return { ...base, goal: { cx: xf.x, line: xf.y, unitX: GOAL.unit * xf.g, unitY: GOAL.unit * 0.89 * xf.g }, ball: { x: ball.x, y: ball.y } };
+    }
+    return { ...base, goal: { cx: GOAL.cx, line: GOAL.line, unitX: GOAL.unit, unitY: GOAL.unit * 0.89 }, ball: { x: SPOT.x, y: SPOT.y } };
+  }
+
   const toLogical = (event: ReactPointerEvent<HTMLCanvasElement>): SwipePoint => {
     const rect = event.currentTarget.getBoundingClientRect();
     const scale = Math.min(rect.width / W, rect.height / H);
+    gestureInfo.current = { pxPerUnit: scale, input: event.pointerType === "touch" ? "touch" : event.pointerType === "pen" ? "trackpad" : "mouse" };
     return { x: (event.clientX - rect.left - (rect.width - W * scale) / 2) / scale, y: (event.clientY - rect.top - (rect.height - H * scale) / 2) / scale, t: event.timeStamp };
   };
   function release() {
     const points = swipe.current; swipe.current = null;
     const current = live.current.session;
     if (!points || !current || paused || menu) return;
-    if (current.kind === "freekick") { const shot = swipeToFreeKick(points, { width: W, height: H }); if (shot) shootFreeKick(shot); }
-    else { const shot = swipeToShot(points, { width: W, height: H }); if (shot) shootPenalty(shot); }
+    if (current.kind === "freekick" && current.setup) { const shot = swipeToFreeKick(points, swipeOptions(current), current.setup); if (shot) shootFreeKick(shot); }
+    else { const shot = swipeToShot(points, swipeOptions(current)); if (shot) shootPenalty(shot); }
   }
 
   if (!snapshot) return <div className="pk-loading" role={error ? "alert" : "status"}>
@@ -771,7 +788,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
         {inMatch && phase === "idle" && !carousel && <button type="button" className="pk-primary" disabled={busy || paused} onClick={() => setCarousel(true)} data-testid="choose-ball">Choose ball</button>}
-        {phase === "aim" && s && <button type="button" onClick={() => (s.kind === "freekick" ? shootFreeKick({ aimX: keyAim.current.aimX / 1.6, lift: 0.75, power: 0.55, spin: keyAim.current.curl || 0.6, top: 0.5 }) : shootPenalty({ aimX: keyAim.current.aimX, loft: 0, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
+        {phase === "aim" && s && <button type="button" onClick={() => (s.kind === "freekick" && s.setup ? shootFreeKick(keyFreeKick({ ...keyAim.current, power: 0.55, curl: keyAim.current.curl || 0.6, top: 0.5 }, s.setup)) : shootPenalty({ aimX: keyAim.current.aimX, aimY: keyAim.current.aimY, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
         <button type="button" onClick={() => setMenu("hub")} disabled={phase === "shooting"} data-testid="menu">Menu</button>
       </nav>}
       {(error || message) && phase !== "shooting" && screen === "play" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}

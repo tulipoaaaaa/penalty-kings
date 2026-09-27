@@ -30,7 +30,7 @@ export function simulate(bot: Bot, rounds: number, seed: number) {
       const side = random() < 0.5 ? -1 : 1, high = random() < bot.ambition * 0.6;
       const tx = side * (random() < bot.ambition ? 0.8 : 0.5), ty = high ? 0.78 : 0.3;
       const wobble = aimWobble(random() * 10, wobbleFor(difficulty, streak)) * (1 - bot.timing);
-      const shot = { aimX: tx + gauss(random) * bot.aim + wobble, loft: 0, power: (ty + 0.15) / 1.25 + gauss(random) * bot.power, curl: 0 };
+      const shot = { aimX: tx + gauss(random) * bot.aim + wobble, aimY: ty + gauss(random) * bot.power * 1.25, power: Math.min(1, Math.max(0, 0.62 + gauss(random) * bot.power)), curl: 0 };
       const outcome = resolveShot(assistShot(shot, difficulty.assist), keeper, kickSeed(seed, kick, keeper.id), { kickIndex: i, history: [] }, difficulty);
       const goal = outcome.result === "goal";
       history.push({ goal, zone: outcome.zone });
@@ -50,7 +50,7 @@ export function fixedRate(bot: Bot, level: number, shots: number, seed: number) 
     const keeper = keeperById(PARK[k % PARK.length]);
     const side = random() < 0.5 ? -1 : 1, high = random() < bot.ambition * 0.6;
     const tx = side * (random() < bot.ambition ? 0.8 : 0.5), ty = high ? 0.78 : 0.3;
-    const shot = { aimX: tx + gauss(random) * bot.aim + aimWobble(random() * 10, DIFFICULTY_LADDER[level].wobble) * (1 - bot.timing), loft: 0, power: (ty + 0.15) / 1.25 + gauss(random) * bot.power, curl: 0 };
+    const shot = { aimX: tx + gauss(random) * bot.aim + aimWobble(random() * 10, DIFFICULTY_LADDER[level].wobble) * (1 - bot.timing), aimY: ty + gauss(random) * bot.power * 1.25, power: Math.min(1, Math.max(0, 0.62 + gauss(random) * bot.power)), curl: 0 };
     if (resolveShot(assistShot(shot, DIFFICULTY_LADDER[level].assist), keeper, kickSeed(seed, k, keeper.id), { kickIndex: k % 5, history: [] }, DIFFICULTY_LADDER[level]).result === "goal") goals++;
   }
   return goals / shots;

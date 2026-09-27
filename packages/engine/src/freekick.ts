@@ -143,3 +143,19 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
   const saved = Math.hypot(target.x - handX, (target.y - Math.min(hands.y, plan.maxY)) * 1.2) < plan.reach || (Math.abs(target.x - startX) < plan.body && target.y < 0.8);
   return { ...base, result: saved ? "save" : "goal", keeper: { ...plan, x: handX } };
 }
+
+/**
+ * WYSIWYG free kicks: the elevation that makes an unspun, windless shot at this pace cross the goal
+ * line at `aimY` (goal units). Spin, topspin, wind, the wall and the keeper then do their thing:
+ * that is the skill. Bisection on the real flight model (deterministic).
+ */
+export function solveLift(setup: FreeKickSetup, shot: { aimX: number; aimY: number; power: number; top: number }): number {
+  const plain = { ...setup, wind: 0, wallHeight: 0.02, seed: 1 };
+  const heightAt = (lift: number) => resolveFreeKick(plain, { aimX: shot.aimX, lift, power: shot.power, spin: 0, top: shot.top }, NO_KEEPER).target.y;
+  let lo = 0, hi = 1;
+  if (heightAt(hi) < shot.aimY) return 1;
+  if (heightAt(lo) > shot.aimY) return 0;
+  for (let i = 0; i < 16; i++) { const mid = (lo + hi) / 2; if (heightAt(mid) < shot.aimY) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+const NO_KEEPER: KeeperProfile = { id: "mouse", name: "none", bio: "", tell: "", mult: 1, reaction: 9, diveTime: 1, reach: 0, body: 0, maxY: 0, read: 0 };

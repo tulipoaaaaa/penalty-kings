@@ -8,13 +8,13 @@
  */
 
 export type ShotInput = Readonly<{
-  /** Reticle across the goal, -1.4 … 1.4 (posts at ±1). */
+  /** Aim across the goal face, goal units (posts at ±1). WHERE you point is where it goes. */
   aimX: number;
-  /** Keyboard loft adjustment, -0.3 … 0.3. Touch uses 0. */
-  loft: number;
-  /** 0 … 1. Height and ball speed rise with power; above ~0.9 it clears the bar. */
+  /** Aim height on the goal face, goal units (ground 0, bar 1). */
+  aimY: number;
+  /** 0 … 1: pace only (flight time → keeper reaction). Only an extreme overhit (> OVERHIT) adds rise. */
   power: number;
-  /** -1 … 1. Swerve applied to the final position and the flight path. */
+  /** -1 … 1: deliberate bend. Bows the path; drifts the landing point by at most CURL_DRIFT. */
   curl: number;
 }>;
 
@@ -89,12 +89,18 @@ export const clamp = (value: number, min: number, max: number) => Math.min(max, 
 const BALL_RADIUS = 0.045;
 const FRAME = 0.025;
 
+/** Power above this is an overhit: it adds rise (up to +0.4 goal units at full power) and can clear the bar. */
+export const OVERHIT = 0.9;
+/** Maximum landing drift from full curl, goal units: an on-target aim with max curl stays within the post ± 0.05. */
+export const CURL_DRIFT = 0.08;
+
 /** Where the ball crosses the goal line, and how long it takes to get there (seconds). */
 export function shotTarget(shot: ShotInput) {
   const power = clamp(shot.power, 0, 1);
+  const rise = power > OVERHIT ? (power - OVERHIT) * 4 : 0;
   return {
-    x: clamp(shot.aimX, -1.6, 1.6) + clamp(shot.curl, -1, 1) * 0.3,
-    y: Math.max(0.02, 1.25 * power - 0.15 + clamp(shot.loft, -0.3, 0.3)),
+    x: clamp(shot.aimX, -1.6, 1.6) + clamp(shot.curl, -1, 1) * CURL_DRIFT,
+    y: Math.max(0.02, clamp(shot.aimY, 0, 1.6) + rise),
     time: 0.95 - 0.55 * power,
   };
 }
@@ -254,47 +260,92 @@ export function goalPoints(keeper: KeeperProfile, ballMult: number, streak: numb
 
 // ── Input: one forgiving swipe ────────────────────────────────────────────
 export type SwipePoint = Readonly<{ x: number; y: number; t: number }>;
-/** Release window: the last ~100 ms before lift-off decide the direction (80–120 ms allowed). */
+/** Release window: the last ~100 ms before lift-off are averaged for the aim (80–120 ms allowed). */
 export const RELEASE_BUFFER_MS = 100;
+export type InputKind = "touch" | "mouse" | "trackpad";
+/** Speed calibration per input, CSS px per second: [slow → power 0.35, fast → power 1]. */
+export const SPEED_CALIBRATION: Readonly<Record<InputKind, readonly [number, number]>> = {
+  touch: [250, 2600], mouse: [500, 4200], trackpad: [300, 3600],
+};
+/** Curl needs intent: a path bend under this fraction of its length is ignored (natural thumb arcs). */
+export const CURL_DEAD_ZONE = 0.12;
+
+export type SwipeOptions = {
+  width: number; height: number;
+  /** CSS px per logical unit (display scale), so speed is measured in physical-ish px, not canvas units. */
+  pxPerUnit?: number;
+  input?: InputKind;
+  /** Screen geometry of the goal face and the ball, in the same units as the points. */
+  goal?: { cx: number; line: number; unitX: number; unitY: number };
+  ball?: { x: number; y: number };
+  bufferMs?: number;
+};
+const DEFAULT_GOAL = { cx: 240, line: 176, unitX: 90, unitY: 80 }, DEFAULT_BALL = { x: 240, y: 220 };
 
 /**
- * Turns a swipe (screen px, ms) into a shot. The RELEASE decides the shot, but the release
- * direction is blended with the whole swipe's chord so a sloppy last frame still gives the
- * intended shot. Returns null for a tap or a downward swipe.
+ * The finger's release point, de-jittered: a least-squares line through the last `window` ms of
+ * samples, evaluated at lift-off (unbiased at any speed), blended 50/50 with the raw last sample so a
+ * skidding lift-off moves the aim only half as far.
  */
-export function swipeToShot(points: readonly SwipePoint[], size: { width: number; height: number }, bufferMs = RELEASE_BUFFER_MS): ShotInput | null {
-  if (points.length < 2) return null;
-  const first = points[0], last = points[points.length - 1];
-  const up = first.y - last.y;
-  if (up < size.height * 0.05) return null;
-  const window = clamp(bufferMs, 80, 120);
+export function releasePoint(points: readonly SwipePoint[], window = RELEASE_BUFFER_MS) {
+  const last = points[points.length - 1];
   const recent = points.filter(point => last.t - point.t <= window);
-  const from = recent.length >= 2 ? recent[0] : points[points.length - 2];
-  const releaseUp = Math.max(1, from.y - last.y), releaseDx = last.x - from.x;
-  const chordDx = last.x - first.x;
-  const slope = 0.5 * (releaseDx / releaseUp) + 0.5 * (chordDx / up);
-  const seconds = Math.max(0.05, (last.t - first.t) / 1000);
-  const speed = up / size.height / seconds;
-  // Curl: how far the path's middle bows away from the straight chord.
-  const middle = points[Math.floor(points.length / 2)];
-  const along = (middle.y - first.y) / (last.y - first.y || 1);
-  const chordX = first.x + chordDx * along;
-  const length = Math.hypot(chordDx, up) || 1;
-  return {
-    aimX: clamp(slope * 1.6, -1.4, 1.4),
-    loft: 0,
-    power: clamp(0.25 + 0.75 * Math.min(1, speed / 2.2), 0, 1),
-    curl: clamp(-((middle.x - chordX) / length) * 4, -1, 1),
-  };
+  if (recent.length < 3) return { x: last.x, y: last.y };
+  const n = recent.length, mt = recent.reduce((s, p) => s + p.t, 0) / n, mx = recent.reduce((s, p) => s + p.x, 0) / n, my = recent.reduce((s, p) => s + p.y, 0) / n;
+  const vt = recent.reduce((s, p) => s + (p.t - mt) ** 2, 0) || 1;
+  const bx = recent.reduce((s, p) => s + (p.t - mt) * (p.x - mx), 0) / vt, by = recent.reduce((s, p) => s + (p.t - mt) * (p.y - my), 0) / vt;
+  const fit = { x: mx + bx * (last.t - mt), y: my + by * (last.t - mt) };
+  return { x: 0.5 * fit.x + 0.5 * last.x, y: 0.5 * fit.y + 0.5 * last.y };
 }
 
-/** Aim assist (tutorial, first matches, Park): pulls the aim towards a zone centre and keeps power on target. */
+/** The aim point on the goal face for a swipe so far (the reticle follows the finger: WYSIWYG). */
+export function swipeAim(points: readonly SwipePoint[], options: SwipeOptions) {
+  const goal = options.goal ?? DEFAULT_GOAL, ball = options.ball ?? DEFAULT_BALL;
+  const first = points[0], last = points[points.length - 1];
+  const window = clamp(options.bufferMs ?? RELEASE_BUFFER_MS, 80, 120);
+  const release = releasePoint(points, window);
+  const screen = { x: ball.x + (release.x - first.x), y: ball.y + (release.y - first.y) };
+  return { aimX: (screen.x - goal.cx) / goal.unitX, aimY: (goal.line - screen.y) / goal.unitY };
+}
+
+/**
+ * Turns a swipe (points in canvas units, t in ms) into a shot. WHERE the (smoothed) release point is
+ * on the goal face sets the aim; swipe SPEED in CSS px/s sets pace, calibrated per input; a
+ * deliberate bend (beyond the dead-zone) sets curl. Returns null for a tap or a downward swipe.
+ */
+export function swipeToShot(points: readonly SwipePoint[], options: SwipeOptions): ShotInput | null {
+  if (points.length < 2) return null;
+  const first = points[0], last = points[points.length - 1];
+  if (first.y - last.y < options.height * 0.05) return null;
+  const { aimX, aimY } = swipeAim(points, options);
+  // Pace: path length in CSS px over the swipe's duration.
+  let length = 0;
+  for (let i = 1; i < points.length; i++) length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  const css = length * (options.pxPerUnit ?? 1), seconds = Math.max(0.03, (last.t - first.t) / 1000);
+  const [slow, fast] = SPEED_CALIBRATION[options.input ?? "touch"];
+  const power = 0.35 + 0.65 * clamp((css / seconds - slow) / (fast - slow), 0, 1);
+  // Curl: the largest signed deviation of the path from its chord (start → smoothed release), as a fraction of the chord.
+  const end = releasePoint(points, options.bufferMs ?? RELEASE_BUFFER_MS);
+  const dx = end.x - first.x, dy = end.y - first.y, chord = Math.hypot(dx, dy) || 1;
+  let bow = 0;
+  for (const point of points.slice(0, -1)) { const cross = ((point.x - first.x) * dy - (point.y - first.y) * dx) / chord; if (Math.abs(cross) > Math.abs(bow)) bow = cross; }
+  const bend = Math.abs(bow) / chord;
+  const curl = bend < CURL_DEAD_ZONE ? 0 : Math.sign(bow) * clamp((bend - CURL_DEAD_ZONE) / 0.2, 0, 1);
+  return { aimX: clamp(aimX, -1.6, 1.6), aimY: clamp(aimY, 0, 1.6), power, curl };
+}
+
+/** Aim assist (tutorial, first matches, Park): pulls the aim towards a zone centre and keeps power below an overhit. */
 export function assistShot(shot: ShotInput, strength: number): ShotInput {
   const k = clamp(strength, 0, 1);
   if (k === 0) return shot;
-  const anchors = [-0.8, -0.5, 0, 0.5, 0.8];
-  const nearest = anchors.reduce((best, x) => (Math.abs(x - shot.aimX) < Math.abs(best - shot.aimX) ? x : best), anchors[0]);
-  return { ...shot, aimX: shot.aimX + (nearest - shot.aimX) * 0.6 * k, power: shot.power + (clamp(shot.power, 0.35, 0.8) - shot.power) * k };
+  const anchorsX = [-0.8, -0.5, 0, 0.5, 0.8], anchorsY = [0.25, 0.75];
+  const near = (value: number, list: number[]) => list.reduce((best, x) => (Math.abs(x - value) < Math.abs(best - value) ? x : best), list[0]);
+  return {
+    ...shot,
+    aimX: shot.aimX + (near(shot.aimX, anchorsX) - shot.aimX) * 0.6 * k,
+    aimY: shot.aimY + (clamp(shot.aimY, 0.1, 0.9) - shot.aimY) * k,
+    power: shot.power + (Math.min(shot.power, OVERHIT - 0.02) - shot.power) * k,
+  };
 }
 
 /** Aim wobble at release time t (seconds): a smooth, readable sway you learn to time. */

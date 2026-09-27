@@ -254,12 +254,14 @@ function SkillCupPanel({ friend, client, send, approve, guard }: PanelProps) {
 }
 
 /** Canvas pitch for Skill Cup kicks: the game's Stage and its forgiving swipe; results come from the referee. */
-function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; kicks: Kick[]; disabled: boolean; onShoot: (input: { aimX: number; loft: number; power: number; curl: number; releaseMs: number }) => Promise<Kick> }) {
+function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; kicks: Kick[]; disabled: boolean; onShoot: (input: { aimX: number; aimY: number; power: number; curl: number; releaseMs: number }) => Promise<Kick> }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<GenerationSprites | null>(null);
   const stage = useRef<Stage | null>(null);
   const aimStart = useRef(performance.now());
   const drag = useRef<SwipePoint[] | null>(null);
+  const gesture = useRef<{ pxPerUnit: number; input: "touch" | "mouse" | "trackpad" }>({ pxPerUnit: 1, input: "mouse" });
+  const opts = () => ({ width: W, height: H, ...gesture.current });
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   useEffect(() => { createFriendReader().read(friendId).then(value => { sprites.current = value; }).catch(() => undefined); }, [friendId]);
   useEffect(() => {
@@ -273,7 +275,7 @@ function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; 
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (!disabled && !drag.current && !scene.busy) { scene.ballVisible = true; }
-      if (drag.current && drag.current.length > 2) { const shot = swipeToShot(drag.current, { width: W, height: H }); if (shot) { const t = shotTarget(shot); scene.reticle = { x: t.x - shot.curl * 0.3, y: t.y, power: shot.power, curl: shot.curl, active: true }; } }
+      if (drag.current && drag.current.length > 2) { const shot = swipeToShot(drag.current, opts()); if (shot) { const t = shotTarget(shot); scene.reticle = { x: t.x - shot.curl * 0.3, y: t.y, power: shot.power, curl: shot.curl, active: true }; } }
       else if (!scene.busy) scene.reticle = disabled ? null : { x: 0.5, y: 0.5, power: 0.7, curl: 0, active: false };
       scene.update(dt); scene.render(context);
       frame = requestAnimationFrame(draw);
@@ -283,6 +285,7 @@ function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; 
   }, [disabled, friendId]);
   const point = (event: ReactPointerEvent<HTMLCanvasElement>): SwipePoint => {
     const rect = event.currentTarget.getBoundingClientRect();
+    gesture.current = { pxPerUnit: rect.width / W, input: event.pointerType === "touch" ? "touch" : event.pointerType === "pen" ? "trackpad" : "mouse" };
     return { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H, t: event.timeStamp };
   };
   return <div className="pitch">
@@ -293,7 +296,7 @@ function SkillPitch({ friendId, kicks, disabled, onShoot }: { friendId: bigint; 
         const points = drag.current; drag.current = null;
         if (!points || disabled || busy) return;
         points.push(point(event));
-        const shot = swipeToShot(points, { width: W, height: H });
+        const shot = swipeToShot(points, opts());
         if (!shot) return;
         const input = { ...shot, releaseMs: Math.round(performance.now() - aimStart.current) };
         setBusy(true); setError("");

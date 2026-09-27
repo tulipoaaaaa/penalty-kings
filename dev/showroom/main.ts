@@ -34,7 +34,7 @@ async function loadFriend(id: string) {
 function findShot(result: ShotResult, keeper: KeeperId): { outcome: ShotOutcome; curl: number } {
   const profile = keeperById(keeper);
   for (let attempt = 0; attempt < 4000; attempt++) {
-    const shot = { aimX: Math.random() * 2.8 - 1.4, loft: 0, power: Math.random(), curl: Math.random() * 2 - 1 };
+    const shot = { aimX: Math.random() * 2.8 - 1.4, aimY: Math.random() * 1.2, power: Math.random(), curl: Math.random() * 2 - 1 };
     const outcome = resolveShot(shot, profile, Math.floor(Math.random() * 2 ** 31), { kickIndex: 0, history: [] });
     if (outcome.result === result) return { outcome, curl: shot.curl };
   }

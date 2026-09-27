@@ -50,7 +50,7 @@ export function sanitize(input: KickInput): KickInput {
     if (typeof value !== "number" || !Number.isFinite(value)) throw new RefereeError(400, "Kick inputs must be finite numbers.");
     return clamp(value, min, max);
   };
-  return { aimX: num(input.aimX, -1.6, 1.6), loft: num(input.loft, -0.3, 0.3), power: num(input.power, 0, 1), curl: num(input.curl, -1, 1), releaseMs: num(input.releaseMs, 0, 600_000) };
+  return { aimX: num(input.aimX, -1.6, 1.6), aimY: num(input.aimY, 0, 1.6), power: num(input.power, 0, 1), curl: num(input.curl, -1, 1), releaseMs: num(input.releaseMs, 0, 600_000) };
 }
 
 /** Pure scoring shared by the live referee and public replays. */

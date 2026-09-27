@@ -39,7 +39,7 @@ export class Stage {
   rows: RowsProvider = () => null;
   onEvent: (event: StageEvent, data?: unknown) => void = () => {};
   /** Aim reticle shown before the kick (goal-plane units). */
-  reticle: { x: number; y: number; power: number; curl: number; active: boolean } | null = null;
+  reticle: { x: number; y: number; power: number; curl: number; active: boolean; alpha?: number } | null = null;
   ballVisible = false;
   /** Readable pre-kick tell (lean, scan, wall) for the current keeper and ball. */
   tell: KeeperPlan | null = null;
@@ -424,6 +424,7 @@ export class Stage {
     const reticle = this.reticle;
     if (!reticle || this.mode !== "idle" || this.kind === "freekick") return;
     const { x, y } = toScreen(reticle.x, reticle.y), color = reticle.y > 1 || Math.abs(reticle.x) > 1 ? "#ff5a6e" : "#ccff00";
+    c.save(); c.globalAlpha = reticle.alpha ?? 1;
     c.strokeStyle = "#ffffff66"; c.setLineDash([2, 3]); c.beginPath();
     for (let i = 0; i <= 16; i++) { const p = i / 16, f = flightAt({ x: reticle.x, y: reticle.y }, reticle.curl, p), bow = (f.x - reticle.x * p) * GOAL.unit; const px = SPOT.x + (x - SPOT.x) * p + bow, py = SPOT.y + (y - SPOT.y) * p - Math.sin(Math.PI * p) * 12; i ? c.lineTo(px, py) : c.moveTo(px, py); }
     c.stroke(); c.setLineDash([]);
@@ -437,6 +438,7 @@ export class Stage {
       c.fillStyle = "#ccff0044"; c.fillRect(mx, my + h * 0.1, 7, h * 0.3);
       c.fillStyle = reticle.power > 0.9 ? "#ff5a6e" : "#ccff00"; c.fillRect(mx, my + h * (1 - reticle.power), 7, h * reticle.power);
     }
+    c.restore();
   }
 
   private drawReferee(c: CanvasRenderingContext2D) {

@@ -78,17 +78,16 @@ test("daily challenge: same scenario for everyone per date, streak calendar", ()
 
 test("target practice: hitting a target scores, combos build and reset, bar bonus", () => {
   const targets = spawnTargets(5, 0);
-  const t = 3, flight = 0.95 - 0.55 * 0.6;
-  const at = targetAt(targets[0], t + flight);
-  const power = (at.y + 0.15) / 1.25;
-  const aimed = resolveTargetShot({ aimX: at.x, loft: 0, power, curl: 0 }, targets, t, 0);
+  const t = 3;
+  const at = targetAt(targets[0], t + (0.95 - 0.55 * 0.6));
+  const aimed = resolveTargetShot({ aimX: at.x, aimY: at.y, power: 0.6, curl: 0 }, targets, t, 0);
   // (power changes flight time slightly; search nearby release times for a hit)
   let hit = aimed.hit ? aimed : null;
-  for (let dt = -0.2; !hit && dt <= 0.2; dt += 0.01) { const r = resolveTargetShot({ aimX: at.x, loft: 0, power, curl: 0 }, targets, t + dt, 0); if (r.hit) hit = r; }
+  for (let dt = -0.2; !hit && dt <= 0.2; dt += 0.01) { const r = resolveTargetShot({ aimX: at.x, aimY: at.y, power: 0.6, curl: 0 }, targets, t + dt, 0); if (r.hit) hit = r; }
   assert.ok(hit && hit.points > 0 && hit.combo === 1);
-  const miss = resolveTargetShot({ aimX: 1.5, loft: 0, power: 0.5, curl: 0 }, targets, t, 4);
+  const miss = resolveTargetShot({ aimX: 1.5, aimY: 0.5, power: 0.5, curl: 0 }, targets, t, 4);
   assert.equal(miss.combo, 0); assert.equal(miss.points, 0);
-  const bar = resolveTargetShot({ aimX: 0, loft: 0, power: 0.92, curl: 0 }, [], t, MAX_COMBO);
+  const bar = resolveTargetShot({ aimX: 0, aimY: 1, power: 0.6, curl: 0 }, [], t, MAX_COMBO);
   assert.ok(bar.crossbar && bar.points > 0 && bar.combo === MAX_COMBO);
 });
 
@@ -142,15 +141,17 @@ test("cosmetics: 15 KitShop items keep their on-chain order; star rewards are se
 });
 
 import { swipeToFreeKick } from "../../games/penalty-kings/game/input.ts";
-test("free-kick swipe: longer swipes lift, a late flick adds topspin, a bow adds spin", () => {
+import { freeKickSetup } from "@penalty-kings/engine";
+test("free-kick swipe: higher aim lifts, a late flick adds topspin, a bow adds spin", () => {
   const size = { width: 480, height: 320 };
-  const short = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 260, t: 80 }, { x: 240, y: 230, t: 160 }], size)!;
-  const long = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 200, t: 80 }, { x: 240, y: 100, t: 160 }], size)!;
+  const setup = freeKickSetup(2, { distance: 22, angle: 0 });
+  const short = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 260, t: 80 }, { x: 240, y: 230, t: 160 }], size, setup)!;
+  const long = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 200, t: 80 }, { x: 240, y: 100, t: 160 }], size, setup)!;
   assert.ok(long.lift > short.lift);
-  const even = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 250, t: 100 }, { x: 240, y: 200, t: 200 }, { x: 240, y: 150, t: 300 }], size)!;
-  const flick = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 280, t: 100 }, { x: 240, y: 260, t: 200 }, { x: 240, y: 150, t: 260 }], size)!;
+  const even = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 250, t: 100 }, { x: 240, y: 200, t: 200 }, { x: 240, y: 150, t: 300 }], size, setup)!;
+  const flick = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 240, y: 280, t: 100 }, { x: 240, y: 260, t: 200 }, { x: 240, y: 150, t: 260 }], size, setup)!;
   assert.ok(flick.top > even.top);
-  const bowed = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 190, y: 220, t: 100 }, { x: 240, y: 140, t: 200 }], size)!;
+  const bowed = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 190, y: 220, t: 100 }, { x: 240, y: 140, t: 200 }], size, setup)!;
   assert.ok(Math.abs(bowed.spin) > 0.3);
 });
 

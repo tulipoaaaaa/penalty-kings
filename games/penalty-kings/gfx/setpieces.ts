@@ -195,6 +195,11 @@ export function drawZoneHints(c: CanvasRenderingContext2D, alpha: number) {
     cell(o1, o2, 0.66, 1, "bin", "×5"); cell(o1, o2, 0, 0.66, "corner", "×3"); cell(s1, s2, 0, 1, "side", "×2");
   }
   cell(-0.34, 0.34, 0, 1, "centre", "×1");
+  // Telegraph: low shots down the middle meet the keeper's trailing leg (a boot sticking out).
+  const leg = toScreen(0.12, 0.08);
+  c.fillStyle = `rgba(17,17,17,${0.8 * alpha})`; c.fillRect(Math.round(leg.x) - 2, Math.round(leg.y) - 10, 4, 10); c.fillRect(Math.round(leg.x) - 2, Math.round(leg.y) - 2, 12, 4);
+  c.fillStyle = `rgba(255,255,255,${0.9 * alpha})`; c.font = "7px PixelifySans, monospace"; c.textAlign = "center";
+  c.fillText("leg!", leg.x + 4, leg.y - 13); c.textAlign = "left";
 }
 
 /** Target practice: rings on the goal plane, labelled with their value. */

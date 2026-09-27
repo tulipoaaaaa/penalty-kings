@@ -12,7 +12,7 @@ const chain = (week = 1): Chain => ({
 });
 const referee = (options: { chain?: Chain; store?: ReturnType<typeof memoryStore> } = {}) =>
   createReferee({ secret, week: 1, store: options.store ?? memoryStore(), chain: options.chain ?? chain(), signingKey: keys.privateKey });
-const kickInput = (i: number) => ({ aimX: [0.8, -0.8, 0.7, -0.6, 0.9][i], loft: 0, power: 0.8, curl: 0, releaseMs: 900 });
+const kickInput = (i: number) => ({ aimX: [0.8, -0.8, 0.7, -0.6, 0.9][i], aimY: 0.55, power: 0.8, curl: 0, releaseMs: 900 });
 
 test("server replay matches the client engine bit-for-bit", async () => {
   const ref = referee();
@@ -46,10 +46,10 @@ test("the result is signed and verifiable with the published key; forged payload
 test("a client cannot claim a goal", async () => {
   const ref = referee();
   const { entryId } = await ref.enter({ txHash: hashFor(3) });
-  const response = await ref.kick({ entryId, kickIndex: 0, input: { aimX: 1.6, loft: 0.3, power: 1, curl: 1, releaseMs: 1, result: "goal", points: 9999 } as never });
+  const response = await ref.kick({ entryId, kickIndex: 0, input: { aimX: 1.6, aimY: 1.6, power: 1, curl: 1, releaseMs: 1, result: "goal", points: 9999 } as never });
   assert.notEqual(response.result, "goal");
   assert.equal(response.points, 0);
-  await assert.rejects(ref.kick({ entryId, kickIndex: 1, input: { aimX: Number.NaN, loft: 0, power: 0.8, curl: 0, releaseMs: 1 } }), /finite/);
+  await assert.rejects(ref.kick({ entryId, kickIndex: 1, input: { aimX: Number.NaN, aimY: 0.55, power: 0.8, curl: 0, releaseMs: 1 } }), /finite/);
   await assert.rejects(ref.kick({ entryId, kickIndex: 3, input: kickInput(1) }), /Expected kick 1/);
   await assert.rejects(ref.kick({ entryId: 999, kickIndex: 0, input: kickInput(0) }), /Unknown entry/);
 });
@@ -81,7 +81,7 @@ test("leaderboard: best score first, ties to the earlier entry", async () => {
   const ref = referee();
   for (const n of [7, 8]) {
     const { entryId } = await ref.enter({ txHash: hashFor(n) });
-    for (let i = 0; i < 5; i++) await ref.kick({ entryId, kickIndex: i, input: { aimX: 1.6, loft: 0, power: 0.8, curl: 0, releaseMs: 1 } });
+    for (let i = 0; i < 5; i++) await ref.kick({ entryId, kickIndex: i, input: { aimX: 1.6, aimY: 0.55, power: 0.8, curl: 0, releaseMs: 1 } });
   }
   const board = await ref.leaderboard();
   assert.deepEqual(board.map(row => row.entryId), [7, 8], "equal scores: earlier on-chain entry wins");
