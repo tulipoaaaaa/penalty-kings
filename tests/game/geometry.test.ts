@@ -54,3 +54,15 @@ test("free kicks are taken outside the box; their ball is on screen", () => {
     assert.ok(ball.y > 200 && ball.y < 320 && Math.abs(ball.x - 240) < 1);
   }
 });
+
+test("the free-kick wall is drawn at its real height (±6%) for every wall height and distance", async () => {
+  const { fkProject, wallDrawScale } = await import("../../games/penalty-kings/gfx/setpieces.ts");
+  const { freeKickSetup, WALL_DISTANCE, WALL_HEIGHTS } = await import("@penalty-kings/engine");
+  for (const wallHeight of Object.values(WALL_HEIGHTS)) for (const distance of [18, 20, 22, 25, 28, 32]) for (const angle of [-0.3, 0, 0.3]) {
+    const setup = freeKickSetup(11, { distance, angle, wallSize: 4, wallHeight });
+    const z = Math.cos(setup.angle) * setup.distance * (WALL_DISTANCE / setup.distance);
+    const target = fkProject(setup, { x: 0, y: 0, z }).y - fkProject(setup, { x: 0, y: wallHeight, z }).y;
+    const drawn = wallDrawScale(target).height;
+    assert.ok(Math.abs(drawn / target - 1) <= 0.06, `${wallHeight} m at ${distance} m: drawn ${drawn}px vs ${target.toFixed(1)}px`);
+  }
+});

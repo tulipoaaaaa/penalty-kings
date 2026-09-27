@@ -130,6 +130,15 @@ function wallSprite(head: number, jumping: boolean, kit: string, legs = 0) {
   return sprite(`wall-${head}-${jumping ? "j" : "p"}-${kit}-${legs}`, rows, palette);
 }
 
+/** Rows of a standing wall sprite with no extra sock rows (head + body). */
+export const WALL_BASE_ROWS = WALL_HEADS[0].rows.length + BODY_PROTECT.length;
+/** Integer pixel scale + sock rows so a wall player's drawn height matches `target` px (its real height at the wall's depth). */
+export function wallDrawScale(target: number) {
+  const scale = Math.max(1, Math.floor(target / (WALL_BASE_ROWS - 3)));
+  const legs = Math.max(-3, Math.min(4, Math.round(target / scale) - WALL_BASE_ROWS));
+  return { scale, legs, height: (WALL_BASE_ROWS + legs) * scale };
+}
+
 /**
  * The wall: 3–5 players shoulder to shoulder in one team kit, 1.85 m tall at the wall's depth,
  * drawn at an integer pixel scale. They jump on the engine's timing (arms up, knees tucked) while
@@ -141,9 +150,7 @@ export function drawWall(c: CanvasRenderingContext2D, setup: FreeKickSetup, wall
   const jump = sinceStrike !== null && sinceStrike >= setup.wallJumpAt ? Math.sin(clamp01((sinceStrike - setup.wallJumpAt) / JUMP_TIME) * Math.PI) * JUMP_HEIGHT : 0;
   const slot = (wall.halfWidth * 2) / setup.wallSize, jumping = jump > 0.06 && !reduced;
   const ground0 = fkProject(setup, { x: wall.x, y: 0, z }), head0 = fkProject(setup, { x: wall.x, y: height, z });
-  const target = ground0.y - head0.y, base = wallSprite(0, false, kit).height;
-  const scale = Math.max(1, Math.floor(target / (base - 3)));
-  const legs = Math.max(-3, Math.min(4, Math.round(target / scale) - base));
+  const { scale, legs } = wallDrawScale(ground0.y - head0.y);
   c.imageSmoothingEnabled = false;
   // Draw outer players first so the middle ones overlap them (a tight, organised wall).
   const order = Array.from({ length: setup.wallSize }, (_, i) => i).sort((a, b) => Math.abs(b - (setup.wallSize - 1) / 2) - Math.abs(a - (setup.wallSize - 1) / 2));
