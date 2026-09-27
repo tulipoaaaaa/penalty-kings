@@ -146,6 +146,20 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
 }
 
 try {
+  // BQ-P2: no vertical scroll where the page is one screen (landscape phones, where the header wraps on the narrow
+  // ones, and a tall portrait phone). A short portrait phone (360 × 640) scrolls to the footer by design, but the
+  // whole pitch and the Quick shot button are on the first screen.
+  for (const [width, height] of [[844, 390], [812, 375], [667, 375], [640, 360], [568, 320], [390, 844], [360, 640]]) {
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(`${server.url}practice/`, { waitUntil: "load" });
+    await page.waitForFunction(() => window.__pkPractice?.().shootable === true, null, { timeout: 20_000 });
+    const fit = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight - window.innerHeight, canvas: document.getElementById("pp-canvas").getBoundingClientRect().bottom, quick: document.getElementById("pp-quick").getBoundingClientRect().bottom }));
+    if (width > height || height >= 800) assert(fit.scroll <= 0, `${width}x${height}: vertical scroll of ${fit.scroll}px (scrollHeight > innerHeight)`);
+    assert(fit.canvas <= height + 0.5 && fit.quick <= height + 0.5, `${width}x${height}: the pitch (bottom ${fit.canvas}) and Quick shot (bottom ${fit.quick}) are on the first screen`);
+    report.push({ name: `fit ${width}x${height}`, results: `scroll ${Math.max(0, fit.scroll)}px`, goals: "-", keepers: "-", lines: 0, requests: "-" });
+    await context.close();
+  }
   await run({ width: 844, height: 390, name: "844x390", mobile: true });
   await run({ width: 360, height: 640, name: "360x640", mobile: true });
   await run({ width: 1280, height: 800, name: "1280x800", mobile: false });
