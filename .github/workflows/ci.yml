@@ -54,14 +54,10 @@ jobs:
       - name: Forge build + unit tests
         working-directory: contracts
         run: |
-          if [ ! -f foundry.toml ]; then echo "SKIPPED: no contracts yet"; exit 0; fi
           forge build
           forge test -vv --no-match-contract Fork
-      - name: Fork tests (need a Robinhood RPC)
+      - name: Mainnet-fork tests (read-only RPC; no keys in CI)
         working-directory: contracts
         env:
-          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
-        run: |
-          if [ ! -f foundry.toml ]; then echo "SKIPPED: no contracts yet"; exit 0; fi
-          if [ -z "$ROBINHOOD_RPC_URL" ]; then echo "SKIPPED: fork tests (no ROBINHOOD_RPC_URL secret) — NOT a pass"; exit 0; fi
-          forge test -vv --match-contract Fork --fork-url "$ROBINHOOD_RPC_URL"
+          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+        run: forge test -vv --match-contract Fork --fork-url "$ROBINHOOD_RPC_URL"
