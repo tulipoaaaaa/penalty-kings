@@ -389,6 +389,8 @@ export class Stage {
         mood = this.modeTime < 0.7 ? "taunt" : "idle"; gx += shot.outcome.plan.lean * 0.12;
         // Settle onto the home spot during the run-up, so the dive starts from the physics' standing frame.
         const settle = 1 - clamp01(this.modeTime / shot.strikeAt); gx = start + (gx - start) * settle; lift *= settle;
+        // The last beat before a penalty strike: the ready crouch, pixel-identical to the physics' set pose.
+        if (!this.fk && this.modeTime > shot.strikeAt - 0.2) mood = "set";
       } else {
         // Free kicks (penalties draw the engine's KeeperFrame instead, see drawKeeperLayer).
         const hands = keeperAt(shot.outcome.plan, keeperClock(shot.outcome.target.time, shot.flight, flightT));
@@ -402,7 +404,7 @@ export class Stage {
     const [armL, armR] = keeperArms(this.keeper, mood, this.time, shot?.outcome.plan.x ?? 0, shot?.outcome.plan.y ?? 0.4);
     const { x } = toScreen(gx, 0);
     void design;
-    return { x, y: GOAL.line - lift, rotate, stretch, armL, armR, alpha, scaleMul, mood };
+    return { x, y: GOAL.line - lift, rotate, stretch, armL, armR, alpha, scaleMul, mood, reduced: this.reduced, lean: this.tell?.lean ?? 0 };
   }
 
   private keeperAlpha() {
@@ -425,7 +427,7 @@ export class Stage {
     if (frame) { this.drawDivingKeeper(c, frame); this.drawHitboxOverlay(c, frame); return; }
     const pose = this.keeperPose();
     // Signature FX behind the keeper.
-    if (this.keeper === "peacock") { c.fillStyle = "#2a6fdb"; const lean = this.tell?.lean ?? 0; for (let i = -3; i <= 3; i++) { const a = -Math.PI / 2 + i * 0.28 + lean * 0.35; c.fillRect(Math.round(pose.x + Math.cos(a) * 26), Math.round(pose.y - 34 + Math.sin(a) * 24), 4, 4); c.fillStyle = i % 2 ? "#1d8a8a" : "#ffd23f"; } }
+    // (Peacock's fan is part of his sprite now and leans with pose.lean, the tell.)
     if (this.keeper === "disco" && !this.reduced) { const colors = ["#ff4fd8", "#ccff00", "#7fd3ff"]; for (let i = 0; i < 6; i++) { c.fillStyle = colors[(Math.floor(this.time * 4) + i) % 3] + "55"; c.fillRect(GOAL.left + i * 30, GOAL.bar + ((i * 13 + Math.floor(this.time * 8)) % 60), 20, 3); } }
     if (this.keeper === "finalwall") { c.fillStyle = `rgba(255,59,31,${0.15 + 0.1 * Math.sin(this.time * 4)})`; c.fillRect(pose.x - 40, GOAL.bar, 80, GOAL.line - GOAL.bar); }
     const drawn = drawKeeper(c, this.keeper, pose, this.time);
@@ -450,7 +452,10 @@ export class Stage {
     if (this.keeper === "finalwall") { c.fillStyle = `rgba(255,59,31,${0.1 + 0.06 * Math.sin(this.time * 4)})`; c.fillRect(centre.x - 40, GOAL.bar, 80, GOAL.line - GOAL.bar); }
     if (frame.wall) this.drawMimeWall(c, frame.wall, after >= 0 && shot.outcome.touch === "wall" ? clamp01(1 - after / 0.8) : 0);
     const mood = after > 0.2 ? (shot.outcome.result === "goal" ? "sad" : "celebrate") : null;
-    drawKeeperFrame(c, frame, { alpha: this.keeperAlpha(), arms: mood ? keeperArms(this.keeper, mood, this.time, shot.outcome.plan.x, shot.outcome.plan.y) : undefined });
+    drawKeeperFrame(c, frame, {
+      alpha: this.keeperAlpha(), arms: mood ? keeperArms(this.keeper, mood, this.time, shot.outcome.plan.x, shot.outcome.plan.y) : undefined,
+      after: after >= 0 ? after : undefined, mood: mood ?? undefined, time: flightT, reduced: this.reduced,
+    });
     // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
     const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
     if (frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
@@ -480,7 +485,7 @@ export class Stage {
   }
 
   private strokeFrame(c: CanvasRenderingContext2D, frame: KeeperFrame, color: string) {
-    const g = rigGeometry(frame.id), centre = artPoint(frame), u = GOAL.unit;
+    const g = rigGeometry(frame.id, frame.pose), centre = artPoint(frame), u = GOAL.unit;
     c.save(); c.strokeStyle = color; c.lineWidth = 0.75;
     if (frame.wall) { const x1 = GOAL.cx + Math.max(-1, frame.wall[0]) * u, x2 = GOAL.cx + Math.min(1, frame.wall[1]) * u; c.strokeRect(x1, GOAL.line - GOAL_ASPECT * u, x2 - x1, GOAL_ASPECT * u); }
     if (frame.leg) {

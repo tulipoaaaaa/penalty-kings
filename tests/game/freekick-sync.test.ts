@@ -27,9 +27,10 @@ function renderedContact(id: KeeperId, art: Art, ball: P & { r: number }): strin
   const local = { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
   for (const { hand } of art.arms) if (rectDistance(local, hand.x - art.glove / 2, hand.y - art.glove / 2, hand.x + art.glove / 2, hand.y + art.glove / 2) <= ball.r) return "glove";
   for (const { shoulder, hand } of art.arms) if (segmentDistance(local, shoulder, hand) <= ball.r + art.armWidth / 2) return "arm";
-  const design = KEEPER_DESIGNS[id], s = design.scale;
-  for (let r = 0; r < design.rows.length; r++) for (let c = 0; c < design.rows[r].length; c++) {
-    if (!design.palette[design.rows[r][c]]) continue;
+  // The body: the exact pixel rows drawn for this frame's pose (set / launch / stretch).
+  const design = KEEPER_DESIGNS[id], s = design.scale, rows = art.rows;
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+    if (!design.palette[rows[r][c]]) continue;
     const x0 = -art.w / 2 + c * s, y0 = -art.h / 2 + r * s;
     if (rectDistance(local, x0, y0, x0 + s, y0 + s) <= ball.r) return "body";
   }

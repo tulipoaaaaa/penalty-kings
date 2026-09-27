@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEEPERS, KEEPER_RIGS, DIFFICULTY_LADDER, NEUTRAL, resolveShot, kickSeed, prng, type KeeperId, type ShotOutcome } from "@penalty-kings/engine";
-import { KEEPER_DESIGNS, keeperArt } from "../../games/penalty-kings/gfx/keepers.ts";
+import { KEEPERS, KEEPER_RIGS, RIG_POSES, DIFFICULTY_LADDER, NEUTRAL, resolveShot, kickSeed, prng, type KeeperId, type ShotOutcome } from "@penalty-kings/engine";
+import { KEEPER_DESIGNS, keeperArt, keeperRows } from "../../games/penalty-kings/gfx/keepers.ts";
 import { penaltyFlight, keeperClock, penaltyKeeperFrame, penaltyBallArt } from "../../games/penalty-kings/gfx/stage.ts";
 
 // Round 6 B4: a penalty is saved ONLY when the rendered keeper touches the rendered ball at the crossing frame.
@@ -9,11 +9,23 @@ import { penaltyFlight, keeperClock, penaltyKeeperFrame, penaltyBallArt } from "
 // the glove squares, the trailing leg, the mime wall, and the ball circle) in goal-art px, with its own
 // geometry code, and compares it with resolveShot over 2,000 seeded kicks.
 
-test("the physics hit mask is the art: every keeper's opaque pixels, scale, shoulder and arm length", () => {
+test("the physics hit mask is the art: every keeper's opaque pixels per pose, scale, shoulder and arm length", () => {
   for (const [id, design] of Object.entries(KEEPER_DESIGNS) as [KeeperId, (typeof KEEPER_DESIGNS)[KeeperId]][]) {
     const rig = KEEPER_RIGS[id];
-    assert.deepEqual(rig.mask, design.rows.map(row => [...row].map(ch => (design.palette[ch] ? "#" : ".")).join("")), `${id} mask`);
+    for (const pose of RIG_POSES) {
+      // The rows the Stage draws for this pose (keeperRows), read pixel by pixel through the palette.
+      const drawn = keeperRows(id, pose).rows.map(row => [...row].map(ch => (design.palette[ch] ? "#" : ".")).join(""));
+      assert.deepEqual(rig.poses[pose], drawn, `${id} ${pose} mask (run node scripts/gen-keeper-masks.mjs)`);
+      assert.deepEqual([drawn.length, drawn[0].length], [design.rows.length, design.rows[0].length], `${id} ${pose}: every pose shares the body grid`);
+    }
     assert.deepEqual([rig.scale, rig.shoulderY, rig.armLength], [design.scale, design.shoulderY, design.armLength], `${id} rig`);
+  }
+});
+
+test("physics poses never depend on the clock: parts are frozen, animation only recolours opaque pixels", () => {
+  for (const id of Object.keys(KEEPER_DESIGNS) as KeeperId[]) for (const pose of RIG_POSES) {
+    const still = keeperRows(id, pose).rows;
+    for (let phase = 0; phase < 6; phase++) assert.deepEqual(keeperRows(id, pose, phase, phase % 3 - 1).rows, still, `${id} ${pose} phase ${phase}`);
   }
 });
 
@@ -32,9 +44,10 @@ function renderedContact(id: KeeperId, art: Art, ball: { x: number; y: number; r
   const local = { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
   for (const { hand } of art.arms) if (rectDistance(local, hand.x - art.glove / 2, hand.y - art.glove / 2, hand.x + art.glove / 2, hand.y + art.glove / 2) <= ball.r) return "glove";
   for (const { shoulder, hand } of art.arms) if (segmentDistance(local, shoulder, hand) <= ball.r + art.armWidth / 2) return "arm";
-  const design = KEEPER_DESIGNS[id], s = design.scale;
-  for (let r = 0; r < design.rows.length; r++) for (let c = 0; c < design.rows[r].length; c++) {
-    if (!design.palette[design.rows[r][c]]) continue;
+  // The body: the exact pixel rows drawn for this frame's pose (set / launch / stretch).
+  const design = KEEPER_DESIGNS[id], s = design.scale, rows = art.rows;
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+    if (!design.palette[rows[r][c]]) continue;
     const x0 = -art.w / 2 + c * s, y0 = -art.h / 2 + r * s;
     if (rectDistance(local, x0, y0, x0 + s, y0 + s) <= ball.r) return "body";
   }
@@ -45,7 +58,7 @@ function renderedContact(id: KeeperId, art: Art, ball: { x: number; y: number; r
 test("render vs physics: 2,000 seeded kicks, the drawn keeper touches the drawn ball exactly when resolveShot saves", () => {
   const random = prng(0xb4b4);
   let kicks = 0, saves = 0, mismatches = 0;
-  const parts: Record<string, number> = {};
+  const parts: Record<string, number> = {}, poses: Record<string, number> = {};
   const failures: string[] = [];
   for (let k = 0; kicks < 2000; k++) {
     const keeper = KEEPERS[k % KEEPERS.length], difficulty = k % 3 === 0 ? NEUTRAL : DIFFICULTY_LADDER[k % DIFFICULTY_LADDER.length];
@@ -57,14 +70,16 @@ test("render vs physics: 2,000 seeded kicks, the drawn keeper touches the drawn 
     // The crossing frame as the Stage plays it: flight 0.35–0.55 s after STRIKE_AT, keeper clock = engine time.
     const flight = penaltyFlight(outcome.target.time);
     assert.equal(keeperClock(outcome.target.time, flight, flight), outcome.target.time);
-    const art = keeperArt(penaltyKeeperFrame(keeper.id, outcome, flight, flight)), ball = penaltyBallArt(outcome.target, shot.curl, 1);
+    const frame = penaltyKeeperFrame(keeper.id, outcome, flight, flight), art = keeperArt(frame), ball = penaltyBallArt(outcome.target, shot.curl, 1);
+    poses[frame.pose] = (poses[frame.pose] ?? 0) + 1;
     const contact = renderedContact(keeper.id, art, ball), saved = outcome.result === "save";
     if (saved) saves++;
     if (contact) parts[contact] = (parts[contact] ?? 0) + 1;
     if (Boolean(contact) !== saved) { mismatches++; if (failures.length < 5) failures.push(`${keeper.id} kick ${k}: ${outcome.result} but drawn contact = ${contact}`); }
   }
-  console.log(`keeper-sync: ${kicks} kicks, ${saves} saves, contacts ${JSON.stringify(parts)}, mismatches ${mismatches}`);
+  console.log(`keeper-sync: ${kicks} kicks, ${saves} saves, contacts ${JSON.stringify(parts)}, poses at the crossing ${JSON.stringify(poses)}, mismatches ${mismatches}`);
   assert.equal(mismatches, 0, failures.join("\n"));
   assert.ok(saves > 300 && saves < kicks - 300, `a real mix of saves (${saves}) and goals`);
   assert.ok((parts.leg ?? 0) > 0 && (parts.glove ?? 0) > 0 && (parts.body ?? 0) > 0, "legs, gloves and bodies all make saves");
+  assert.ok((poses.set ?? 0) > 0 && (poses.launch ?? 0) > 0 && (poses.stretch ?? 0) > 0, "every body pose is on screen at some crossing");
 });
