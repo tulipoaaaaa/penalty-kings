@@ -13,7 +13,7 @@ import {
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
-import { Stage, RARITY_NAMES } from "./gfx/stage.js";
+import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
@@ -128,6 +128,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** Time the game clocks were frozen (paused, hidden, menu, pack, carousel, walkout): shot clock and target timer use clockNow(). */
   const frozenMs = useRef(0);
   const clockNow = () => performance.now() - frozenMs.current;
+  /**
+   * Target Practice motion (round 6 C8): seconds of target movement. It runs during the shot (the
+   * targets keep moving on screen while the ball flies; during the shot it follows the Stage's own
+   * kick clock, so the drawn positions at the crossing are exactly the judged ones) and stops in menus.
+   * The 60 s countdown (clockNow) is frozen during the shot animation instead.
+   */
+  const targetMotion = useRef<{ t: number; release: number | null }>({ t: 0, release: null });
+  /** The target hit by the kick in flight (judged at release, shown when the ball arrives). */
+  const pendingTarget = useRef<{ hit: Target | null; combo: number } | null>(null);
+  const hitTargets = useRef(new Set<number>());
   /** The action-flow state (game/flow.ts), read synchronously from refs. */
   const flow = (): FlowState => {
     const c = live.current;
@@ -141,7 +151,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
   const timing = useRef<{ release: number; resolved: number; log: { kind: string; toResult: number; toReady: number }[] }>({ release: 0, resolved: 0, log: [] });
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
-  const latest = useRef({ tickAim: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
+  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
 
   const maxPrize = maximumPrize(definition);
   const pending = snapshot?.plays.find(play => play.outcomeId === null) ?? null;
@@ -231,10 +241,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let frame = 0, last = performance.now();
     const loop = (time: number) => {
       const current = live.current, frozen = current.paused || document.hidden;
-      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment)) frozenMs.current += time - last;
+      // Target Practice: the 60 s clock also stops while a shot plays (round 6 C8).
+      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
       const dt = frozen ? 0 : Math.min(0.05, (time - last) / 1000); last = time;
       latest.current.tickAim(dt);
       scene.update(dt);
+      latest.current.tickTargets(dt);
       scene.render(context);
       frame = requestAnimationFrame(loop);
     };
@@ -355,11 +367,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       // WYSIWYG: the reticle is the landing point (wobble, assist and curl drift included, as shootPenalty applies them) for the WHOLE drag; full for the first 5 kicks, then faint.
       scene.reticle = { x: target.x, y: target.y, power: aimed.power, curl: aimed.curl, active: Boolean(partial) || am.charging, alpha: kicksTaken.current < 5 ? 1 : Math.max(0.35, assist) };
     }
-    if (s.kind === "target" && s.target) {
-      const t = (clockNow() - s.target.startedAt) / 1000;
-      scene.targets = s.target.targets.map(target => ({ ...targetAt(target, t), r: target.r, value: target.value }));
-      if (t >= TARGET_SECONDS) endSession(s);
-    }
+    if (s.kind === "target" && s.target && (clockNow() - s.target.startedAt) / 1000 >= TARGET_SECONDS) endSession(s);
+  }
+
+  /** Target Practice: move the targets (also during the flight; frozen in menus) and draw them. */
+  function tickTargets(dt: number) {
+    const c = live.current, scene = stage.current, s = c.session;
+    if (!scene || !s || s.kind !== "target" || !s.target) return;
+    const motion = targetMotion.current, kick = scene.kickClock;
+    if (motion.release !== null && kick !== null) motion.t = motion.release + kick; // the Stage's kick clock: drawn = judged
+    else if (!c.menu && !c.pack && !c.carousel && !c.paused) motion.t += dt;
+    scene.targets = s.target.targets.map(target => ({ ...targetAt(target, motion.t), r: target.r, value: target.value, hit: hitTargets.current.has(target.id) }));
   }
 
   // ── Sessions ────────────────────────────────────────────────────────────
@@ -384,6 +402,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function beginSession(next: Session) {
     const scene = stage.current;
     if (inFlight.current) cancelKick();
+    targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     setSession(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
       scene.kind = next.kind; scene.keeper = next.keeper; scene.streak = 0; scene.setScore(0);
@@ -452,12 +471,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const shot = aimedShot(raw, wobble, kickAssist(current));
     const index = current.kicks.length;
     if (current.kind === "target" && current.target) {
-      const t = (clockNow() - current.target.startedAt) / 1000;
-      const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo);
-      const target = shotTarget(shot);
+      // Judged where the targets are DRAWN when the ball crosses: release + the Stage's strike + flight time.
+      const target = shotTarget(shot), t = targetMotion.current.t;
+      const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo, STRIKE_AT + penaltyFlight(target.time));
       const result: ShotResult = Math.abs(target.x) > 1 ? "wide" : target.y > 1 ? "over" : hit.hit || hit.crossbar ? "goal" : "save";
       pendingKick.current = { record: { result, zone: "centre", points: hit.points, x: target.x, y: target.y }, result };
-      setSession({ ...current, target: { ...current.target, combo: hit.combo, hits: current.target.hits + (hit.hit ? 1 : 0), targets: hit.hit ? current.target.targets.filter(item => item !== hit.hit) : current.target.targets } });
+      pendingTarget.current = { hit: hit.hit, combo: hit.combo };
+      targetMotion.current.release = t;
       scene.play({ result, target, plan: keeperPlan(keeperById("mouse"), 1, target), zone: "centre", postIn: false }, shot.curl);
       return;
     }
@@ -520,10 +540,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const streak = goal ? current.streak + 1 : 0;
     const kicks = [...current.kicks, record], points = current.points + record.points;
     let next: Session = { ...current, kicks, points, streak };
+    // Target Practice: the hit, combo and count show when the ball arrives (not at release).
+    const targetHit = pendingTarget.current; pendingTarget.current = null;
+    if (current.kind === "target" && current.target) {
+      const combo = timedOut ? 0 : targetHit?.combo ?? 0;
+      if (targetHit?.hit) hitTargets.current.add(targetHit.hit.id);
+      next = { ...next, target: { ...current.target, combo, hits: current.target.hits + (targetHit?.hit ? 1 : 0) } };
+    }
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = streak; }
     let sub = timedOut ? "Shot clock" : goal ? `+${formatNumber(record.points)} pts · ${record.zone === "bin" ? "TOP BIN ×5" : record.zone === "corner" ? "corner ×3" : record.zone === "side" ? "side ×2" : "centre ×1"}${record.postIn ? " · in off the post +50%" : ""}${record.knuckle ? " · knuckleball ×2" : ""}` : "Streak reset";
-    if (current.kind === "target") sub = record.points ? `+${formatNumber(record.points)} · combo ×${current.target?.combo ?? 1}` : "Miss: combo reset";
+    if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
     if (xp) addXp(xp);
@@ -540,13 +567,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }
 
   function onKickDone() {
-    const current = live.current.session;
+    let current = live.current.session;
     if (!inFlight.current) return; // a cancelled kick, or a duplicate "done"
     inFlight.current = 0;
     { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved) }); t.release = 0; }
     setBanner(null);
     if (!current) return;
     if (current.kind === "target") {
+      targetMotion.current.release = null;
+      if (current.target && hitTargets.current.size) { const gone = hitTargets.current; current = { ...current, target: { ...current.target, targets: current.target.targets.filter(item => !gone.has(item.id)) } }; hitTargets.current = new Set(); setSession(current); }
       const t = current.target ? (clockNow() - current.target.startedAt) / 1000 : TARGET_SECONDS;
       if (t >= TARGET_SECONDS) { endSession(current); return; }
       if (current.target && current.target.targets.length === 0) { const round = current.target.round + 1; const updated = { ...current, target: { ...current.target, round, targets: spawnTargets(current.seed, round) } }; setSession(updated); startAim(updated); return; }
@@ -600,7 +629,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "penalties") updated.best = { ...updated.best, penalties: Math.max(p.best.penalties, current.points) };
       if (current.mode === "freekicks") updated.best = { ...updated.best, freekicks: Math.max(p.best.freekicks, current.points) };
-      if (current.mode === "target") { updated.best = { ...updated.best, target: Math.max(p.best.target, current.points) }; xp += Math.round(current.points / 100) * XP.target; result.title = `Time! ${current.target?.hits ?? 0} targets`; }
+      if (current.mode === "target") { updated.best = { ...updated.best, target: Math.max(p.best.target, current.points) }; xp += Math.round(current.points / 100) * XP.target; const hits = current.target?.hits ?? 0; result.title = `Time up! You hit ${hits} target${hits === 1 ? "" : "s"}`; }
       if (current.mode === "tour" && current.level) {
         const stars = starsFor(current.level, current.kicks), before = p.stars[current.level.id] ?? 0;
         result.stars = stars; result.title = `${current.level.name}: ${stars ? "cleared" : "not yet"}`;
@@ -770,7 +799,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
   (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log }; };
-  latest.current = { tickAim, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
+  latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
   function swipeOptions(current: Session) {
@@ -808,7 +837,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const skillTable = [...skill].sort((a, b) => b.score - a.score || a.id - b.id);
   const scenario = dailyScenario(today);
   const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
-  const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))}s · ×${s.target.combo}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
+  const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
   return <section className="pk" aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
     <div className="pk-stage" inert={Boolean(menu) || paused || screen !== "play" || undefined}>

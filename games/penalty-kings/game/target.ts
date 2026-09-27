@@ -29,10 +29,15 @@ export function targetAt(target: Target, t: number) {
 
 export type TargetHit = { hit: Target | null; crossbar: boolean; points: number; combo: number; x: number; y: number };
 
-/** Resolve one kick released at time t (seconds into the round) against the live targets. */
-export function resolveTargetShot(shot: ShotInput, targets: readonly Target[], t: number, combo: number): TargetHit {
+/**
+ * Resolve one kick released at time t (seconds of target motion) against the live targets.
+ * `delay` is how long after release the ball crosses the goal line ON SCREEN (the shell passes the
+ * Stage's strike + flight time), so the hit is judged on the target positions drawn at that moment.
+ * The targets keep moving during the flight. Defaults to the engine's physical flight time.
+ */
+export function resolveTargetShot(shot: ShotInput, targets: readonly Target[], t: number, combo: number, delay?: number): TargetHit {
   const crossing = shotTarget(shot);
-  const arrive = t + crossing.time;
+  const arrive = t + (delay ?? crossing.time);
   const crossbar = Math.abs(crossing.y - 1) < 0.07 && Math.abs(crossing.x) < 1;
   const hit = targets.find(target => { const at = targetAt(target, arrive); return Math.hypot(crossing.x - at.x, crossing.y - at.y) < target.r; }) ?? null;
   const nextCombo = hit || crossbar ? Math.min(MAX_COMBO, combo + 1) : 0;

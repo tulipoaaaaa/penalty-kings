@@ -91,6 +91,17 @@ test("target practice: hitting a target scores, combos build and reset, bar bonu
   assert.ok(bar.crossbar && bar.points > 0 && bar.combo === MAX_COMBO);
 });
 
+test("target practice (round 6 C8): the hit is judged on the target positions at the on-screen crossing time", () => {
+  const targets = spawnTargets(11, 0), t = 7.3, delay = 0.9; // the shell passes STRIKE_AT + the Stage's flight time
+  const moving = targets.find(target => target.value !== 5)!;
+  const drawn = targetAt(moving, t + delay), atRelease = targetAt(moving, t);
+  assert.ok(Math.hypot(drawn.x - atRelease.x, drawn.y - atRelease.y) > moving.r, "the target moves during the flight");
+  const shot = { aimX: drawn.x, aimY: drawn.y, power: 0.6, curl: 0 };
+  assert.equal(resolveTargetShot(shot, [moving], t, 0, delay).hit, moving, "aiming where the target is drawn at the crossing hits");
+  const stale = { aimX: atRelease.x, aimY: atRelease.y, power: 0.6, curl: 0 };
+  assert.equal(resolveTargetShot(stale, [moving], t, 0, delay).hit, null, "aiming where it was at release misses");
+});
+
 test("ETHICS: the paid ball reveal is derived only from the settled outcome — no fake near-misses", () => {
   for (let outcome = 1; outcome <= 7; outcome++) {
     const plan = revealPlan(outcome);
