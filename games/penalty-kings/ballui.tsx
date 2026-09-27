@@ -13,17 +13,24 @@ import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packS
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
 const PACKS = [1n, 2n, 5n, 10n] as const;
+/** Scuffed explained (round 6 C10): shown before the first purchase and in any pack summary with a Scuffed ball. */
+export const SCUFFED_LINE = "0 RF, but still drops $GBOOT and counts for your collection";
 
 /** a) SHOP: stadium tier + pack size; total cost, max prize and odds before confirming. */
-export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen }: {
+export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false }: {
   definition: ChanceGameDefinition; tier: Tier; simulated: boolean; balance: bigint; busy: boolean; full: boolean;
-  onBuy: (quantity: bigint) => void; onOdds: () => void; unopened: bigint; onOpen: () => void;
+  onBuy: (quantity: bigint) => void; onOdds: () => void; unopened: bigint; onOpen: () => void; firstPurchase?: boolean;
 }) {
   const affordable = PACKS.filter(size => balance >= definition.price * size);
   const [pack, setPack] = useState<bigint>(affordable.includes(5n) ? 5n : affordable[affordable.length - 1] ?? 1n);
   const tag = simulated ? " (sim)" : "";
   const cost = definition.price * pack, maxPrize = definition.outcomes.reduce((max, item) => (item.reward > max ? item.reward : max), 0n);
   return <div className="pk-shop">
+    {firstPurchase && <div className="pk-explain" data-testid="first-purchase">
+      <h3>Before your first pack</h3>
+      <p>Each ball's rarity is decided when you open the pack, and every ball is worth the RF printed on it. <button type="button" className="pk-link" onClick={onOdds}>See odds</button></p>
+      <p><b>{RARITY_NAMES[0]}:</b> {SCUFFED_LINE}.</p>
+    </div>}
     <div className="pk-tiers" role="radiogroup" aria-label="Stadium">
       {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
         <strong>{item.name}</strong><small>{item.priceRF.toLocaleString("en-US")} RF per ball · top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
@@ -53,6 +60,7 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
   const done = revealed.every(Boolean);
   const rewardOf = (rarity: number) => definition.outcomes[rarity].reward;
   const summary = packSummary(rarities, definition.price, rewardOf);
+  const scuffed = rarities.filter(rarity => rarity === 0).length;
   const tag = simulated ? " (sim)" : "";
   return <div className="pk-pack" role="dialog" aria-label="Pack opening" data-testid="pack">
     <p className="pk-honest">Rarity decided by {simulated ? "the preview's simulated draw (on-chain randomness when live)" : "on-chain randomness (Dice)"} when the pack was opened. Tapping order and speed change nothing.</p>
@@ -63,8 +71,10 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
     {!done && <button type="button" className="pk-primary" onClick={onRevealAll} data-testid="reveal-all">Reveal all</button>}
     {done && <div className="pk-summary" data-testid="pack-summary">
       <h3>Pack summary</h3>
-      <p>Spent <b>{rf(summary.spent)}</b>{tag} · pulled <b>{rf(summary.pulled)}</b>{tag} in balls (backed, redeemable any time) · net <b className={summary.net < 0n ? "pk-loss" : "pk-gain"}>{summary.net < 0n ? "−" : "+"}{rf(summary.net < 0n ? -summary.net : summary.net)}</b>{tag}</p>
-      <p>$GBOOT drops: +{formatNumber(gboot)}{simulated ? " (simulated)" : " (paid weekly)"}. Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p>
+      <p>Spent <b>{rf(summary.spent)}</b>{tag} on {summary.count} ball{summary.count === 1 ? "" : "s"}. Together they are worth <b>{rf(summary.pulled)}</b>{tag}: they are yours, and you can cash any of them back into RF from your Bag at any time.</p>
+      <p>Difference: <b className={summary.net < 0n ? "pk-loss" : "pk-gain"}>{summary.net < 0n ? "−" : "+"}{rf(summary.net < 0n ? -summary.net : summary.net)}</b>{tag}. {summary.net < 0n ? "Most packs return less than they cost; a few return much more." : summary.net > 0n ? "This pack is worth more than it cost; most packs return less." : "This pack is worth exactly what it cost."}</p>
+      <p>$GBOOT dropped: +{formatNumber(gboot)}{simulated ? " (simulated)" : " (paid weekly)"}. Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p>
+      {scuffed > 0 && <p data-testid="scuffed-note"><b>{scuffed} {RARITY_NAMES[0]}{scuffed === 1 ? "" : "s"}:</b> {SCUFFED_LINE}.</p>}
       <button type="button" className="pk-primary" onClick={onDone} autoFocus data-testid="to-bag">Go to my Bag</button>
     </div>}
   </div>;

@@ -921,7 +921,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "balls" && <>
-        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} />
+        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} />
         {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
         <BallCase definition={definition} tag={tag} />
         <StadiumPrices source={prizeSource} now={now} />

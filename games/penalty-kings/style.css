@@ -187,6 +187,10 @@
 .pk-summary { text-align: center; }
 .pk-summary h3 { margin: 0; color: var(--pk-gold); }
 .pk-summary p { margin: 0.3em 0; }
+.pk-explain { border: 2px solid var(--pk-gold); padding: 6px 10px; margin-bottom: 8px; }
+.pk-explain h3 { margin: 0 0 4px; color: var(--pk-gold); font-size: 1em; }
+.pk-explain p, .pk-explain ul { margin: 0.3em 0; }
+.pk-explain ul { padding-left: 1.2em; }
 .pk-loss { color: var(--pk-red); }
 .pk-gain { color: var(--pk-volt); }
 .pk-counts { display: flex; flex-wrap: wrap; gap: 8px; font-weight: 700; }
