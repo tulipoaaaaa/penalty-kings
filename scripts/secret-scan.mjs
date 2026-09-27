@@ -14,7 +14,9 @@ const allow = new Set(existsSync("scripts/hex-allowlist.txt")
 const staged = process.argv.includes("--staged");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 const files = (staged ? git("diff", "--cached", "--name-only", "--diff-filter=ACMR") : git("ls-files")).split("\n").filter(Boolean)
-  .filter(file => !/\.(tgz|png|jpg|webp|woff2|mp3|wav)$/i.test(file) && file !== "package-lock.json");
+  .filter(file => !/\.(tgz|png|jpg|webp|woff2|mp3|wav)$/i.test(file) && file !== "package-lock.json")
+  // Vendored upstream Solidity (OpenZeppelin, forge-std) pinned by contracts/lib/provenance.json: its bytes32 constants are public.
+  .filter(file => !file.startsWith("contracts/lib/"));
 const problems = [];
 for (const file of files) {
   let text;
