@@ -55,6 +55,8 @@ jobs:
         run: npm run test:smoke
       - name: Free practice page (site/practice/, 5 kicks → CTA at 844x390, 360x640, 1280x800; no wallet/RPC requests)
         run: npm run test:practice
+      - name: Landing with no wallet (390x844 — big practice CTA above the fold → /practice/, muted clip, how to get a Friend)
+        run: npm run test:landing
       - name: Interaction test (buy → place → reveal → shoot → HUD)
         run: npm run test:game
       - name: Phone layouts (360×800, 390×844, 800×360, 844×390; fit, 11px text, toolbar, real swipe)
