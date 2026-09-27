@@ -185,6 +185,13 @@ export function drawPreview(c: CanvasRenderingContext2D, setup: FreeKickSetup, p
   if (alpha <= 0.02) return;
   c.fillStyle = `rgba(255,255,255,${0.7 * alpha})`;
   for (let i = 1; i < path.length; i += 1) { const p = fkProject(setup, path[i]); c.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2); }
+  // Where it crosses the goal line (the real flight reaches it): a small ring on the goal plane.
+  const last = path[path.length - 1];
+  if (path.length > 1 && last.z >= Math.cos(setup.angle) * setup.distance - 0.01) {
+    const p = fkProject(setup, last), r = Math.max(2, 0.2 * p.pxPerM);
+    c.strokeStyle = `rgba(255,210,63,${0.9 * alpha})`; c.lineWidth = 1;
+    c.beginPath(); c.arc(Math.round(p.x) + 0.5, Math.round(p.y) + 0.5, r, 0, Math.PI * 2); c.stroke();
+  }
 }
 
 /** HUD wind label (the chip in the top-right cluster; flags on the stands show it too). */

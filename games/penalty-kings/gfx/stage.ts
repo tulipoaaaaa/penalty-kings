@@ -3,7 +3,7 @@
  * Layers: sky → stands → crowd → boards → pitch → net → keeper → goal frame → ball → striker → FX → canvas UI.
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
-import { keeperById, keeperAt, keeperFrame, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
+import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
@@ -59,6 +59,23 @@ export const freeKickFlight = (outcome: FreeKickOutcome) => Math.max(0.3, outcom
 /** A free kick as the Stage plays it (a wall block plays as a save). */
 export const freeKickShot = (outcome: FreeKickOutcome): ShotOutcome =>
   ({ result: outcome.result === "wall" ? "save" : outcome.result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false, touch: outcome.touch });
+/**
+ * The free-kick keeper the Stage draws `flightT` s after the strike (negative: his run-up shuffle): the engine's
+ * own freeKickKeeperFrame, on the engine's clock (the flight plays 1:1), so at the crossing it is exactly the frame
+ * resolveFreeKick tested. Held 0.3 s after the crossing, like penalties.
+ */
+export const freeKickKeeperFrameAt = (id: KeeperId, outcome: FreeKickOutcome, flightT: number): KeeperFrame =>
+  freeKickKeeperFrame(id, outcome.keeperMotion, Math.min(outcome.target.time + 0.3, flightT));
+/** Seconds before the strike the free-kick keeper starts his shuffle (the Stage draws his engine frame from then on). */
+export const freeKickShuffleLead = (outcome: FreeKickOutcome) => outcome.keeperMotion.steps * FK_SHUFFLE_TIME;
+/** Drawing-only hop of a shuffle or cross-step, px (0 under reduced motion; never while the ball can be at the line). */
+export function freeKickStepHop(outcome: FreeKickOutcome, flightT: number, reduced: boolean) {
+  const m = outcome.keeperMotion, lead = m.steps * FK_SHUFFLE_TIME;
+  if (reduced || flightT >= outcome.target.time - 0.15) return 0;
+  if (flightT >= -lead && flightT < 0) return Math.round(Math.abs(Math.sin(Math.PI * (flightT + lead) / FK_SHUFFLE_TIME)) * 2);
+  if (m.stepEnd > m.commit && flightT >= m.commit && flightT < m.stepEnd) return Math.round(Math.abs(Math.sin(Math.PI * 2 * (flightT - m.commit) / (m.stepEnd - m.commit))) * 2);
+  return 0;
+}
 const FK_MIN_BALL_PX = 1.4;
 /**
  * The free-kick ball on SCREEN `since` s after the strike: the engine path (pathAt) through the FK
@@ -386,7 +403,8 @@ export class Stage {
       const since = this.modeTime - shot.strikeAt, t = shot.outcome.target;
       const near = shot.outcome.result === "post" || (shot.outcome.result !== "goal" && (Math.abs(Math.abs(t.x) - 1) < 0.12 || Math.abs(t.y - 1) < 0.1));
       // Near-misses only (no default slow-mo), ≤ 0.5 s of real time.
-      if (near && since > shot.flight * 0.85 && since < shot.flight + 0.1) slow = 0.5;
+      // Free kicks play the engine's flight 1:1 (on-screen flight time = engine time): their near-miss beat starts at the line.
+      if (near && since > shot.flight * (this.fk ? 1 : 0.85) && since < shot.flight + 0.1) slow = 0.5;
     }
     if (this.replaying && this.mode === "shot") {
       slow = Math.min(slow, this.replaying.slow);
@@ -545,6 +563,7 @@ export class Stage {
     const shot = this.shot;
     if (!shot || this.mode !== "shot" || this.kind === "target" || Boolean(this.fk) !== (this.kind === "freekick")) return null;
     const flightT = this.modeTime - shot.strikeAt;
+    if (this.fk) return flightT < -freeKickShuffleLead(this.fk) ? null : freeKickKeeperFrameAt(this.keeper, this.fk, flightT);
     return flightT < 0 ? null : penaltyKeeperFrame(this.keeper, shot.outcome, shot.flight, flightT);
   }
 
@@ -590,10 +609,20 @@ export class Stage {
     if (shot.outcome.result === "save" && shot.outcome.touch === "glove" && after >= 0 && after < GLINT_SECONDS) {
       const ball = penaltyBallArt(shot.outcome.target, shot.curl, 1); glint = this.glint; glint.t = after; glint.x = ball.x; glint.y = ball.y;
     }
+    // Free kicks: a small hop on each shuffle / cross-step (drawing only; never near the crossing, none under reduced motion).
+    const hop = this.fk ? freeKickStepHop(this.fk, flightT, this.reduced) : 0;
+    if (hop) { c.save(); c.translate(0, -hop); }
     drawKeeperFrame(c, frame, {
       alpha: this.keeperAlpha(), arms: mood ? keeperArms(this.keeper, mood, this.time, shot.outcome.plan.x, shot.outcome.plan.y) : undefined,
       after: after >= 0 ? after : undefined, mood: mood ?? undefined, time: flightT, reduced: this.reduced, glint,
     });
+    if (hop) c.restore();
+    // Tipped over: fingertip sparks where the ball met the glove (a flourish after the crossing, off under reduced motion).
+    if (this.fk?.tipOver && !this.reduced && after >= 0 && after < 0.35) {
+      const at = artPoint({ x: shot.outcome.target.x, y: shot.outcome.target.y * GOAL_ASPECT }), k = after / 0.35;
+      c.fillStyle = `rgba(255,255,255,${1 - k})`;
+      for (let i = 0; i < 4; i++) { const a = -Math.PI / 2 + (i - 1.5) * 0.6, d = 3 + k * 7; c.fillRect(Math.round(at.x + Math.cos(a) * d), Math.round(at.y + Math.sin(a) * d), 2, 2); }
+    }
     // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
     const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
     if (frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
@@ -704,6 +733,7 @@ export class Stage {
       if (p >= 1) {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
         if (result === "goal") { x = end.x + (240 - end.x) * 0.1 * q; y = end.y + ease.outBounce(q) * (GOAL.line - 4 - end.y); r = 2.3; }
+        else if (result === "save" && this.fk?.tipOver) { x = end.x + (end.x - 240) * 0.15 * q; y = end.y - 34 * Math.sin(Math.PI * 0.5 * q) + 20 * q * q; r = 2.5 - 0.8 * q; spin = this.time * 20; } // tipped over the bar
         else if (result === "save") { const dir = end.x >= 240 ? 1 : -1; x = end.x + dir * 130 * q; y = end.y + 95 * q - 45 * Math.sin(Math.PI * q); r = 2.5 + 2 * q; spin = this.time * 20; }
         else if (result === "post") { x = end.x + (240 - end.x) * 0.5 * q; y = end.y + 120 * ease.outBounce(q) - 20; r = 2.5 + 2 * q; }
         else if (result === "over") { x = end.x + (end.x - 240) * 0.5 * q; y = end.y - 70 * q; r = 2.5 - 1.2 * q; }
