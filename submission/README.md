@@ -138,7 +138,7 @@ The same checks run in GitHub Actions.
 - The simulated preview starts with 20 RF, which buys two Park balls. Warm-up kicks are
   unlimited, and the Pro and Champions pages are reference builds that the preview wallet
   cannot afford.
-- The sandbox cannot open links, so the in-game stadium selector shows each stadium's path.
+- Stadium links live in a slim bar on the host page above the game, because the sandboxed game cannot navigate.
 - Persistent progress is not supplied by the SDK, so preview progress resets on reload.
 
 **Risks:** live mode (if linked in DEPLOYMENT.md) uses real RF and real wallet transactions. Dice

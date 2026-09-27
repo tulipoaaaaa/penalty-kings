@@ -580,7 +580,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <p>Three stadiums, same odds and 90% return, scaled prices. Each stadium is its own game contract and its own page.</p>
         {TIERS.map(item => <div key={item.id} className="pk-item" data-current={item.id === tier.id}>
           <span><strong>{item.name}</strong> <small>{item.priceRF.toLocaleString("en-US")} RF per ball · top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small></span>
-          <small>{item.id === tier.id ? "You are here" : item.id === "champions" ? "Unlocks when the Pro bank earns it" : `Open ${item.path} on this site`}</small>
+          <small>{item.id === tier.id ? "You are here" : item.id === "champions" && !simulated ? "Unlocks when the Pro bank earns it" : "Switch with the stadium bar above the game"}</small>
         </div>)}
         {simulated && <p className="pk-note">The preview wallet holds 20 simulated RF, so Pro and Champions balls are out of reach here; their odds and prices are shown for reference.</p>}
       </>}
