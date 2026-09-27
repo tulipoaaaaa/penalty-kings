@@ -92,6 +92,10 @@ export class Stage {
   setStadium(id: StadiumId) { this.stadium = id; this.crowd = new Crowd(id); }
   setReduced(value: boolean) { this.reduced = value; this.camera.reduced = value; this.particles.budget = value ? 0.25 : 1; }
   get busy() { return this.mode !== "idle" || Boolean(this.reveal); }
+  /** A moment a kick must not cut short: the walkout or a pack reveal sequence. */
+  get moment() { return this.mode === "walkout" || Boolean(this.reveal); }
+  /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; }
 
   // ── Moments ───────────────────────────────────────────────────────────────
   say(context: CommentaryContext) {
