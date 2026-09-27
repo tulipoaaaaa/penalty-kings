@@ -20,6 +20,8 @@ Adds `submissions/penalty-kings/README.md`.
   The pilot ships without $GBOOT.
 - **Source:** https://github.com/tulipoaaaaa/penalty-kings (FriendSDK v0.1.2)
 - **Playable preview (simulated economy):** https://tulipoaaaaa.github.io/penalty-kings/
+- **Judge path video (59 s):** https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/judge-path.webm
+  (showreel → tutorial → Modes with the next goal → Free Kicks → buy/open a pack → Big Match kick)
 - **Requirements:** a browser wallet on Robinhood mainnet (4663) holding a hardwired
   Generations NFT (generation ≥ 1). The real SDK ownership gate is kept.
 - **Free practice, no wallet:** https://tulipoaaaaa.github.io/penalty-kings/practice/ (a few kicks
@@ -33,10 +35,13 @@ Adds `submissions/penalty-kings/README.md`.
   - Swipe up from the ball to shoot (keyboard: arrows, A/D curl, Space).
   - Free modes: tutorial, Penalties vs 12 keepers, Free Kicks, Target Practice, World Tour
     (30 levels) and a Daily Challenge.
+  - The Modes screen always shows your next goal. Skill Zone goals (top bin, in off the post or bar) pay extra XP.
+    A daily check-in pays XP, with a cosmetic on day 7. Progression is XP and cosmetics only; there is no off-chain currency.
   - Big Match: buy a pack → open (SDK play + settle) → reveal → Bag → choose a ball → kick →
     redeem for RF at any time.
 - **Economy:**
-  - Balls cost 10 / 1,000 / 10,000 RF, with identical odds and a 90.00% RTP (asserted in CI).
+  - Balls cost 10 / 1,000 / 10,000 RF, with identical odds and a 90.00% RTP (asserted in CI). The exact
+    odds are printed on every pack.
   - Rewards are 0–10× the ball price; the top prize is reserved per ball.
   - $GBOOT (100M fixed supply, RF-paired) is a tested, **undeployed** upgrade package, approved as
     a design only. See [docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/GBOOT-UPGRADE.md).
@@ -45,8 +50,9 @@ Adds `submissions/penalty-kings/README.md`.
   Nothing else is deployed. Everything economic in the preview is simulated and labelled. The roadmap is in the README.
 - **Checks** (all run in GitHub Actions):
   - typecheck, `friendsdk check` and the SDK harness at 960 and 360 px;
-  - engine (28), game-logic (34) and referee tests;
-  - browser flow, modes, a 13-scenario action-flow audit and 90-second QA;
+  - engine (31), game-logic (86) and referee tests;
+  - browser flow, modes, a 17-scenario action-flow audit (including 2 s and 5 s randomness waits), phone layouts
+    at 360×800 / 390×844 / 800×360 / 844×390, the free practice page, and a 90-second QA with reduced motion on and off;
   - odds verification and the economy simulator;
   - Foundry: 169 unit/fuzz/invariant tests plus mainnet-fork tests;
   - a real mainnet ownership gate and a secret scan.

@@ -165,15 +165,16 @@ npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champ
 
 **Checks** (in GitHub Actions; the preview only redeploys after a fully green CI run):
 - `friendsdk check` + the SDK browser harness at 960 px and 360 px, and typecheck;
-- engine tests (28): zones, keepers, the difficulty director, the swipe mapping regression table,
+- engine tests (31): zones, keepers, the difficulty director, the swipe mapping regression table,
   free-kick physics;
-- game-logic tests (34): levels, progress, daily, target, the reveal ethics rule, prizes, the
+- game-logic tests (86): levels, progress, daily, target, the reveal ethics rule, prizes, the
   live-price maths, pitch geometry, Bag honesty, and an action-flow state machine covering every
   action in ≈69k states;
 - browser tests:
   - the buy → open → reveal → Bag → kick → redeem flow;
   - every free mode;
-  - a 13-scenario action-flow audit: double release, key plus mouse, walkout, pack reveal, resize mid-swipe, and speed (release → result ≤ 1.2 s);
+  - a 17-scenario action-flow audit: double release, key plus mouse, walkout, pack reveal, resize mid-swipe, 2 s and 5 s randomness waits, and speed (release → result ≤ 1.2 s);
+  - phone layouts at 360×800, 390×844, 800×360 and 844×390, and the free practice page (no wallet or RPC requests);
   - 90-second first-session QA;
 - odds verification (EV 90.00%); the economy simulator; the Skill Cup referee (replay match, signed results);
 - Foundry: 169 unit, fuzz and invariant tests, including the tokenomics v2 vaults, the Bootroom farm bound, the rewards budget invariant, the TWAP oracle
