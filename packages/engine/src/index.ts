@@ -252,6 +252,13 @@ function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: numbe
   if (!plan.wall && !plan.teleport && Math.abs(target.x) > 0.2 && roll() < read) {
     next = { ...next, x: Math.sign(target.x) * clamp(Math.abs(target.x), 0.45, 0.9), y: clamp(target.y, 0.15, 0.85) };
   }
+  // BQ-P2-1: the mime (wall) and the ghost (teleport) skip the read above, so the ladder's harder rungs did not
+  // touch them (the mime was flat, the ghost even got easier). They get ONLY the ladder's extra read: the mime
+  // steps to your side of his wall, the ghost appears where you aimed. NEUTRAL and rungs with read ≤ 0 draw no
+  // roll, so the Skill Cup referee and the easy rungs are unchanged.
+  if ((plan.wall || plan.teleport) && difficulty.read > 0 && roll() < difficulty.read) {
+    next = { ...next, x: clamp(target.x, -0.9, 0.9), y: clamp(target.y, 0.15, 0.85) };
+  }
   return next;
 }
 
