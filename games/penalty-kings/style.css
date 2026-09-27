@@ -703,7 +703,7 @@
   .pk-card { width: clamp(56px, 20cqw, 80px); }
   .pk-carousel { top: calc(var(--pk-pt) + 12px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 20px); overflow: auto; padding: 8px 10px; gap: 6px; font-size: 13px; }
   .pk-title { padding: 16px 12px calc(var(--pk-tb) + 10px); gap: 10px; font-size: 13px; }
-  .pk-attract { padding: 16px 12px calc(var(--pk-tb) + 10px); }
+  .pk-attract { padding: 64px 12px calc(var(--pk-tb) + 10px); } /* the title card starts below the sound toggle (BQ-X6) */
   .pk-attract h1 { font-size: clamp(30px, 11cqw, 52px); }
   .pk-attract-top { padding: 8px 12px 10px; }
   .pk-attract:not(.pk-coldopen) .pk-attract-bottom { padding: 10px 12px; max-width: calc(100cqw - 24px); }
