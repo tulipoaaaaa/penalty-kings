@@ -33,6 +33,12 @@
 .pk-stat, .pk-chip { background: #0b0d1ad9; border: 2px solid #ffffff2e; padding: 0.3em 0.6em; white-space: nowrap; }
 .pk-stat b { color: var(--pk-volt); }
 .pk-chip { font-weight: 700; letter-spacing: 0.06em; }
+/* Shot clock bar (round 6 C14): drains from full to empty; red in the last 1.5 s. */
+.pk-clockbar { position: relative; width: 100%; min-width: 72px; height: 1.3em; background: #0b0d1ad9; border: 2px solid #ffffff2e; box-sizing: border-box; }
+.pk-clockbar[hidden] { display: none; }
+.pk-clockbar i { position: absolute; inset: 0; background: var(--pk-volt); transform-origin: left center; transform: scaleX(var(--left, 1)); }
+.pk-clockbar[data-urgent="true"] i { background: var(--pk-red); }
+.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: 0.85em; line-height: 1.2em; color: #fff; text-shadow: 1px 1px 0 #000; }
 .pk-sim { background: var(--pk-gold); color: var(--pk-ink); border-color: var(--pk-gold); }
 .pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
 
@@ -119,6 +125,8 @@
 .pk-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid #0006; vertical-align: middle; }
 .pk-note { font-size: 0.85em; opacity: 0.85; }
 .pk-roundcard { text-align: center; }
+.pk-plain { list-style: none; padding: 0; margin: 0.4em 0; }
+.pk-plain li { margin: 0.2em 0; }
 .pk-stars { color: #d9a400; letter-spacing: 0.1em; font-size: 1.2em; }
 
 /* Display case (kit bag, Ball Collection). */
@@ -135,7 +143,17 @@
 .pk-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
 .pk-levels button { display: grid; gap: 1px; padding: 6px 8px; }
 .pk-levels small { opacity: 0.8; }
+/* World Tour path (round 6 C16): cities in order, a line joining each city's levels, the next level lit. */
+.pk-path { list-style: none; margin: 0; padding: 0; }
+.pk-city { position: relative; margin-bottom: 10px; padding-left: 14px; border-left: 3px solid var(--pk-line); }
+.pk-city[data-open="true"] { border-left-color: var(--pk-volt); }
+.pk-city[data-open="false"] h3 { opacity: 0.6; }
+.pk-city h3 small { font-weight: 400; opacity: 0.8; }
+.pk-levelpath button[data-next] { outline: 3px solid var(--pk-gold); outline-offset: 1px; }
+.pk-nexttag { font-style: normal; color: var(--pk-gold); }
 .pk-brief { line-height: 1.6; }
+.pk-scoring { margin: 0.3em 0 0.8em; padding-left: 1.2em; }
+.pk-scoring li { margin: 0.2em 0; }
 .pk-book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .pk-keepercard { display: grid; gap: 2px; padding: 6px; border: 1px solid #8884; }
 .pk-keepercard canvas { width: 64px; height: 64px; image-rendering: pixelated; }
@@ -187,6 +205,14 @@
 .pk-summary { text-align: center; }
 .pk-summary h3 { margin: 0; color: var(--pk-gold); }
 .pk-summary p { margin: 0.3em 0; }
+.pk-explain { border: 2px solid var(--pk-gold); padding: 6px 10px; margin-bottom: 8px; }
+.pk-explain h3 { margin: 0 0 4px; color: var(--pk-gold); font-size: 1em; }
+.pk-explain p, .pk-explain ul { margin: 0.3em 0; }
+.pk-explain ul { padding-left: 1.2em; }
+.pk-tokens { margin: 0.3em 0; padding-left: 1.2em; }
+.pk-tokens li { margin: 0.15em 0; }
+.pk-confirm { border: 2px solid var(--pk-red); padding: 6px 10px; margin: 6px 0; }
+.pk-confirm p { margin: 0 0 6px; }
 .pk-loss { color: var(--pk-red); }
 .pk-gain { color: var(--pk-volt); }
 .pk-counts { display: flex; flex-wrap: wrap; gap: 8px; font-weight: 700; }

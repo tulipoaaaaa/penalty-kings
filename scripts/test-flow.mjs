@@ -13,10 +13,17 @@ const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
 const errors = [];
 const results = [];
 const ok = name => { results.push(name); console.log(`  ✓ ${name}`); };
+/** Save-code helpers (game/savecode.ts format): CRC-32 over "friendId:payload", payload = base64url JSON. */
+const crc32 = text => { let crc = ~0; for (let i = 0; i < text.length; i++) { crc ^= text.charCodeAt(i); for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (~crc >>> 0).toString(16).padStart(8, "0"); };
+const editSaveCode = (code, friendId, change) => {
+  const [prefix, payload] = code.trim().split(".");
+  const next = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")), ...change }), "utf8").toString("base64url");
+  return `${prefix}.${next}.${crc32(`${friendId}:${next}`)}`;
+};
 
 await testGame("./games/penalty-kings", {
   width, timeout: 90_000,
-  check: async ({ page, game }) => {
+  check: async ({ page, game, friendId }) => {
     page.on("pageerror", error => errors.push(String(error)));
     const canvas = game.locator("canvas.pk-canvas");
     const flow = () => game.locator("body").evaluate(() => window.__pkFlow());
@@ -75,9 +82,29 @@ await testGame("./games/penalty-kings", {
     ok("swipe released outside the canvas shoots once (tutorial finished on 3 kicks)");
     await game.getByRole("button", { name: "Modes", exact: true }).click();
 
-    // 5. Penalties (5 s shot clock): an open menu freezes the clock; closing it does not time out.
+    // 5a. Round 6 C14: no shot clock in the first 3 matches after the tutorial (no bar, no timeout).
     await game.getByTestId("mode-penalties").click();
     await waitShootable();
+    assert.equal(await game.getByTestId("shot-clock").isVisible(), false, "no shot-clock bar in the first matches");
+    await page.waitForTimeout(6000);
+    assert.equal(await game.locator(".pk-banner").count(), 0, "no timeout in the first matches");
+    assert.equal(await kicks(), 0);
+    ok("first matches after the tutorial: shot clock off");
+
+    // Restore a save code with 3 matches played after the tutorial, so the clock is on from here.
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Settings", exact: true }).click();
+    await game.getByTestId("save-code-in").fill(editSaveCode(await game.getByTestId("save-code-out").inputValue(), friendId, { matches: 4 }));
+    await game.getByTestId("save-code-restore").click();
+    await game.getByTestId("save-code-note").filter({ hasText: /restored/ }).waitFor();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Change mode", exact: true }).click();
+
+    // 5b. Penalties (shot clock on, shown as a bar): an open menu freezes the clock; closing it does not time out.
+    await game.getByTestId("mode-penalties").click();
+    await waitShootable();
+    await game.getByTestId("shot-clock").waitFor({ state: "visible", timeout: 2000 });
     await game.getByTestId("menu").click();
     await page.waitForTimeout(6500);
     await game.getByRole("button", { name: "Close" }).first().click();
@@ -85,6 +112,17 @@ await testGame("./games/penalty-kings", {
     assert.equal(await game.locator(".pk-banner").count(), 0, "no TIME! after closing the menu");
     assert.equal(await kicks(), 0);
     ok("menu open for 6.5 s during a 5 s shot clock: no timeout");
+
+    // 5c. Round 6 C14: when the clock runs out the kick is lost OUT LOUD, with a pause before the next kick.
+    await game.locator(".pk-banner strong").filter({ hasText: "Time up — kick lost" }).waitFor({ timeout: 7000 });
+    const lostAt = Date.now();
+    await page.waitForTimeout(900);
+    assert.equal(await game.locator(".pk-banner strong").textContent(), "Time up — kick lost", "the time-up banner stays up");
+    assert.equal((await flow()).shootable, false, "no next kick during the pause");
+    await waitShootable();
+    assert.ok(Date.now() - lostAt >= 1300, `pause before the next kick (${Date.now() - lostAt} ms)`);
+    assert.equal(await kicks(), 1, "the lost kick counts");
+    ok("shot clock out: 'Time up — kick lost', a short pause, then the next kick");
 
     // 6. Swipe starting off-canvas (above the pitch, in the HUD band) and dragged over the ball: no shot.
     await waitShootable();
@@ -104,12 +142,13 @@ await testGame("./games/penalty-kings", {
 
     // 8. Mode switch mid-kick: Menu and the pot banner are disabled while the kick plays.
     await waitShootable();
+    const before8 = await kicks();
     await swipe();
     await page.waitForTimeout(150);
     assert.equal(await game.getByTestId("menu").isDisabled(), true, "Menu disabled mid-kick");
     assert.equal(await game.getByTestId("pot").isDisabled(), true, "pot banner disabled mid-kick");
     await waitIdleKick();
-    assert.equal(await kicks(), 1);
+    assert.equal(await kicks(), before8 + 1);
     ok("no menu or mode switch mid-kick");
 
     // 9. Quick shot during a free kick (double click) → one kick.

@@ -82,7 +82,8 @@ export function transition(s: FlowState, action: FlowAction, options: { sessionE
     case "start-swipe": case "tick-clock": return s;
     case "resolve":
       if (options.sessionEnds) return { ...s, phase: "idle", inFlight: 0, menu: true };
-      return s.match ? { ...s, phase: "idle", inFlight: 0, carousel: s.balls > 0 } : { ...s, phase: "aim", inFlight: 0 };
+      // Big Match remembers the ball (round 6 C12): the next kick aims with it; the carousel opens only on "Change ball".
+      return { ...s, phase: "aim", inFlight: 0 };
     case "open-menu": return { ...s, menu: true };
     case "close-menu": return { ...s, menu: false };
     case "start-mode": return { ...s, screen: "play", session: true, match: false, phase: "aim", menu: false, carousel: false, inFlight: 0 };

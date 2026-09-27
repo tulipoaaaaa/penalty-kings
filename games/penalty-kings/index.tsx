@@ -8,19 +8,20 @@ import { maximumPrize, type GameSnapshot } from "@rarefriends/friendsdk/game";
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
-  KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, streakMultiplier, shotTarget, clamp,
+  KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, shotTarget, clamp,
   swipeToShot, aimedShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
-import { Stage, RARITY_NAMES } from "./gfx/stage.js";
+import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
-import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
+import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
+import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
@@ -32,7 +33,7 @@ import { MatchDirector, type KickFacts } from "./game/director.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
-import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
+import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
@@ -61,6 +62,7 @@ const RIVALS = ["Rival Friend A", "Rival Friend B", "Rival Friend C", "Rival Fri
 const SIM_RACE = [2400, 1900, 1500, 1210, 1000, 820, 640, 500, 360, 240, 120];
 const SIM_SKILL = [9350, 7900, 6120, 4600, 3800];
 const LADDER_SHOWCASE: readonly KeeperId[] = ["squirrel", "peacock", "octopus", "mime", "disco", "sumo", "robot", "ghost", "finalwall"];
+const TIME_UP = "Time up — kick lost", TIME_UP_PAUSE_MS = 1600;
 const LABELS: Record<ShotResult | "wall", string> = { goal: "GOAL!", save: "SAVED!", post: "OFF THE POST!", over: "OVER THE BAR!", wide: "WIDE!", wall: "BLOCKED!" };
 const vibrate = (pattern: number | number[]) => { try { navigator.vibrate?.(pattern); } catch { /* iPhone Safari: unsupported, skip */ } };
 
@@ -85,6 +87,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [gboot, setGboot] = useState(simulated ? SIM_STARTING_GBOOT : 0), [burned, setBurned] = useState(0);
   const [cupRF, setCupRF] = useState(SIM_CUP_SEED_RF), [cupGboot, setCupGboot] = useState(SIM_CUP_SEED_GBOOT);
   const [race, setRace] = useState(0), [wildcards, setWildcards] = useState(0);
+  /** A Wildcard spend waits for this confirmation (round 6 C11). */
+  const [confirmWildcard, setConfirmWildcard] = useState(false);
+  useEffect(() => { setConfirmWildcard(false); }, [menu]);
   const [lastBigPull, setLastBigPull] = useState<string | null>(null);
   const [owned, setOwned] = useState<Set<string>>(() => new Set(ALL_COSMETICS.filter(item => item.price === 0 && !item.name.includes("★")).map(item => item.id)));
   const [equipped, setEquipped] = useState<Record<Cosmetic["kind"], string>>({ boots: "boots-classic", kit: "kit-white", net: "net-white", celebration: "cele-knee-slide" });
@@ -95,7 +100,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
   const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
   const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number } | null>(null);
-  const [selectedBall, setSelectedBall] = useState<string | null>(null);
+  /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
+  const [selectedBall, setSelectedBall] = useState<string | null>(() => loadLastBall());
   const [carousel, setCarousel] = useState(false);
   const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
   /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
@@ -128,6 +134,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** Time the game clocks were frozen (paused, hidden, menu, pack, carousel, walkout): shot clock and target timer use clockNow(). */
   const frozenMs = useRef(0);
   const clockNow = () => performance.now() - frozenMs.current;
+  /**
+   * Target Practice motion (round 6 C8): seconds of target movement. It runs during the shot (the
+   * targets keep moving on screen while the ball flies; during the shot it follows the Stage's own
+   * kick clock, so the drawn positions at the crossing are exactly the judged ones) and stops in menus.
+   * The 60 s countdown (clockNow) is frozen during the shot animation instead.
+   */
+  const targetMotion = useRef<{ t: number; release: number | null }>({ t: 0, release: null });
+  /** The target hit by the kick in flight (judged at release, shown when the ball arrives). */
+  const pendingTarget = useRef<{ hit: Target | null; combo: number } | null>(null);
+  const hitTargets = useRef(new Set<number>());
   /** The action-flow state (game/flow.ts), read synchronously from refs. */
   const flow = (): FlowState => {
     const c = live.current;
@@ -138,10 +154,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const setPhaseNow = (next: Phase) => { live.current = { ...live.current, phase: next }; setPhase(next); };
   const pointer = useRef<number | null>(null);
   const timeoutTimer = useRef(0);
+  /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
+  const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
   const timing = useRef<{ release: number; resolved: number; log: { kind: string; toResult: number; toReady: number }[] }>({ release: 0, resolved: 0, log: [] });
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
-  const latest = useRef({ tickAim: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
+  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
 
   const maxPrize = maximumPrize(definition);
   const pending = snapshot?.plays.find(play => play.outcomeId === null) ?? null;
@@ -231,10 +249,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let frame = 0, last = performance.now();
     const loop = (time: number) => {
       const current = live.current, frozen = current.paused || document.hidden;
-      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment)) frozenMs.current += time - last;
+      // Target Practice: the 60 s clock also stops while a shot plays (round 6 C8).
+      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
       const dt = frozen ? 0 : Math.min(0.05, (time - last) / 1000); last = time;
       latest.current.tickAim(dt);
       scene.update(dt);
+      latest.current.tickTargets(dt);
       scene.render(context);
       frame = requestAnimationFrame(loop);
     };
@@ -320,14 +340,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "tutorial") return { ...DIFFICULTY_LADDER[0], clock: 0 };
     return DIFFICULTY_LADDER[current.rung];
   }
-  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" ? 0 : difficultyFor(current).clock);
+  /** Shot clock seconds (0 = off): off in the tutorial, Target Practice and the first 3 matches (the Skill Cup keeps the referee's rules). */
+  const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" || (current.mode !== "skill" && !shotClockOn(progressRef.current)) ? 0 : difficultyFor(current).clock);
   /** Aim assist strength for a penalty/target kick: the reticle and the kick both use it (WYSIWYG). */
   const kickAssist = (current: Session) => Math.max(difficultyFor(current).assist, current.mode === "skill" ? 0 : assist * 0.5);
 
   // ── Aiming (keyboard, clock, live previews) ─────────────────────────────
   function tickAim(dt: number) {
     const current = live.current, scene = stage.current;
-    if (!scene || !current.session || !canShoot(flow())) { if (scene && current.phase !== "aim") scene.clock = null; return; }
+    if (!scene || !current.session || !canShoot(flow())) { if (scene && current.phase !== "aim") { scene.clock = null; showClock(null); } return; }
     const s = current.session, k = keys.current, am = keyAim.current;
     if (k.has("ArrowLeft")) am.aimX = clamp(am.aimX - dt * 1.2, -1.4, 1.4);
     if (k.has("ArrowRight")) am.aimX = clamp(am.aimX + dt * 1.2, -1.4, 1.4);
@@ -338,9 +359,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const total = clockFor(s);
     if (total > 0) {
       const left = total - (clockNow() - aimStarted.current) / 1000;
-      scene.clock = { left: Math.max(0, left), total };
+      scene.clock = { left: Math.max(0, left), total }; showClock(scene.clock);
       if (left <= 0) { timeout(); return; }
-    } else scene.clock = null;
+    } else { scene.clock = null; showClock(null); }
     // Live aim display: reticle (penalties/target) or trajectory preview (free kicks), faded by assist.
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficultyFor(s), s.streak));
     if (s.kind === "freekick" && s.setup) {
@@ -355,11 +376,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       // WYSIWYG: the reticle is the landing point (wobble, assist and curl drift included, as shootPenalty applies them) for the WHOLE drag; full for the first 5 kicks, then faint.
       scene.reticle = { x: target.x, y: target.y, power: aimed.power, curl: aimed.curl, active: Boolean(partial) || am.charging, alpha: kicksTaken.current < 5 ? 1 : Math.max(0.35, assist) };
     }
-    if (s.kind === "target" && s.target) {
-      const t = (clockNow() - s.target.startedAt) / 1000;
-      scene.targets = s.target.targets.map(target => ({ ...targetAt(target, t), r: target.r, value: target.value }));
-      if (t >= TARGET_SECONDS) endSession(s);
-    }
+    if (s.kind === "target" && s.target && (clockNow() - s.target.startedAt) / 1000 >= TARGET_SECONDS) endSession(s);
+  }
+
+  /** Target Practice: move the targets (also during the flight; frozen in menus) and draw them. */
+  function tickTargets(dt: number) {
+    const c = live.current, scene = stage.current, s = c.session;
+    if (!scene || !s || s.kind !== "target" || !s.target) return;
+    const motion = targetMotion.current, kick = scene.kickClock;
+    if (motion.release !== null && kick !== null) motion.t = motion.release + kick; // the Stage's kick clock: drawn = judged
+    else if (!c.menu && !c.pack && !c.carousel && !c.paused) motion.t += dt;
+    scene.targets = s.target.targets.map(target => ({ ...targetAt(target, motion.t), r: target.r, value: target.value, hit: hitTargets.current.has(target.id) }));
   }
 
   // ── Sessions ────────────────────────────────────────────────────────────
@@ -384,6 +411,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function beginSession(next: Session) {
     const scene = stage.current;
     if (inFlight.current) cancelKick();
+    targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     setSession(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
       scene.kind = next.kind; scene.keeper = next.keeper; scene.streak = 0; scene.setScore(0);
@@ -406,7 +434,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "daily") { setMenu("daily"); return; }
     if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
     if (mode === "skill") { enterSkillCup(); return; }
-    if (mode === "match") { if (bag.some(ball => !ball.sample)) { setScreen("play"); beginSession(newSession("match")); setSelectedBall(selectedBall ?? bag.find(ball => !ball.sample)!.id); setCarousel(true); } else setMenu("balls"); return; }
+    // Big Match (round 6 C12): kick straight away with the last-used ball (or the best one); "Change ball" opens the carousel.
+    if (mode === "match") { const id = lastUsedBall(); if (id) kickWith(id); else setMenu("balls"); return; }
     beginSession(newSession(mode));
   }
 
@@ -452,12 +481,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const shot = aimedShot(raw, wobble, kickAssist(current));
     const index = current.kicks.length;
     if (current.kind === "target" && current.target) {
-      const t = (clockNow() - current.target.startedAt) / 1000;
-      const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo);
-      const target = shotTarget(shot);
+      // Judged where the targets are DRAWN when the ball crosses: release + the Stage's strike + flight time.
+      const target = shotTarget(shot), t = targetMotion.current.t;
+      const hit = resolveTargetShot(shot, current.target.targets, t, current.target.combo, STRIKE_AT + penaltyFlight(target.time));
       const result: ShotResult = Math.abs(target.x) > 1 ? "wide" : target.y > 1 ? "over" : hit.hit || hit.crossbar ? "goal" : "save";
       pendingKick.current = { record: { result, zone: "centre", points: hit.points, x: target.x, y: target.y }, result };
-      setSession({ ...current, target: { ...current.target, combo: hit.combo, hits: current.target.hits + (hit.hit ? 1 : 0), targets: hit.hit ? current.target.targets.filter(item => item !== hit.hit) : current.target.targets } });
+      pendingTarget.current = { hit: hit.hit, combo: hit.combo };
+      targetMotion.current.release = t;
       scene.play({ result, target, plan: keeperPlan(keeperById("mouse"), 1, target), zone: "centre", postIn: false }, shot.curl);
       return;
     }
@@ -497,14 +527,23 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     scene.cue = current.kind === "target" ? null : cue.say; pendingWave.current = cue.wave;
   }
 
+  /** The countdown bar: fraction left, red in the last 1.5 s; hidden when the clock is off. */
+  function showClock(clock: { left: number; total: number } | null) {
+    const bar = clockBar.current; if (!bar) return;
+    bar.hidden = !clock;
+    if (clock) { bar.style.setProperty("--left", String(Math.max(0, Math.min(1, clock.left / clock.total)))); bar.dataset.urgent = String(clock.left < 1.5); bar.setAttribute("aria-valuenow", String(Math.ceil(clock.left))); }
+  }
+
+  /** The shot clock ran out: never a silent loss. "Time up — kick lost" stays up for a short pause before the next kick. */
   function timeout() {
     const current = live.current.session;
     if (!current || !may("tick-clock")) return;
     inFlight.current = 1; const id = ++kickId.current; setPhaseNow("shooting");
     swipe.current = null; pointer.current = null; keyAim.current.charging = false;
+    showClock(null); if (stage.current) { stage.current.clock = null; stage.current.reticle = null; }
     pendingKick.current = { record: { result: "wide", zone: "centre", points: 0, x: 0, y: 0 }, result: "wide" };
-    setBanner({ text: "TIME!", sub: "The shot clock ran out: that counts as a miss.", tone: "miss" });
-    timeoutTimer.current = window.setTimeout(() => { if (kickId.current !== id) return; latest.current.onResolved("wide", true); latest.current.onKickDone(); }, 900);
+    setBanner({ text: TIME_UP, sub: "The shot clock ran out. Next kick in a moment.", tone: "miss" });
+    timeoutTimer.current = window.setTimeout(() => { if (kickId.current !== id) return; latest.current.onResolved("wide", true); latest.current.onKickDone(); }, TIME_UP_PAUSE_MS);
   }
 
   // ── Results of a kick ───────────────────────────────────────────────────
@@ -520,33 +559,44 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const streak = goal ? current.streak + 1 : 0;
     const kicks = [...current.kicks, record], points = current.points + record.points;
     let next: Session = { ...current, kicks, points, streak };
+    // Target Practice: the hit, combo and count show when the ball arrives (not at release).
+    const targetHit = pendingTarget.current; pendingTarget.current = null;
+    if (current.kind === "target" && current.target) {
+      const combo = timedOut ? 0 : targetHit?.combo ?? 0;
+      if (targetHit?.hit) hitTargets.current.add(targetHit.hit.id);
+      next = { ...next, target: { ...current.target, combo, hits: current.target.hits + (targetHit?.hit ? 1 : 0) } };
+    }
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = streak; }
-    let sub = timedOut ? "Shot clock" : goal ? `+${formatNumber(record.points)} pts · ${record.zone === "bin" ? "TOP BIN ×5" : record.zone === "corner" ? "corner ×3" : record.zone === "side" ? "side ×2" : "centre ×1"}${record.postIn ? " · in off the post +50%" : ""}${record.knuckle ? " · knuckleball ×2" : ""}` : "Streak reset";
-    if (current.kind === "target") sub = record.points ? `+${formatNumber(record.points)} · combo ×${current.target?.combo ?? 1}` : "Miss: combo reset";
+    // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${streak >= 2 ? ` · ${streak} in a row` : ""}` : current.streak >= 2 ? `Your run of ${current.streak} goals ends` : "No goal this time";
+    if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
     if (xp) addXp(xp);
-    // Big Match: 5 kicks, then sudden death at ×2 if 3+ goals (unchanged rule).
+    // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
       const regular = kicks.length <= 5 && !current.suddenDeath;
-      if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · SUDDEN DEATH: ×2 until you miss"; scene?.say("sudden-death"); }
+      if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
+      if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
+    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;
   }
 
   function onKickDone() {
-    const current = live.current.session;
+    let current = live.current.session;
     if (!inFlight.current) return; // a cancelled kick, or a duplicate "done"
     inFlight.current = 0;
     { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved) }); t.release = 0; }
     setBanner(null);
     if (!current) return;
     if (current.kind === "target") {
+      targetMotion.current.release = null;
+      if (current.target && hitTargets.current.size) { const gone = hitTargets.current; current = { ...current, target: { ...current.target, targets: current.target.targets.filter(item => !gone.has(item.id)) } }; hitTargets.current = new Set(); setSession(current); }
       const t = current.target ? (clockNow() - current.target.startedAt) / 1000 : TARGET_SECONDS;
       if (t >= TARGET_SECONDS) { endSession(current); return; }
       if (current.target && current.target.targets.length === 0) { const round = current.target.round + 1; const updated = { ...current, target: { ...current.target, round, targets: spawnTargets(current.seed, round) } }; setSession(updated); startAim(updated); return; }
@@ -555,7 +605,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "match") {
       const done = current.suddenDeath ? current.kicks[current.kicks.length - 1]?.result !== "goal" : current.kicks.length >= 5 && !current.suddenDeath;
       if (done) { endSession(current); return; }
-      setPhaseNow("idle"); setCarousel(true); return;
+      // The same ball again (round 6 C12): the carousel only opens on "Change ball".
+      const ball = current.ball, held = ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample);
+      if (held) { startAim(current); return; }
+      setPhaseNow("idle"); return;
     }
     if (current.kicks.length >= current.total) { endSession(current); return; }
     // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
@@ -600,7 +653,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "penalties") updated.best = { ...updated.best, penalties: Math.max(p.best.penalties, current.points) };
       if (current.mode === "freekicks") updated.best = { ...updated.best, freekicks: Math.max(p.best.freekicks, current.points) };
-      if (current.mode === "target") { updated.best = { ...updated.best, target: Math.max(p.best.target, current.points) }; xp += Math.round(current.points / 100) * XP.target; result.title = `Time! ${current.target?.hits ?? 0} targets`; }
+      if (current.mode === "target") { updated.best = { ...updated.best, target: Math.max(p.best.target, current.points) }; xp += Math.round(current.points / 100) * XP.target; const hits = current.target?.hits ?? 0; result.title = `Time up! You hit ${hits} target${hits === 1 ? "" : "s"}`; }
       if (current.mode === "tour" && current.level) {
         const stars = starsFor(current.level, current.kicks), before = p.stars[current.level.id] ?? 0;
         result.stars = stars; result.title = `${current.level.name}: ${stars ? "cleared" : "not yet"}`;
@@ -615,7 +668,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "match") {
         const top10 = raceTable[Math.min(9, raceTable.length - 1)].points, gap = Math.max(0, top10 - race + 1);
-        result.match = { rf: `${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())}) pulled in balls this session${tag}`, gboot: `+${formatNumber(earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
+        // Results in plain words (round 6 C12), with the true numbers.
+        result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
+        result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
+        result.match = {
+          rf: earned.rf > 0n ? `The balls you opened this session are worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
+          gboot: `$GBOOT dropped by your packs this session: +${formatNumber(earned.gboot)}${simulated ? " (simulated)" : " (estimate, paid weekly)"}.`,
+          race: `Golden Boot Cup race: +${formatNumber(earned.race)} points this session${tag}.`,
+          toTop10: raceRank <= 10 ? `You are #${raceRank} in the race${tag}.` : `You need ${formatNumber(gap)} more points to reach the top 10${tag}.`,
+        };
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -696,8 +757,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current.session;
       if (current?.mode === "match" && current.ball?.recordId === record.id) {
         setSession({ ...current, ball: undefined }); if (live.current.phase === "aim") setPhaseNow("idle");
-        if (selectedBall === record.id) setSelectedBall(null);
-      } setMessage(`Redeemed a ${RARITY_NAMES[record.rarity]} for ${rf(definition.outcomes[record.rarity].reward)}.`); });
+      }
+      if (selectedBall === record.id) { setSelectedBall(null); saveLastBall(null); } setMessage(`Redeemed a ${RARITY_NAMES[record.rarity]} for ${rf(definition.outcomes[record.rarity].reward)}.`); });
   }
 
   /** BAG / CAROUSEL → kick with this ball (Big Match). Choice changes only skill-layer fields. */
@@ -709,11 +770,29 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.rarity = style.fx; scene.lucky = style.luckyTrail; scene.season = record.season; scene.crowd.react(style.crowd);
     }
   }
+  /** The last ball kicked with, if still in the Bag; otherwise the most valuable ball held. */
+  function lastUsedBall() {
+    const held = bagRef.current.filter(ball => !ball.sample);
+    return held.find(ball => ball.id === selectedBall)?.id ?? [...held].sort((a, b) => b.rarity - a.rarity)[0]?.id ?? null;
+  }
+  /** "Change ball": leave the aim (never mid-kick) and open the carousel, under the open-carousel guard. */
+  function changeBall() {
+    const state = flow();
+    if (state.phase === "shooting" || state.inFlight > 0 || !allowed({ ...state, phase: "idle" }, "open-carousel")) return;
+    if (state.phase === "aim") { swipe.current = null; pointer.current = null; keyAim.current.charging = false; setPhaseNow("idle"); }
+    live.current = { ...live.current, carousel: true }; setCarousel(true);
+  }
+  /** Closing the carousel goes back to aiming with the current ball (if one is still held). */
+  function closeCarousel() {
+    live.current = { ...live.current, carousel: false }; setCarousel(false);
+    const current = live.current.session, ball = current?.ball;
+    if (current?.mode === "match" && ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample) && !inFlight.current) startAim(current);
+  }
   function kickWith(id: string | null) {
     const record = bagRef.current.find(ball => ball.id === id && !ball.sample);
     if (!record) { setMenu("balls"); return; }
     if (!may("kick-with")) return;
-    chooseBall(record.id);
+    chooseBall(record.id); saveLastBall(record.id);
     const current = live.current.session;
     const session = current && current.mode === "match" ? { ...current, ball: { recordId: record.id, rarity: record.rarity } } : { ...newSession("match"), ball: { recordId: record.id, rarity: record.rarity } };
     if (!current || current.mode !== "match") beginSession(session); else setSession(session);
@@ -770,7 +849,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
   (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log }; };
-  latest.current = { tickAim, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
+  latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
   function swipeOptions(current: Session) {
@@ -807,8 +886,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const s = session, inMatch = s?.mode === "match";
   const skillTable = [...skill].sort((a, b) => b.score - a.score || a.id - b.id);
   const scenario = dailyScenario(today);
+  // World Tour results (round 6 C16): "Next level" opens the following level's brief, or says what opens its city.
+  const after = menu === "results" && s?.mode === "tour" && s.level ? levelAfter(LEVELS, s.level, progress) : null;
+  const tourNext = after && "level" in after ? { onNext: () => { setPendingLevel(after.level); setMenu("tour"); } } : after;
   const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
-  const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))}s · ×${s.target.combo}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
+  const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
   return <section className="pk" aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
     <div className="pk-stage" inert={Boolean(menu) || paused || screen !== "play" || undefined}>
@@ -834,12 +916,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {screen === "play" && s && <>
         <header className="pk-hud pk-hud-left">
-          <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : `${modeName.toUpperCase()} · ${rungName(s.rung).toUpperCase()}`}</span>
-          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Balls <b data-testid="balls">{balls.toString()}</b></span>
+          <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : modeName.toUpperCase()}</span>
+          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Bag <b data-testid="bag-count">{bag.filter(ball => !ball.sample).length}</b> · Unopened <b data-testid="unopened">{balls.toString()}</b></span>
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
-          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel} · ×{streakMultiplier(s.streak)}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
+          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel}{s.kind !== "target" && s.streak >= 2 ? ` · ${s.streak} in a row` : ""}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
+          <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={5}><span>Shot clock</span><i /></div>
         </header>
       </>}
 
@@ -847,10 +930,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
       {pack && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={flipCard} onRevealAll={revealAll} onDone={() => { setPack(null); setMenu("bag"); }} />}
-      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={() => setCarousel(false)} />}
+      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={closeCarousel} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
-        {inMatch && phase === "idle" && !carousel && <button type="button" className="pk-primary" disabled={busy || paused} onClick={() => { if (may("open-carousel")) setCarousel(true); }} data-testid="choose-ball">Choose ball</button>}
+        {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}
         {phase === "aim" && s && !pack && !carousel && <button type="button" onClick={() => (s.kind === "freekick" && s.setup ? shootFreeKick(keyFreeKick({ ...keyAim.current, power: 0.55, curl: keyAim.current.curl || 0.6, top: 0.5 }, s.setup)) : shootPenalty({ aimX: keyAim.current.aimX, aimY: keyAim.current.aimY, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
         <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
       </nav>}
@@ -892,7 +975,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "balls" && <>
-        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} />
+        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} />
         {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
         <BallCase definition={definition} tag={tag} />
         <StadiumPrices source={prizeSource} now={now} />
@@ -916,13 +999,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} onShare={() => void shareCard(`Penalty Kings Daily ${today}: ${formatNumber(progress.daily.best)} pts`)} />}
 
       {menu === "cups" && <>
+        <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
         <h3>Golden Boot Cup: this week</h3>
         <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium (Park ×1, Pro ×100, Champions ×1,000), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
         {simulated && <><ol className="pk-table">{raceTable.slice(0, 10).map((row, index) => <li key={row.name} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.points)}</b></li>)}</ol>
           {raceRank > 10 && <p>You: #{raceRank} with {formatNumber(race)} pts{tag}.</p>}
           <p>Pot $GBOOT: {formatNumber(cupGboot)}{tag}</p>
-          <button type="button" disabled={gboot < WILDCARD_PRICE || busy} onClick={() => { setGboot(value => value - WILDCARD_PRICE); setBurned(value => value + WILDCARD_PRICE / 2); setCupGboot(value => value + WILDCARD_PRICE / 2); setWildcards(value => value + 1); }}>
-            Wildcard entry · {WILDCARD_PRICE} $GBOOT (50% burned, 50% to pot)</button>
+          {confirmWildcard
+            ? <div className="pk-confirm" role="alertdialog" aria-label="Confirm Wildcard" data-testid="wildcard-confirm">
+              <p>Spend <b>{WILDCARD_PRICE} $GBOOT</b>{tag} on one Wildcard entry? Half ({WILDCARD_PRICE / 2}) is burned and gone forever; half goes to the Cup pot. A Wildcard is an extra draw, not a prize. You have {formatNumber(gboot)} $GBOOT{tag}.</p>
+              <div className="pk-buyrow">
+                <button type="button" className="pk-primary" disabled={gboot < WILDCARD_PRICE || busy} data-testid="wildcard-yes" onClick={() => { setConfirmWildcard(false); if (gboot < WILDCARD_PRICE) return; setGboot(value => value - WILDCARD_PRICE); setBurned(value => value + WILDCARD_PRICE / 2); setCupGboot(value => value + WILDCARD_PRICE / 2); setWildcards(value => value + 1); }}>Yes, spend {WILDCARD_PRICE} $GBOOT</button>
+                <button type="button" autoFocus onClick={() => setConfirmWildcard(false)}>Cancel</button>
+              </div>
+            </div>
+            : <button type="button" disabled={gboot < WILDCARD_PRICE || busy} onClick={() => setConfirmWildcard(true)} data-testid="wildcard">
+              Wildcard entry · {WILDCARD_PRICE} $GBOOT (50% burned, 50% to pot)</button>}
           <p className="pk-note">Wildcards: {wildcards}{tag}. Live wildcard draws use on-chain randomness (Clubhouse).</p></>}
         {!simulated && <p>The live pot, race table and payouts are computed each week from on-chain ball settlements by a public script and published with transaction links in docs/WEEKLY.md. This screen does not invent live numbers.</p>}
         <h3>Skill Cup: 5 kicks vs THE FINAL WALL</h3>
@@ -952,7 +1044,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <ol>
           <li>Swipe up from the ball. Where you release decides the shot; speed is power; a curved swipe bends it. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power.</li>
           <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. Streaks multiply up to ×3.</li>
-          <li>A 5-second shot clock keeps the pressure on (off in the tutorial). Aim wobble grows with your streak.</li>
+          <li>After your first 3 matches, a shot clock (4–5 seconds, shown as a bar) keeps the pressure on; if it runs out, that kick is lost. It is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
           <li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
           <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome, 90% average return), and keep them in your Bag. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
           <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>
@@ -982,7 +1074,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </div>
       </div>}
 
-      {menu === "results" && summary && <Results summary={summary} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
         onAgain={() => { const last = session; setMenu(null); if (!last) { setScreen("modes"); return; }
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "skill") enterSkillCup(); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
@@ -1002,6 +1094,9 @@ function menuTitle(menu: Exclude<Menu, null>) {
 /** Bag records persist on this device when the browser allows (the sandboxed preview may not). */
 const BAG_KEY = "penalty-kings/bag/v1";
 function loadBag(): BallRecord[] { try { const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(BAG_KEY); return raw ? (JSON.parse(raw) as BallRecord[]) : []; } catch { return []; } }
+const LAST_BALL_KEY = "penalty-kings/last-ball/v1";
+function loadLastBall(): string | null { try { return typeof localStorage === "undefined" ? null : localStorage.getItem(LAST_BALL_KEY); } catch { return null; } }
+function saveLastBall(id: string | null) { try { if (id) localStorage.setItem(LAST_BALL_KEY, id); else localStorage.removeItem(LAST_BALL_KEY); } catch { /* not persisted */ } }
 function saveBag(records: readonly BallRecord[]) { try { localStorage.setItem(BAG_KEY, JSON.stringify(records.filter(record => !record.sample))); } catch { /* not persisted */ } }
 /** Stable 32-bit hash of a ball id (kick seeds for the skill layer). */
 function hashId(id: string) { let h = 2166136261; for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }

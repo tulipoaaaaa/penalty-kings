@@ -2,12 +2,13 @@
 import { useEffect, useRef } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
-import { KEEPERS, keeperById, DIFFICULTY_LADDER, type KeeperId } from "@penalty-kings/engine";
-import { RARITIES, TIERS, formatNumber, type Tier } from "./economy.js";
+import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
+import { RARITIES, TIERS, TOKEN_LINES, formatNumber, type Tier } from "./economy.js";
 import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { MODES, isUnlocked, levelFromXp, totalStars, STADIUM_STARS, LADDER, type Progress, type ModeId } from "./game/progress.js";
+import { MODES, isUnlocked, levelFromXp, totalStars, LADDER, type Progress, type ModeId } from "./game/progress.js";
+import { CITIES, LEVELS_PER_CITY, cityLevels, cityOpen, cityStars, nextLevel, starsToOpen } from "./game/tour.js";
 import { describe, type Level } from "./game/objectives.js";
 import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPrice } from "./game/price.js";
@@ -97,6 +98,11 @@ export function RfPriceLine({ price, now }: { price: RfPrice; now: number }) {
   </p>;
 }
 
+/** "RF: … / Ball: … / $GBOOT: … / Lace: … / Burn: …" (economy TOKEN_LINES, word for word). */
+export function TokenExplainer() {
+  return <ul className="pk-tokens" data-testid="token-lines">{TOKEN_LINES.map(([term, text]) => <li key={term}><b>{term}:</b> {text}</li>)}</ul>;
+}
+
 export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (mode: ModeId) => void }) {
   const { level } = levelFromXp(progress.xp);
   return <div className="pk-modes">
@@ -109,21 +115,26 @@ export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (
   </div>;
 }
 
+/** World Tour (round 6 C16): a path of 6 cities × 5 levels; the next level is highlighted; stars open the next city. */
 export function TourMap({ levels, progress, onPick }: { levels: readonly Level[]; progress: Progress; onPick: (level: Level) => void }) {
-  const stars = totalStars(progress);
+  const stars = totalStars(progress), next = nextLevel(levels, progress);
   return <div className="pk-tour">
-    <p>★ {stars} / {levels.length * 3}. Stars open the next stadium, and 3-star finals unlock cosmetics.</p>
-    {(["park", "pro", "champions"] as const).map(stadium => {
-      const open = stars >= STADIUM_STARS[stadium];
-      return <section key={stadium}><h3>{stadium === "park" ? "Park" : stadium === "pro" ? "Pro" : "Champions"}{open ? "" : ` · needs ★ ${STADIUM_STARS[stadium]}`}</h3>
-        <div className="pk-levels">{levels.filter(level => level.stadium === stadium).map((level, index) => {
-          const got = progress.stars[level.id] ?? 0, keeper = keeperById(level.keeper).name;
-          return <button key={level.id} type="button" disabled={!open} onClick={() => onPick(level)} title={level.objectives.map(o => describe(o, keeper)).join(" · ")} data-testid={`level-${level.id}`}>
-            <b>{index + 1}. {level.name}</b><small>{level.mode === "freekick" ? `Free kick ${level.setup?.distance} m` : `Penalties vs ${keeper.split(" ")[0]}`}</small>
-            <span className="pk-stars" aria-label={`${got} of 3 stars`}>{"★".repeat(got)}{"☆".repeat(3 - got)}</span>
+    <p>★ {stars} / {levels.length * 3} · {CITIES.length} cities, {LEVELS_PER_CITY} levels each. Earn {starsToOpen()} of a city's {LEVELS_PER_CITY * 3} stars to open the next city; 3-star finals unlock cosmetics.</p>
+    <ol className="pk-path">{CITIES.map(city => {
+      const list = cityLevels(levels, city.chapter), open = cityOpen(levels, city.chapter, progress), got = cityStars(levels, city.chapter, progress);
+      const before = CITIES.find(item => item.chapter === city.chapter - 1);
+      const need = before ? starsToOpen(cityLevels(levels, before.chapter).length) : 0, have = before ? cityStars(levels, before.chapter, progress) : 0;
+      return <li key={city.chapter} className="pk-city" data-open={open} data-testid={`city-${city.chapter}`}>
+        <h3>{city.chapter}. {city.name} <small>{city.stadium === "park" ? "Park" : city.stadium === "pro" ? "Pro" : "Champions"} stadium · ★ {got}/{list.length * 3}</small></h3>
+        {!open && before && <p className="pk-note">Locked: get ★ {need} in {before.name} to open (you have {have}).</p>}
+        <div className="pk-levels pk-levelpath">{list.map((level, index) => {
+          const done = progress.stars[level.id] ?? 0, keeper = keeperById(level.keeper).name, isNext = next?.id === level.id;
+          return <button key={level.id} type="button" disabled={!open} onClick={() => onPick(level)} autoFocus={isNext} data-next={isNext || undefined} title={level.objectives.map(o => describe(o, keeper)).join(" · ")} data-testid={`level-${level.id}`}>
+            <b>{city.chapter}-{index + 1}. {level.name}{isNext ? <em className="pk-nexttag"> Next</em> : null}</b><small>{level.mode === "freekick" ? `Free kick ${level.setup?.distance} m` : `Penalties vs ${keeper.split(" ")[0]}`}</small>
+            <span className="pk-stars" aria-label={`${done} of 3 stars`}>{"★".repeat(done)}{"☆".repeat(3 - done)}</span>
           </button>;
-        })}</div></section>;
-    })}
+        })}</div></li>;
+    })}</ol>
   </div>;
 }
 
@@ -147,7 +158,18 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
 }
 
 export function ScoutingBook({ progress }: { progress: Progress }) {
+  const streaks = [1, 2, 3, 4, 5].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
   return <div className="pk-book">
+    {/* The numbers kept off the pitch (round 6 C15): difficulty, multipliers, keeper reads. */}
+    <h3>How scoring works</h3>
+    <ul className="pk-scoring" data-testid="scoring">
+      <li><b>Challenge level:</b> {rungName(progress.difficulty)} (it adjusts between rounds to how you play, from Sunday League to Legend).</li>
+      <li><b>Where it goes in:</b> centre ×{ZONE_MULT.centre} (and usually saved), side ×{ZONE_MULT.side}, corner ×{ZONE_MULT.corner}, top bin ×{ZONE_MULT.bin}; in off the post +{Math.round((POST_IN_BONUS - 1) * 100)}%; a free-kick knuckleball ×2.</li>
+      <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}).</li>
+      <li><b>Keepers:</b> each card shows how often the keeper dives the right way (before your challenge level) and the points multiplier for scoring past them.</li>
+      <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>
+      <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
+    </ul>
     <h3>Keepers ({progress.stamps.length}/{KEEPERS.length} stamped)</h3>
     <div className="pk-book-grid">{LADDER.map(id => <KeeperCard key={id} id={id} stamped={progress.stamps.includes(id)} />)}</div>
     <h3>Ball Collection ({new Set(progress.pulled).size}/7 pulled)</h3>
@@ -169,21 +191,28 @@ function KeeperCard({ id, stamped }: { id: KeeperId; stamped: boolean }) {
     <canvas ref={ref} width={64} height={64} aria-hidden="true" />
     <strong>{profile.name}{stamped ? " ✓" : ""}</strong>
     <small>{profile.bio}</small>
-    <small><b>Tell:</b> {profile.tell} · reads {Math.round(profile.read * 100)}% · score ×{profile.mult}</small>
+    <small><b>Tell:</b> {profile.tell} · dives the right way {Math.round(profile.read * 100)}% of the time · points ×{profile.mult}</small>
   </div>;
 }
 
 export type SessionSummary = { title: string; kicks: number; goals: number; points: number; xp: number; stars?: number; stamp?: string; unlocked?: string[];
+  /** A plain final-score line (Big Match). */
+  final?: string;
   match?: { rf: string; gboot: string; race: string; toTop10: string } };
-export function Results({ summary, onAgain, onModes }: { summary: SessionSummary; onAgain: () => void; onModes: () => void }) {
+export function Results({ summary, onAgain, onModes, next }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null }) {
+  const hasNext = Boolean(next && "onNext" in next);
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
-    <p><b>{summary.goals}</b> goals from {summary.kicks} kicks · <b>{formatNumber(summary.points)}</b> points · +{summary.xp} XP</p>
+    <p>{summary.final ?? <>You scored <b>{summary.goals}</b> of {summary.kicks} kick{summary.kicks === 1 ? "" : "s"} for <b>{formatNumber(summary.points)}</b> points.</>}{summary.xp > 0 ? ` You earned ${summary.xp} XP.` : ""}</p>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
     {summary.stamp && <p>Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item}>Unlocked: <b>{item}</b></p>)}
-    {summary.match && <p>This session: {summary.match.rf} · {summary.match.gboot} · race {summary.match.race} · {summary.match.toTop10}</p>}
-    <div className="pk-buyrow"><button type="button" className="pk-primary" onClick={onAgain} autoFocus>Play again</button><button type="button" onClick={onModes}>Modes</button></div>
+    {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
+    {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
+    <div className="pk-buyrow">
+      {next && "onNext" in next && <button type="button" className="pk-primary" onClick={next.onNext} autoFocus data-testid="next-level">Next level</button>}
+      <button type="button" className={hasNext ? undefined : "pk-primary"} onClick={onAgain} autoFocus={!hasNext}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+    </div>
   </div>;
 }
 

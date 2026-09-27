@@ -4,12 +4,13 @@ import { readFileSync } from "node:fs";
 import { KEEPERS } from "@penalty-kings/engine";
 import { starsFor, met, describe, type Level, type KickRecord } from "../../games/penalty-kings/game/objectives.ts";
 import levelsJson from "../../games/penalty-kings/game/levels.json";
-import { loadProgress, saveProgress, fresh, levelFromXp, assistLevel, isUnlocked, nextRung, LADDER, STORAGE_KEY } from "../../games/penalty-kings/game/progress.ts";
+import { loadProgress, saveProgress, fresh, levelFromXp, assistLevel, isUnlocked, nextRung, shotClockOn, LADDER, STORAGE_KEY } from "../../games/penalty-kings/game/progress.ts";
 import { dailyScenario, dailyStreak, dailyState, utcDate } from "../../games/penalty-kings/game/daily.ts";
 import { spawnTargets, resolveTargetShot, targetAt, MAX_COMBO } from "../../games/penalty-kings/game/target.ts";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.ts";
+import { CITIES, LEVELS_PER_CITY, cityLevels, cityOpen, levelAfter, nextLevel, starsToOpen } from "../../games/penalty-kings/game/tour.ts";
 import { potBanner, prizeLine, jumbotronSlides, cupEndsAt, PRICE_MAX_AGE_MS } from "../../games/penalty-kings/game/prizes.ts";
-import { ALL_COSMETICS, COSMETICS } from "../../games/penalty-kings/economy.ts";
+import { ALL_COSMETICS, COSMETICS, TOKEN_LINES } from "../../games/penalty-kings/economy.ts";
 
 const levels = levelsJson as unknown as Level[];
 const kick = (o: Partial<KickRecord>): KickRecord => ({ result: "goal", zone: "corner", points: 300, x: 0.8, y: 0.3, ...o });
@@ -65,6 +66,14 @@ test("levels, unlocks, ladder and assist fade", () => {
   assert.ok(assistLevel({ ...fresh(), tutorialDone: true, matches: 6 }, "park") > 0);
 });
 
+test("shot clock (round 6 C14): off in the tutorial and the first 3 matches after it", () => {
+  assert.equal(shotClockOn(fresh()), false, "tutorial");
+  for (const matches of [1, 2, 3]) assert.equal(shotClockOn({ ...fresh(), tutorialDone: true, matches }), false, `tutorial + ${matches - 1} matches`);
+  assert.equal(shotClockOn({ ...fresh(), tutorialDone: true, matches: 4 }), true, "the 4th session after the tutorial has a clock");
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  assert.match(index, /Time up — kick lost/, "a timed-out kick is announced, never silent");
+});
+
 test("daily challenge: same scenario for everyone per date, streak calendar", () => {
   assert.deepEqual(dailyScenario("2026-09-28"), dailyScenario("2026-09-28"));
   const days = new Set(Array.from({ length: 30 }, (_, i) => JSON.stringify(dailyScenario(`2026-10-${String(i + 1).padStart(2, "0")}`))));
@@ -89,6 +98,70 @@ test("target practice: hitting a target scores, combos build and reset, bar bonu
   assert.equal(miss.combo, 0); assert.equal(miss.points, 0);
   const bar = resolveTargetShot({ aimX: 0, aimY: 1, power: 0.6, curl: 0 }, [], t, MAX_COMBO);
   assert.ok(bar.crossbar && bar.points > 0 && bar.combo === MAX_COMBO);
+});
+
+test("target practice (round 6 C8): the hit is judged on the target positions at the on-screen crossing time", () => {
+  const targets = spawnTargets(11, 0), t = 7.3, delay = 0.9; // the shell passes STRIKE_AT + the Stage's flight time
+  const moving = targets.find(target => target.value !== 5)!;
+  const drawn = targetAt(moving, t + delay), atRelease = targetAt(moving, t);
+  assert.ok(Math.hypot(drawn.x - atRelease.x, drawn.y - atRelease.y) > moving.r, "the target moves during the flight");
+  const shot = { aimX: drawn.x, aimY: drawn.y, power: 0.6, curl: 0 };
+  assert.equal(resolveTargetShot(shot, [moving], t, 0, delay).hit, moving, "aiming where the target is drawn at the crossing hits");
+  const stale = { aimX: atRelease.x, aimY: atRelease.y, power: 0.6, curl: 0 };
+  assert.equal(resolveTargetShot(stale, [moving], t, 0, delay).hit, null, "aiming where it was at release misses");
+});
+
+test("token explainer (round 6 C11): the five lines word for word, RF + $GBOOT only (no Coins anywhere)", () => {
+  assert.deepEqual(TOKEN_LINES.map(([term, text]) => `${term}: ${text}`), [
+    "RF: Rare Friends money. Buy balls with it; cash balls back into it.",
+    "Ball: your shot. Its RF value is printed on it.",
+    "$GBOOT: the game's token. Spend it on kits, cup entries and wildcards.",
+    "Lace: lock $GBOOT into your Friend for style + XP perks.",
+    "Burn: spent $GBOOT is gone forever.",
+  ]);
+  for (const file of ["index.tsx", "ui.tsx", "ballui.tsx", "economy.ts"]) {
+    const text = readFileSync(new URL(`../../games/penalty-kings/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(text, /\bcoins?\b/i, `${file} mentions an off-chain currency`);
+  }
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  assert.match(index, /setConfirmWildcard\(true\)/, "the Wildcard button only opens a confirmation");
+});
+
+test("World Tour (round 6 C16): 6 cities × 5 levels in order, ids unchanged; ~60% of a city's stars opens the next", () => {
+  assert.equal(CITIES.length, 6);
+  for (const city of CITIES) {
+    const list = cityLevels(levels, city.chapter);
+    assert.equal(list.length, LEVELS_PER_CITY, city.name);
+    assert.ok(list.every(level => level.stadium === city.stadium), `${city.name} keeps its stadium`);
+  }
+  assert.deepEqual(levels.map(level => level.id), [...["park", "pro", "champions"].flatMap(s => Array.from({ length: 10 }, (_, i) => `${s}-${i + 1}`))], "ids and order are stable");
+  assert.equal(starsToOpen(), 9, "60% of 15 stars");
+  const none = { stars: {} as Record<string, number> };
+  assert.equal(cityOpen(levels, 1, none), true); assert.equal(cityOpen(levels, 2, none), false);
+  assert.equal(nextLevel(levels, none)?.id, "park-1");
+  const eight = { stars: { "park-1": 3, "park-2": 3, "park-3": 2 } };
+  assert.equal(cityOpen(levels, 2, eight), false, "8 stars is not enough");
+  assert.equal(nextLevel(levels, eight)?.id, "park-4", "next = first open level without a star");
+  const after = levelAfter(levels, levels[4], eight);
+  assert.ok(after && "locked" in after && /1 more ★ in Lisbon to open Buenos Aires/.test(after.locked), JSON.stringify(after));
+  const nine = { stars: { ...eight.stars, "park-4": 1 } };
+  assert.equal(cityOpen(levels, 2, nine), true, "9 stars opens city 2");
+  assert.equal(cityOpen(levels, 3, nine), false);
+  const opened = levelAfter(levels, levels[4], nine);
+  assert.ok(opened && "level" in opened && opened.level.id === "park-6");
+  assert.equal(levelAfter(levels, levels[29], nine), null, "no level after the final");
+});
+
+test("HUD jargon (round 6 C15): rung names, ×N multipliers and keeper reads live in the Scouting Book, not on the pitch", () => {
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../../games/penalty-kings/ui.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(index, /rungName|streakMultiplier\(/, "no difficulty rung or streak multiplier in the shell's HUD");
+  const hud = index.slice(index.indexOf('className="pk-hud pk-hud-left"'), index.indexOf("{banner &&"));
+  assert.doesNotMatch(hud, /×/, "no ×N in the HUD");
+  const onResolved = index.slice(index.indexOf("function onResolved"), index.indexOf("function onKickDone"));
+  assert.doesNotMatch(onResolved, /×\d/, "no ×N in the kick banners");
+  const book = ui.slice(ui.indexOf("export function ScoutingBook"), ui.indexOf("export type SessionSummary"));
+  assert.match(book, /rungName\(progress\.difficulty\)/); assert.match(book, /ZONE_MULT/); assert.match(book, /streakMultiplier/); assert.match(book, /profile\.read/);
 });
 
 test("ETHICS: the paid ball reveal is derived only from the settled outcome — no fake near-misses", () => {

@@ -19,6 +19,8 @@ export type Objective =
 export type Level = {
   id: string;
   stadium: "park" | "pro" | "champions";
+  /** World Tour city (1–6, five levels each; game/tour.ts). */
+  chapter?: number;
   name: string;
   mode: "penalty" | "freekick";
   keeper: KeeperId;

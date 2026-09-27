@@ -212,7 +212,7 @@ export function drawZoneHints(c: CanvasRenderingContext2D, alpha: number) {
   c.fillText("leg!", leg.x + 4, leg.y - 13); c.textAlign = "left";
 }
 
-/** Target practice: rings on the goal plane, labelled with their value. */
+/** Target practice: rings on the goal plane, labelled with the points they are worth (100 / 200 / 500). */
 export function drawTargets(c: CanvasRenderingContext2D, targets: ReadonlyArray<{ x: number; y: number; r: number; value: number; hit?: boolean }>, time: number, reduced: boolean) {
   for (const target of targets) {
     const centre = toScreen(target.x, target.y), rx = target.r * GOAL.unit, ry = target.r * GOAL.unit * 0.89;
@@ -222,7 +222,7 @@ export function drawTargets(c: CanvasRenderingContext2D, targets: ReadonlyArray<
     c.strokeStyle = target.value === 5 ? "#ffd23f" : "#ffffff"; c.lineWidth = 2; c.stroke();
     c.beginPath(); c.ellipse(centre.x, centre.y, rx * 0.45, ry * 0.45, 0, 0, Math.PI * 2); c.stroke();
     c.fillStyle = "#0b0d1a"; c.font = "bold 8px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(`×${target.value}`, centre.x, centre.y); c.textAlign = "left"; c.textBaseline = "alphabetic";
+    c.fillText(String(target.value * 100), centre.x, centre.y); c.textAlign = "left"; c.textBaseline = "alphabetic";
   }
 }
 export function drawCrossbarGlow(c: CanvasRenderingContext2D, time: number) {

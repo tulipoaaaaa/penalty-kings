@@ -97,6 +97,12 @@ await testGame("./games/penalty-kings", {
     // choose a ball → KICK (the ball is not consumed) → REDEEM one ball for RF.
     // (The SDK preview wallet holds 20 simulated RF, so the largest affordable Park pack is 2 balls.)
     await game.getByTestId("ball-shop").click();
+    // Round 6 C10/C11: the first purchase explains Scuffed balls and the tokens, word for word.
+    const first = await game.getByTestId("first-purchase").textContent();
+    assert.match(first, /Scuffed Ball: 0 RF, but still drops \$GBOOT and counts for your collection/);
+    assert.match(first, /RF: Rare Friends money\. Buy balls with it; cash balls back into it\./);
+    assert.match(first, /Burn: spent \$GBOOT is gone forever\./);
+    assert.doesNotMatch(first, /coins?/i);
     await game.getByTestId("pack-2").click();
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
@@ -121,11 +127,17 @@ await testGame("./games/penalty-kings", {
     await game.locator(".pk-banner").waitFor({ timeout: 8000 });
     const banner = await game.locator(".pk-banner strong").textContent();
     await game.getByTestId("round").and(game.locator('[data-kicks="1"]')).waitFor({ timeout: 8000 });
-    await game.getByTestId("carousel").waitFor({ timeout: 12_000 });
+    // Round 6 C12: the same ball comes back for the next kick (no carousel); the HUD reads "Bag N · Unopened M".
+    await waitShootable();
+    assert.equal(await game.getByTestId("carousel").count(), 0, "no carousel between kicks: the last-used ball is remembered");
+    assert.match(await game.locator(".pk-hud-left .pk-stat").textContent(), /Bag 2 · Unopened 0/);
+    await game.getByTestId("change-ball").click();
+    await game.getByTestId("carousel").waitFor({ timeout: 5000 });
     assert.match(await game.getByTestId("carousel").textContent(), /1 kicks|0 goals in 1 kicks|1 goals in 1 kicks/, "the ball's career counts the kick");
     console.log(`big match kick: ${banner}`);
     // The ball stays in the Bag after kicking; redeem one with RF value (if both were Scuffed, there is nothing to redeem).
     await game.getByRole("button", { name: "Close", exact: true }).click();
+    await waitShootable(); // closing the carousel goes back to aiming with the same ball
     await game.getByTestId("menu").click();
     await button("My Bag").click();
     assert.equal(await game.getByTestId("ball").count(), 2, "kicking did not consume a ball");
@@ -137,6 +149,21 @@ await testGame("./games/penalty-kings", {
       assert.equal(await game.getByTestId("ball").count(), 1, "the redeemed ball left the Bag");
       console.log("redeemed one ball for RF");
     } else console.log("both balls were Scuffed (no RF value): nothing to redeem this run");
+
+    // Round 6 C11: the Cups screen explains the tokens, and a Wildcard spend asks first (Cancel spends nothing).
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await button("Cups").click();
+    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, cup entries and wildcards\./);
+    const potBefore = await game.getByText(/^Pot \$GBOOT:/).textContent();
+    await game.getByTestId("wildcard").click();
+    await game.getByTestId("wildcard-confirm").waitFor();
+    await button("Cancel").click();
+    assert.equal(await game.getByText(/^Pot \$GBOOT:/).textContent(), potBefore, "cancel spends nothing");
+    await game.getByTestId("wildcard").click();
+    await game.getByTestId("wildcard-yes").click();
+    await game.getByText(/^Wildcards: 1/).waitFor();
+    console.log("wildcard: confirmation shown, cancel spends nothing, confirm buys one");
 
     // Frame times (Stage render only) from a short idle window.
     const frames = await game.locator("canvas.pk-canvas").evaluate(async node => {

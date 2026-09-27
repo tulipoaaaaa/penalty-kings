@@ -638,7 +638,7 @@ export class Stage {
       if (flipping) { const k = Math.abs(Math.cos(this.scoreFlip.t * Math.PI)); c.save(); c.translate(dx + 3, y + 9); c.scale(1, Math.max(0.1, k)); c.fillText(this.scoreFlip.t < 0.5 ? old[i] : text[i], -2, -4); c.restore(); }
       else c.fillText(text[i], dx + 1, y + 5);
     }
-    if (this.streak >= 2) { c.fillStyle = "#ff8c00"; c.fillText(`STREAK ×${Math.min(3, 1 + 0.5 * (this.streak - 1))}`, x + 4, y + 21); }
+    if (this.streak >= 2) { c.fillStyle = "#ff8c00"; c.fillText(`${this.streak} IN A ROW`, x + 4, y + 21); }
     c.textBaseline = "alphabetic";
   }
 
