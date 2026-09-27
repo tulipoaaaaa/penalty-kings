@@ -60,4 +60,5 @@ The P2 list is added as it lands.
 |---|---|---|
 | BQ-P2-1 The mime was flat across the ladder and the ghost got easier on harder rungs | They get the ladder's extra read (mime steps to your side of the wall, the ghost appears where you aimed); NEUTRAL and L0–L3 unchanged. Table in [BUG-QUEST-rates.md](BUG-QUEST-rates.md) | `packages/engine/test/bq-p2.test.ts` (all 12 keepers monotone L3 → L8) |
 | BQ-P2-2 The difficulty history counted every mode (Skill Cup, Big Match, Target, tutorial) | Only ladder modes (Penalties, Free Kicks, World Tour, Daily) record a kick (`recordsDifficulty`) | `tests/game/bq-p2.test.ts` |
+| BQ-P2-3 A read could send the keeper against his lean/scan, so the run-up tell pointed the wrong way | `adjustPlan` re-points the squirrel's and disco's lean and the robot's scan at the final dive (the peacock's fan stays a fake by design); the shell shows the final plan's tell in the run-up in every mode, not only beacon modes. Gameplay-neutral (tells are drawing only) | `packages/engine/test/bq-p2.test.ts` |
 

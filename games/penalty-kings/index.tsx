@@ -852,7 +852,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     lastStrike.current = { outcome, curl: shot.curl, keeper: profile.id };
     direct(current, pendingKick.current.record);
     if (current.mode === "tutorial") tutorialShots.current.push({ outcome, curl: shot.curl, keeper: profile.id, result: outcome.result, points: pendingKick.current.record.points });
-    if (usesBeacon(current.mode)) scene.tell = outcome.plan; // the dive now exists: its true tell shows in the run-up (fan, scan, wall)
+    scene.tell = outcome.plan; // the dive now exists (after any read): its true tell shows in the run-up (fan, scan, wall), in every mode (BQ-P2-3)
     scene.play(outcome, shot.curl);
   }
 

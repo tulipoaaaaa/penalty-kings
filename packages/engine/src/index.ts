@@ -259,6 +259,14 @@ function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: numbe
   if ((plan.wall || plan.teleport) && difficulty.read > 0 && roll() < difficulty.read) {
     next = { ...next, x: clamp(target.x, -0.9, 0.9), y: clamp(target.y, 0.15, 0.85) };
   }
+  // BQ-P2-3: the run-up tells are drawn from THIS plan, so after a read they follow the final dive: the squirrel's
+  // and the disco's lean and the robot's scan-line point at the side he actually goes. (The peacock's fan is a
+  // fake by design, "the side he is faking", so it is left alone; a robot with no learned side keeps scan 0.)
+  if (Math.sign(next.x) !== Math.sign(plan.x) && next.x !== 0) {
+    const side = Math.sign(next.x);
+    if (plan.lean && profile.id !== "peacock") next = { ...next, lean: side * Math.abs(plan.lean) };
+    if (plan.scan) next = { ...next, scan: side };
+  }
   return next;
 }
 
