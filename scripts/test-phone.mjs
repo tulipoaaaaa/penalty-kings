@@ -11,7 +11,8 @@
 //     and not under the SDK toolbar;
 //   - a real swipe (touch events on the page, from the ball upwards) produces a kick;
 //   - saves artifacts/phone-<w>x<h>.png (or --out docs/screenshots to refresh the docs) (the phone's screen while aiming, after the first kick).
-// Usage: node scripts/test-phone.mjs [--size 360x800] [--out docs/screenshots]
+// Also (BQ-P1-9): at 960×640 and 1280×800 the title's Kick off is >= 44 CSS px (cold open and attract card).
+// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only] [--out docs/screenshots]
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
@@ -21,7 +22,7 @@ installPriceFixture(); // answers the live RF/USD pool reads with recorded value
 
 const args = process.argv.slice(2);
 const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const SIZES = (option("--size") ? [option("--size")] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
+const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
 const OUT = option("--out") ?? "artifacts";
 const MIN_FONT = 11;
 // Logical scene geometry (gfx/stadium.ts, penalty camera): goal mouth incl. posts and bar, and the ball on the spot.
@@ -250,5 +251,29 @@ for (const [width, height] of SIZES) {
   });
   assert.deepEqual(errors.filter(e => !/favicon/.test(e)), [], `console errors: ${errors.join("\n")}`);
   console.log(`PASS phone ${label} (${portrait ? "portrait, after the rotate card" : "landscape"}): ${checked.length} checks — ${checked.filter(c => c.startsWith("swipe")).join(", ")}`);
+}
+// BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
+// in the cold open and on the attract card after "Skip intro".
+const DESKTOP = option("--size") ? [] : [[960, 640], [1280, 800]];
+for (const [width, height] of DESKTOP) {
+  const label = `${width}x${height}`, sizes = [];
+  await testGame("./games/penalty-kings", {
+    width, height, timeout: 60_000,
+    check: async ({ page, game }) => {
+      const tall = async (locator, name) => {
+        await locator.waitFor({ state: "visible" });
+        const box = await locator.boundingBox();
+        assert.ok(box.height >= 44 && box.width >= 44, `${label}: ${name} is a small target ${JSON.stringify(box)}`);
+        sizes.push(`${name} ${Math.round(box.width)}x${Math.round(box.height)}`);
+      };
+      await tall(game.getByTestId("play"), "Kick off (cold open)");
+      if (await game.getByTestId("skip-intro").isVisible()) {
+        await game.getByTestId("skip-intro").click();
+        await tall(game.getByTestId("play"), "Kick off (attract)");
+      }
+      if (width === 1280) await page.screenshot({ path: `artifacts/title-${label}.png` });
+    },
+  });
+  console.log(`PASS title CTA ${label}: ${sizes.join(", ")}`);
 }
 console.log(`PASS phone layouts: ${SIZES.map(s => s.join("x")).join(", ")}; screenshots in ${OUT}/`);
