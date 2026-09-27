@@ -57,7 +57,7 @@ test("levels, unlocks, ladder and assist fade", () => {
   assert.equal(levelFromXp(100).level, 2);
   assert.equal(levelFromXp(300).level, 3);
   assert.ok(isUnlocked("penalties", fresh()) && isUnlocked("match", fresh()));
-  assert.ok(!isUnlocked("target", fresh()) && isUnlocked("target", { ...fresh(), xp: 300 }));
+  assert.ok(!isUnlocked("target", fresh()) && isUnlocked("target", { ...fresh(), xp: 100 }));
   assert.equal(nextRung(fresh()), LADDER[0]);
   assert.equal(nextRung({ ...fresh(), stamps: ["mouse"] }), "squirrel");
   assert.equal(assistLevel(fresh(), "pro"), 1);

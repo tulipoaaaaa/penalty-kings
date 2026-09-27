@@ -49,7 +49,7 @@ function safeStorage(): Storage | null {
 }
 
 // ── XP and levels ─────────────────────────────────────────────────────────
-export const XP = { goal: 10, zoneBonus: { centre: 0, side: 2, corner: 5, bin: 10 }, star: 50, daily: 30, stamp: 80, target: 1 } as const;
+export const XP = { tutorial: 100, goal: 10, zoneBonus: { centre: 0, side: 2, corner: 5, bin: 10 }, star: 50, daily: 30, stamp: 80, target: 1 } as const;
 /** Level 1 at 0 XP; each level costs 100 more than the last (100, 200, 300 …). */
 export function levelFromXp(xp: number) {
   let level = 1, need = 100, left = xp;
@@ -64,7 +64,7 @@ export const MODES: ReadonlyArray<{ id: ModeId; name: string; blurb: string; lev
   { id: "freekicks", name: "Free Kicks", blurb: "18–32 m. Curl it, dip it, knuckle it.", level: 2 },
   { id: "tour", name: "World Tour", blurb: "30 levels, 3 stars each.", level: 2 },
   { id: "daily", name: "Daily Challenge", blurb: "Same scenario for everyone. 3 attempts.", level: 2 },
-  { id: "target", name: "Target Practice", blurb: "60 seconds. Bins, bar, combos.", level: 3 },
+  { id: "target", name: "Target Practice", blurb: "60 seconds. Bins, bar, combos.", level: 2 },
   { id: "match", name: "Big Match", blurb: "RF balls: rarity by chance, $GBOOT drops. Optional.", level: 1, paid: true },
 ];
 export const isUnlocked = (mode: ModeId, progress: Progress) => (MODES.find(item => item.id === mode)?.level ?? 1) <= levelFromXp(progress.xp).level;

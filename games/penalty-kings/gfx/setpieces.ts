@@ -2,16 +2,17 @@
  * Set-piece rendering: the free-kick camera, the wall (cast from the keeper roster), the wind
  * flag, target-practice targets, zone hints and the shot-clock ring.
  *
- * Free-kick camera: behind the ball on the ball→goal line, 1.6 m up and 14 m back. Its focal
- * length is chosen per distance so the goal ALWAYS lands exactly on the stadium's goal art
- * (horizontal 90 px per 3.66 m, vertical 80 px per 2.44 m), whatever the distance.
+ * Free-kick camera: a broadcast view behind the ball on the ball→goal line, 3.6 m up and
+ * 0.95 × the distance back, so the wall hides only the lower part of the goal and the ball stays
+ * on screen at 18–32 m. Its focal length is chosen per distance so the goal ALWAYS lands exactly
+ * on the stadium's goal art (horizontal 90 px per 3.66 m, vertical 80 px per 2.44 m).
  */
 import { GOAL_HALF_WIDTH, GOAL_HEIGHT, WALL_DISTANCE, type FreeKickSetup, type FlightSample, type KeeperId, type Zone } from "@penalty-kings/engine";
 import { KEEPER_DESIGNS } from "./keepers.js";
-import { sprite, drawSprite, clamp01, ease } from "./core.js";
+import { sprite, clamp01, ease } from "./core.js";
 import { GOAL, toScreen } from "./stadium.js";
 
-const BACK = 14, HEIGHT = 1.6;
+const HEIGHT = 3.6, back = (distance: number) => 0.95 * distance;
 const PX_X = GOAL.unit / GOAL_HALF_WIDTH, PX_Y = (GOAL.unit * 0.89) / GOAL_HEIGHT;
 const HORIZON = GOAL.line - PX_Y * HEIGHT;
 
@@ -23,36 +24,46 @@ export function fkProject(setup: FreeKickSetup, point: { x: number; y: number; z
   const ux = -x0 / dist, uz = depth / dist, nx = depth / dist, nz = x0 / dist;
   const rx = point.x - x0, rz = point.z;
   const forward = rx * ux + rz * uz, lateral = rx * nx + rz * nz;
-  const cam = Math.max(0.5, forward + BACK), k = (dist + BACK) / cam;
+  const BACK = back(dist), cam = Math.max(0.5, forward + BACK), k = (dist + BACK) / cam;
   return { x: GOAL.cx + PX_X * lateral * k, y: HORIZON + PX_Y * (HEIGHT - point.y) * k, scale: k };
 }
 export const fkBall = (setup: FreeKickSetup) => fkProject(setup, { x: Math.sin(setup.angle) * setup.distance, y: 0.11, z: 0 });
 
 const WALL_CAST: KeeperId[] = ["sumo", "robot", "octopus", "mime", "disco", "squirrel", "sloth", "peacock", "mouse", "chameleon", "ghost"];
 
-/** The wall: 3–5 original characters shoulder to shoulder; they jump on the engine's timing. */
+/**
+ * The wall: 3–5 original characters shoulder to shoulder, each exactly one player-width slot
+ * (0.62 m) and 1.85 m tall at the wall's depth. Heads come from the keeper cast; bodies wear
+ * that keeper's colours. They jump on the engine's timing (arms up); shadows stay on the grass.
+ */
 export function drawWall(c: CanvasRenderingContext2D, setup: FreeKickSetup, wall: { x: number; halfWidth: number } | null, sinceStrike: number | null, reduced: boolean) {
   if (!wall) return;
-  const x0 = Math.sin(setup.angle) * setup.distance, depth = Math.cos(setup.angle) * setup.distance;
-  const t = WALL_DISTANCE / setup.distance, z = depth * t;
+  const depth = Math.cos(setup.angle) * setup.distance, z = depth * (WALL_DISTANCE / setup.distance);
   const jump = sinceStrike !== null && sinceStrike >= setup.wallJumpAt ? Math.sin(clamp01((sinceStrike - setup.wallJumpAt) / 0.5) * Math.PI) * 0.38 : 0;
-  const width = (wall.halfWidth * 2) / setup.wallSize;
+  const slot = (wall.halfWidth * 2) / setup.wallSize;
   for (let i = 0; i < setup.wallSize; i++) {
-    const wx = wall.x - wall.halfWidth + width * (i + 0.5);
-    const feet = fkProject(setup, { x: wx, y: jump, z }), head = fkProject(setup, { x: wx, y: 1.85 + jump, z });
-    const id = WALL_CAST[(setup.seed + i * 3) % WALL_CAST.length], design = KEEPER_DESIGNS[id];
-    const body = sprite(`keeper-${id}`, design.rows, design.palette);
-    const scale = (feet.y - head.y) / body.height;
-    // Shadow stays on the ground while they jump.
-    const ground = fkProject(setup, { x: wx, y: 0, z });
-    c.fillStyle = "#00000044"; c.beginPath(); c.ellipse(ground.x, ground.y, body.width * scale * 0.4, 3, 0, 0, Math.PI * 2); c.fill();
-    drawSprite(c, body, feet.x, feet.y, { scale, sy: jump > 0.05 && !reduced ? 1.04 : 1 });
-    // Hands protecting (arms up when airborne).
-    c.fillStyle = design.glove;
-    const hy = jump > 0.05 ? head.y - 2 : feet.y - (feet.y - head.y) * 0.45;
-    c.fillRect(Math.round(feet.x - body.width * scale * 0.3), Math.round(hy), 3, 3); c.fillRect(Math.round(feet.x + body.width * scale * 0.3 - 3), Math.round(hy), 3, 3);
+    const wx = wall.x - wall.halfWidth + slot * (i + 0.5);
+    const ground = fkProject(setup, { x: wx, y: 0, z }), feet = fkProject(setup, { x: wx, y: jump, z }), top = fkProject(setup, { x: wx, y: 1.85 + jump, z });
+    const left = fkProject(setup, { x: wx - slot / 2, y: 0, z }), right = fkProject(setup, { x: wx + slot / 2, y: 0, z });
+    const w = Math.max(4, right.x - left.x - 1), h = feet.y - top.y, x = Math.round(feet.x - w / 2);
+    const id = WALL_CAST[(setup.seed + i * 3) % WALL_CAST.length], design = KEEPER_DESIGNS[id], palette = design.palette;
+    c.fillStyle = "#00000044"; c.beginPath(); c.ellipse(ground.x, ground.y, w * 0.6, 2, 0, 0, Math.PI * 2); c.fill();
+    const y0 = Math.round(top.y), head = Math.round(h * 0.3);
+    // Legs, shorts, shirt (keeper colours), outline.
+    c.fillStyle = "#111"; c.fillRect(x - 1, y0 + head - 1, w + 2, h - head + 1);
+    c.fillStyle = palette["6"] ?? "#222"; c.fillRect(x + 1, Math.round(feet.y - h * 0.22), Math.max(1, w / 2 - 2), Math.round(h * 0.22)); c.fillRect(x + Math.ceil(w / 2) + 1, Math.round(feet.y - h * 0.22), Math.max(1, w / 2 - 2), Math.round(h * 0.22));
+    c.fillStyle = palette["1"] ?? "#333"; c.fillRect(x, Math.round(feet.y - h * 0.36), w, Math.round(h * 0.14));
+    c.fillStyle = palette["2"] ?? "#888"; c.fillRect(x, y0 + head, w, Math.round(h * 0.36));
+    c.fillStyle = palette["3"] ?? palette["4"] ?? "#bbb"; c.fillRect(x + Math.round(w / 2) - 1, y0 + head + 2, 2, Math.round(h * 0.3));
+    // Head: the top of the keeper sprite, fitted to the slot.
+    const body = sprite(`keeper-${id}`, design.rows, design.palette), crop = Math.round(body.height * 0.55);
+    c.imageSmoothingEnabled = false;
+    c.drawImage(body, 0, 0, body.width, crop, x - 1, y0, w + 2, head + 2);
+    // Arms: protecting low, or up when airborne.
+    c.fillStyle = design.arm;
+    if (jump > 0.05 && !reduced) { c.fillRect(x - 2, y0 - 3, 2, head + 2); c.fillRect(x + w, y0 - 3, 2, head + 2); }
+    else { c.fillRect(x + 1, Math.round(feet.y - h * 0.42), w - 2, 2); }
   }
-  void x0;
 }
 
 /** Ball position along an engine flight path at time t (interpolated). */

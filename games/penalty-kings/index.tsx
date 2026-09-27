@@ -92,6 +92,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, loft: 0, lift: 0.55, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
   const aimStarted = useRef(0);
   const pendingKick = useRef<{ record: KickRecord; result: ShotResult | "wall" } | null>(null);
+  const progressRef = useRef(progress); progressRef.current = progress;
+  /** Every progress change goes through here so later reads in the same tick see it. */
+  const updateProgress = (change: (p: Progress) => Progress) => { const next = change(progressRef.current); progressRef.current = next; setProgress(next); };
   const live = useRef({ paused, menu, phase, session, screen });
   live.current = { paused, menu, phase, session, screen };
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
@@ -311,7 +314,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const scenario = dailyScenario(today);
     const record = dailyState(progress.daily, today);
     if (record.attempts >= DAILY_ATTEMPTS) return;
-    setProgress(p => ({ ...p, daily: { ...record, attempts: record.attempts + 1 } }));
+    updateProgress(p => ({ ...p, daily: { ...record, attempts: record.attempts + 1 } }));
     beginSession(newSession("daily", { kind: scenario.mode === "freekick" ? "freekick" : "penalty", keeper: scenario.keeper, total: scenario.kicks, daily: scenario, setup: scenario.setup, seed: scenario.seed }));
   }
 
@@ -403,8 +406,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const regular = kicks.length <= 5 && !current.suddenDeath;
       if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · SUDDEN DEATH: ×2 until you miss"; scene?.say("sudden-death"); }
     }
-    setProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    setBanner({ text: timedOut ? "TIME!" : LABELS[result], sub, tone: goal ? "goal" : "miss" });
+    updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
+    const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : LABELS[result];
+    setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;
   }
@@ -437,7 +441,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }
 
   function addXp(amount: number) {
-    setProgress(p => {
+    updateProgress(p => {
       const before = levelFromXp(p.xp).level, after = levelFromXp(p.xp + amount).level;
       if (after > before) {
         const opened = MODES.filter(mode => mode.level > before && mode.level <= after).map(mode => mode.name);
@@ -452,12 +456,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const scene = stage.current;
     if (scene) { scene.clock = null; scene.preview = null; scene.reticle = null; }
     let result: SessionSummary = { title: "Full time", kicks: current.kicks.length, goals, points: current.points, xp: 0 };
-    setProgress(p => {
+    {
+      const p = progressRef.current;
       let updated: Progress = { ...p };
       let xp = 0;
       const rung = nextDifficultyLevel(p.difficulty, p.history); // between rounds only
       if (current.mode !== "match" && current.mode !== "skill") updated = { ...updated, difficulty: rung, matches: p.matches + 1 };
-      if (current.mode === "tutorial") { updated.tutorialDone = true; result.title = "Tutorial complete!"; }
+      if (current.mode === "tutorial") { updated.tutorialDone = true; xp += XP.tutorial; result.title = "Tutorial complete! Level 2: Free Kicks, World Tour, Daily and Target Practice unlocked"; }
       if ((current.mode === "penalties" || current.mode === "tutorial") && goals >= 3 && !p.stamps.includes(current.keeper)) {
         updated.stamps = [...p.stamps, current.keeper]; xp += XP.stamp; result.stamp = keeperById(current.keeper).name;
       }
@@ -486,8 +491,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       result = { ...result, xp: result.xp + xp };
       updated.xp = p.xp + xp;
-      return updated;
-    });
+      const before = levelFromXp(p.xp).level, after = levelFromXp(updated.xp).level;
+      if (after > before) result.unlocked = [...(result.unlocked ?? []), `Level ${after}`];
+      progressRef.current = updated;
+      setProgress(updated);
+    }
     setSummary(result);
     setSession({ ...current, kicks: current.kicks });
     setPhase("idle"); setMenu("results");
@@ -521,7 +529,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       setCupRF(value => value + tier.priceRF * CUP_SHARE_OF_PRICE);
       setRace(value => value + meta.racePoints * tier.raceWeight);
       if (outcomeId >= 6) setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[outcomeId - 1].toUpperCase()}`);
-      setProgress(p => (p.pulled.includes(outcomeId - 1) ? p : { ...p, pulled: [...p.pulled, outcomeId - 1] }));
+      updateProgress(p => (p.pulled.includes(outcomeId - 1) ? p : { ...p, pulled: [...p.pulled, outcomeId - 1] }));
       setSession(s => (s ? { ...s, ball: { playId: settled.id, outcomeId }, earned: { rf: s.earned.rf + definition.outcomes[outcomeId - 1].reward, gboot: s.earned.gboot + drop, race: s.earned.race + meta.racePoints * tier.raceWeight } } : s));
       if (stage.current) stage.current.showReveal(revealPlan(outcomeId));
       setPhase("reveal");
