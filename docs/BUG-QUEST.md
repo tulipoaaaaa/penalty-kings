@@ -42,7 +42,7 @@ Four read-only review agents audited the code at `90c7e74`; their findings are t
 
 The full before/after table (12 keepers × NEUTRAL + L0–L8, 4 simulated players, 20,000 shots per cell, same seeds) is in [BUG-QUEST-rates.md](BUG-QUEST-rates.md). `node --experimental-strip-types scripts/keeper-goal-rates.ts` regenerates it.
 - BQ-P1-2 changed no goal rate: only non-goals became saves.
-- BQ-P1-3 moved **only the mouse**: NEUTRAL 63.7 → 66.1 %, L8 41.4 → 50.4 %. At L8, +5.6 of the +9.0 points are top-bin shots that used to be saved, which is the tell becoming true. This is more than ±2 pts on the upper rungs; **a compensating retune of his reach is an owner decision**, and it is not made here.
+- BQ-P1-3 moved **only the mouse**: NEUTRAL 63.7 → 66.1 %, L8 41.4 → 50.4 %. At L8, +5.6 of the +9.0 points are top-bin shots that used to be saved, which is the tell becoming true. This is more than ±2 pts on the upper rungs. **Owner decision (2026-09-27): no retune.** The mouse is the easy keeper, and his tell being true fits his character.
 - The difficulty sim still holds the 55–65 % band.
 
 ## Found during the fix round

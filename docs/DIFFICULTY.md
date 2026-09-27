@@ -171,3 +171,9 @@ of 5 has a non-empty band of crossing heights that scores (≥ 0.2 goal units at
   wobble, crowd noise.
 - **Feel**: 2-frame hit-stop, slow-mo on the release and near-misses (skill layer only),
   `navigator.vibrate` on Android (skipped where unsupported). No energy or lives in any free mode.
+
+
+## Owner decisions (2026-09-27)
+
+- **The mouse keeper stays as he is** after BQ-P1-3 made his "top corners are always open" tell true. He is the easy keeper by design, so his higher goal rate on the upper rungs (up to +9 pts at L8; see [BUG-QUEST-rates.md](BUG-QUEST-rates.md)) is accepted, and he is not retuned.
+- **Old best scores are not rescaled** after the C2 streak curve change (×1.2 / ×1.5 / ×2, replacing the old ×1.5 / ×2 / ×3). Very few real saves exist and judges start fresh, so rewriting stored records isn't worth the risk. Best penalty and free-kick scores set before C2 simply stay as they were.
