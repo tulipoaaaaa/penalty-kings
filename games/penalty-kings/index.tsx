@@ -175,6 +175,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [discover, setDiscover] = useState<{ key: number; text: string } | null>(null);
   const discoverQueue = useRef<string[]>([]);
   const kicksTaken = useRef(0);
+  /** The player's first goal this visit got the big celebration + crowd wave (tutorial, or the first free mode if every tutorial kick was saved). */
+  const firstGoalCelebrated = useRef(false);
   const progressRef = useRef(progress); progressRef.current = progress;
   const bagRef = useRef(bag); bagRef.current = bag;
   /** Every progress change goes through here so later reads in the same tick see it. */
@@ -831,7 +833,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     priorityLine();
     if (!timedOut) playMoments(afterBeat.current, ["reaction"], current.kind);
     // First session: the first goal (kick 1, or later if kick 1 was saved) gets the full celebration plus a crowd wave.
-    if (current.mode === "tutorial" && bigCelebrationDue(current.kicks, goal) && stage.current) {
+    const firstFreeGoal = goal && !firstGoalCelebrated.current && current.mode !== "tutorial" && (FREE_PLAY_MODES as readonly string[]).includes(current.mode);
+    if (((current.mode === "tutorial" && bigCelebrationDue(current.kicks, goal)) || firstFreeGoal) && stage.current) {
+      firstGoalCelebrated.current = true;
       const scene = stage.current; scene.celebration = FIRST_GOAL_CELEBRATION; // the Stage starts it 1 s after the goal; startAim restores the equipped one
       scene.wave(); scene.particles.emit("firework", 240, 60, scene.reduced ? 8 : 26, { color: ["#ffd23f", "#ff5a6e", "#7fd3ff", "#ffffff"], speed: 60, spread: Math.PI * 2, life: 1.1, gravity: 30 });
       lineLater(0, () => stage.current?.say("wave")); // the wave's line after the goal line
