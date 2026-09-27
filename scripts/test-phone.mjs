@@ -56,6 +56,24 @@ async function assertTargets(game, where) {
   else assert.deepEqual(small.bad, [], `${where}: tap targets under ${MIN_TAP} CSS px`);
 }
 
+/** BQ-X6: on the attract title the pot is the pot line inside the title card; the HUD pot banner is hidden (or clear
+ *  of the title), the title card and the Kick off card do not overlap, and the sound toggle covers no title text. */
+async function titleClear(game, where) {
+  const boxes = await game.locator("body").evaluate(() => Object.fromEntries([".pk-pot", ".pk-attract-top", ".pk-attract-top h1", ".pk-attract-bottom", ".pk-title-sound", "[data-testid=pot-counter]"].map(selector => {
+    const node = document.querySelector(selector), range = document.createRange();
+    if (node && selector.endsWith(" h1")) range.selectNodeContents(node); // the heading's text, not its full-width box
+    const r = node && selector.endsWith(" h1") ? range.getBoundingClientRect() : node?.getBoundingClientRect();
+    return [selector, node && node.checkVisibility() && r.width > 0 ? { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom } : null];
+  })));
+  const hit = (a, b) => a && b && a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+  const top = boxes[".pk-attract-top"], line = boxes["[data-testid=pot-counter]"];
+  assert.ok(top && line, `${where}: the title card and its pot line are shown ${JSON.stringify(boxes)}`);
+  assert.ok(line.x1 >= top.x1 - 0.5 && line.x2 <= top.x2 + 0.5 && line.y1 >= top.y1 - 0.5 && line.y2 <= top.y2 + 0.5, `${where}: the pot line sits inside the title card ${JSON.stringify(boxes)}`);
+  for (const other of [".pk-attract-top", ".pk-attract-bottom", ".pk-title-sound"]) assert.ok(!hit(boxes[".pk-pot"], boxes[other]), `${where}: the pot banner overlaps ${other} ${JSON.stringify(boxes)}`);
+  assert.ok(!hit(top, boxes[".pk-attract-bottom"]), `${where}: the title card overlaps the Kick off card ${JSON.stringify(boxes)}`);
+  for (const text of [".pk-attract-top h1", "[data-testid=pot-counter]"]) assert.ok(!hit(boxes[".pk-title-sound"], boxes[text]), `${where}: the sound toggle covers ${text} ${JSON.stringify(boxes)}`);
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -187,6 +205,7 @@ for (const [width, height] of SIZES) {
       if (await game.getByTestId("skip-intro").isVisible()) {
         await reachable(game.getByTestId("skip-intro"), "Skip intro");
         await game.getByTestId("skip-intro").click();
+        await titleClear(game, `${label} title (attract)`); checked.push("title:clear");
         await fonts("title (attract)");
         await targets("title (attract)");
         await reachable(game.getByTestId("play"), "Kick off");
@@ -306,6 +325,7 @@ for (const [width, height] of DESKTOP) {
       await assertTargets(game, `${label} title (cold open)`);
       if (await game.getByTestId("skip-intro").isVisible()) {
         await game.getByTestId("skip-intro").click();
+        await titleClear(game, `${label} title (attract)`); sizes.push("title clear (BQ-X6)");
         await tall(game.getByTestId("play"), "Kick off (attract)");
         await assertTargets(game, `${label} title (attract)`);
       }
