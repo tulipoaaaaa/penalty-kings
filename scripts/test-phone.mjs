@@ -8,7 +8,7 @@
 //   - Kick off, Quick shot and Menu (and the pack/carousel buttons) are on screen, tappable (nothing covers them)
 //     and not under the SDK toolbar;
 //   - a real swipe (touch events on the page, from the ball upwards) produces a kick;
-//   - saves docs/screenshots/phone-<w>x<h>.png (the phone's screen while aiming, after the first kick).
+//   - saves artifacts/phone-<w>x<h>.png (or --out docs/screenshots to refresh the docs) (the phone's screen while aiming, after the first kick).
 // Usage: node scripts/test-phone.mjs [--size 360x800] [--out docs/screenshots]
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -20,7 +20,7 @@ installPriceFixture(); // answers the live RF/USD pool reads with recorded value
 const args = process.argv.slice(2);
 const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const SIZES = (option("--size") ? [option("--size")] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
-const OUT = option("--out") ?? "docs/screenshots";
+const OUT = option("--out") ?? "artifacts";
 const MIN_FONT = 11;
 // Logical scene geometry (gfx/stadium.ts, penalty camera): goal mouth incl. posts and bar, and the ball on the spot.
 const GOAL = { left: 168, right: 312, top: 146, bottom: 212 };
