@@ -57,6 +57,8 @@ jobs:
         run: npm run test:practice
       - name: Interaction test (buy → place → reveal → shoot → HUD)
         run: npm run test:game
+      - name: Phone layouts (360×800, 390×844, 800×360, 844×390; fit, 11px text, toolbar, real swipe)
+        run: npm run test:phone
       - name: Every free mode played in the real runtime (tutorial, free kicks, target, tour, daily)
         run: npm run test:modes
       - name: 90-second first-session QA (reduced motion AND full motion, 960 + 360 px, with minimums)

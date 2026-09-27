@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
+import { playInPortraitIfAsked } from "./lib/phone.mjs";
 
 installPriceFixture(); // answers the live RF/USD pool reads with recorded values (the SDK fixture rejects unknown reads)
 
@@ -24,6 +25,7 @@ const SCOREBOARD = { left: 386, right: 480, top: 0, bottom: 22 };
 await testGame("./games/penalty-kings", {
   width, screenshot, timeout: 60_000,
   check: async ({ page, game }) => {
+    await playInPortraitIfAsked(game); // 360 × 800 is a portrait phone: "Play in portrait anyway" (R6-B7)
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     page.on("pageerror", error => errors.push(String(error)));
     const button = name => game.getByRole("button", { name, exact: true });
