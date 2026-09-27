@@ -20,7 +20,7 @@ import { COSMETICS } from "../games/penalty-kings/economy.js";
 import { renderScene, ballFlightScreen, keeperPose, toScreen, SPOT, W, H, type SceneState } from "../games/penalty-kings/scene.js";
 import "./style.css";
 
-declare const __PK_LIVE__: { gboot?: Address; kitShop?: Address; skillCup?: Address; wildcards?: Address; refereeUrl?: string; explorer: string };
+declare const __PK_LIVE__: { gboot?: Address; kitShop?: Address; skillCup?: Address; wildcards?: Address; refereeUrl?: string; explorer: string; rpcUrl?: string };
 const LIVE = __PK_LIVE__;
 const chain = defineChain({ id: 4663, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: ["https://rpc.mainnet.chain.robinhood.com"] } } });
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)", "function transfer(address,uint256) returns (bool)"]);
@@ -37,7 +37,7 @@ type Confirm = { title: string; lines: string[]; resolve: (ok: boolean) => void 
 
 function App() {
   const session = useMemo(() => createFriendWalletSession(), []);
-  const client = useMemo(() => createFriendPublicClient(), []);
+  const client = useMemo(() => createFriendPublicClient(LIVE.rpcUrl ? { rpcUrl: LIVE.rpcUrl } : undefined), []);
   const [wallet, setWallet] = useState(session.getSnapshot());
   const [friends, setFriends] = useState<readonly OwnedFriend[] | null>(null);
   const [friend, setFriend] = useState<OwnedFriend | null>(null);

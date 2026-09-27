@@ -3,7 +3,7 @@ name: Mainnet-fork rehearsal
 # at runtime and funded ON THE FORK ONLY. Nothing is broadcast to mainnet; no secrets are used.
 on:
   push:
-    paths: ["contracts/**", "scripts/onchain/**", "scripts/lib/**", "games/penalty-kings/tiers/**", ".github/workflows/rehearsal.yml"]
+    paths: ["contracts/**", "scripts/**", "clubhouse/**", "verifier/**", "games/penalty-kings/**", ".github/workflows/rehearsal.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,3 +47,12 @@ jobs:
           export BURNER_MNEMONIC="$(node -e 'const {generateMnemonic,english}=require("viem/accounts");process.stdout.write(generateMnemonic(english))')"
           echo "::add-mask::$BURNER_MNEMONIC"
           node scripts/onchain/stadium.mjs park 20000
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Clubhouse end-to-end on a fork (kit unlock, Skill Cup + referee, wildcard)
+        run: node scripts/test-clubhouse-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: clubhouse-e2e
+          path: artifacts/
