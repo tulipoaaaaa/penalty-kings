@@ -52,7 +52,7 @@ The full before/after table (12 keepers × NEUTRAL + L0–L8, 4 simulated player
 | The first-goal crowd wave was lost if every tutorial kick was saved (likelier after BQ-P1-2) | The first goal in the next free mode gets it | see git log "First-goal celebration" | `qa:90s` waves ≥ 1 at 360 px (5 repeat runs) |
 | `test:landing` needed a prior site build | It builds the site first | see git log | `npm run test:landing` from a clean `site/` |
 
-The P2 list is added as it lands.
+**All P2s are handled** (the free-kick wall fix BQ-P2-5 is held for an owner decision). Engine commits were cherry-picked, so their shas are in `git log --grep=BQ-P2`.
 
 ## P2 (engine / difficulty)
 
@@ -67,3 +67,47 @@ The P2 list is added as it lands.
 | BQ-P2-7 The free-kick knuckleball preview flew a different seed from the strike | ALREADY FIXED in ae5bad5 (C1b): the preview and the strike both resolve `kickSetup(setup, sessionSeed, kickIndex, keeper)` with the same aim wobble | `tests/game/freekick-sync.test.ts` "the trajectory preview flies the strike's own seed" |
 | BQ-P2-8 In off the bar / OFF THE BAR! / the crossbar line were guessed from the crossing height (y > 0.93 or 0.9), and a free-mode bar-in goal read "centre · in off the post · SKILL ZONE: in off the bar" | The engine flags the woodwork it touched (`ShotOutcome.hitPost/hitBar`, `FreeKickOutcome` too; no new rolls, verifier unchanged); the kick record keeps `hitBar`; Skill Zone XP, the banner, the Stage's crossbar line and the Director (new `goal:bar-in` / `first:bar-in` lines) use it; the inline "in off the post/bar" words are said once (left out when the Skill Zone label says it) | `packages/engine/test/bq-p2.test.ts`, `tests/game/bq-p2.test.ts`, `packages/game-director/test/director.test.ts` |
 
+
+## P2 (contracts / docs)
+
+| Item | Status | Commit | Test |
+|---|---|---|---|
+| EdgeSplitter reverted on dust under 4 wei (zero-amount v4 swap) | fixed: skip the swap and $GBOOT burn when the buyback share is 0 | `0f42dfb` | `testDustUnder4WeiSkipsSwap` (mock swapper reverts on 0 like v4) |
+| `SkillCup.week()` underflowed before `start` | fixed: returns 1 before start | `a47a37c` | `testWeekBeforeStartDoesNotUnderflow` |
+| GBoot natspec named a "FINAL WALL bounty vault" | fixed: the 5 % goes to the rewards vault | `397c99a` | comment only |
+| `economy.ts` drop-rate comment said 3 % × volume | fixed: 2 % × ball price ÷ TWAP ÷ 2.15, capped | `c057961` | comment only |
+| BallVault natspec implied a price floor | fixed: free-price market, any non-zero price | `32b634f` | comment only |
+| GBOOT-UPGRADE KitShop share and perk-tier examples | fixed: KitShop burns 100 %; exact tier examples | `747f166` | `testDocumentedPerkTierExamples` |
+| README row did not say LiquidityLock splits LP fees | fixed | `3f32ba1` | docs only |
+| Offline forge runs need `--no-match-contract Fork` | fixed in README, HANDOFF-RF, GBOOT-UPGRADE | `4edc9ea` | docs only |
+| The weekly report's pot and TWAP are operator inputs | fixed in the header and WEEKLY.md; the report now records both inputs | `ea3de25`, `5cd8c01` | docs; output field |
+
+forge: 198 → 201 passing offline; 7/7 fork tests.
+
+## P2 (UI)
+
+| Item | Status | Commit | Test (what failed before) |
+|---|---|---|---|
+| Ball shop → open pack → My Bag → Close ended on an empty pitch | fixed: returns to Modes | `5b9655d` | `test-flow` UI P2 run (the five menus already returned to Modes) |
+| Big Match Results said "No packs opened" for 0 RF packs; totals never reset | fixed | `e4abf96` | `test-flow` UI P2 run |
+| Results "Play again" started a match with no ball | fixed: same ball (or last-used/best if redeemed) | `233a7d1` | `test-flow` UI P2 run ("Choose ball") |
+| Kit shop and Rules missing from Modes | fixed (≥ 44 px) | `16d0413` | `test-flow` UI P2 run |
+| Tapping the pot line on title/Modes opened nothing | fixed: opens Odds; closing returns | `78bef65` | `test-flow` UI P2 run |
+| Copy: "x1.2" multipliers, "the Shop" | fixed (×, Ball shop) | `3f060b2` | copy test in `tests/game/bq-p2.test.ts` |
+| Reduce motion: device setting didn't lock the box; a device change wiped the player's choice | fixed: on if either asks; locked and labelled when the device asks | `0f32a74` | `test-flow` UI P2 run |
+| Pack card still flipped with the in-game reduce-motion setting | fixed | `42a5d0e` | `test-flow` UI P2 run |
+| BQ-X6 attract title over the pot banner | already fixed by C3c (`6448109`); check added; the sound toggle also covered the "P" at 390×844 (fixed) | `fe972e2`, `91d721f` | `test-phone` title overlap check at 5 sizes |
+| BQ-X7 replay under the tutorial coach panel | fixed: the tip clears when the replay starts | `08f7de7` | `test-flow` UI P2 run |
+| BQ-X9 side effects in a `setPack` updater | already fixed by B5 (`f40bf76`) | — | — |
+
+## P2 (build / hosting)
+
+| Item | Status | Commit | Test (what failed before) |
+|---|---|---|---|
+| QA hooks (`__pkFlow`, `__pkStats`, `__pkDirector`) shipped in `site/` | fixed: stripped at build (`PK_QA_HOOKS=1` keeps them for a local QA build) | `0e25d27` | `check:no-dev` (9 hits before) |
+| Latent `/live/` 404 and Clubhouse link without a deployment | fixed: links only to pages the build makes | `016f854` | `npm run test:site-links` (16 deployment combinations) |
+| frame-ancestors | documented: GitHub Pages can't send headers; headers for RF hosting in HANDOFF-RF | `0dbabb9` | docs only |
+| SDK toolbar 9 px on phones | the SDK's own `runtime.css`; documented as a v0.2.1 host request | `ddce6c1` | docs only |
+| Practice page scrolled 3–33 px on landscape phones | fixed | `2cdcc62` | `test-practice` no-overflow check at 6 sizes |
+| `runtime.js` per stadium | not a duplicate (each carries its tier's price and odds); guarded | `3b5bdbf` | `check:no-dev` |
+| BQ-X10 dev server hung on a missing Showroom file | fixed: read first, 404 | `c7ea46d` | `npm run test:dev-server` |
