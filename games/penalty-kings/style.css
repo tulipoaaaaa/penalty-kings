@@ -556,3 +556,10 @@
   --pk-i-tag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h6v1H1zM1 2h1v1H1zM3 2h5v1H3zM1 3h8v1H1zM1 4h9v1H1zM1 5h8v1H1zM1 6h7v1H1zM1 7h6v1H1z'/%3E%3C/svg%3E");
   --pk-i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h3v1H1zM0 2h1v1H0zM4 2h1v1H4zM0 3h1v1H0zM4 3h6v1H4zM0 4h1v1H0zM4 4h1v1H4zM7 4h1v1H7zM9 4h1v1H9zM1 5h3v1H1zM7 5h1v1H7zM9 5h1v1H9z'/%3E%3C/svg%3E");
 }
+
+/* ── FD-3b: waits for randomness (appended block; the wait itself is drawn on the Stage canvas) ── */
+.pk-wait { position: absolute; left: 50%; bottom: 17cqh; transform: translateX(-50%); margin: 0; max-width: 70cqw; font-size: clamp(7px, 1.3cqw, 12px); text-align: center;
+  color: var(--pk-ink, #0b0d1a); background: var(--pk-gold, #ffd23f); border: 2px solid #0b0d1a; box-shadow: 2px 2px 0 #000; padding: 0.3em 0.7em; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .pk-wait { animation: pk-discover-in 0.3s ease-out; } }
+/* The penalty wait is drawn on the canvas ("THE KEEPER IS DECIDING…"); its status line is for screen readers only. */
+.pk-wait.pk-wait-sr { width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; animation: none; }

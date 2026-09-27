@@ -151,6 +151,42 @@ await testGame("./games/penalty-kings", {
     assert.equal(await kicks(), before8 + 1);
     ok("no menu or mode switch mid-kick");
 
+    // 8b. FD-3b: a simulated randomness wait (dev-only delay, set inside the game frame; the judged default is 0 s).
+    //     The shot is committed and the keeper decides: no mode switch (Menu disabled), no result. A pause (the
+    //     host's Friend-wallet menu) aborts the wait: nothing is scored, and the same kick is aimed again.
+    const setDelay = ms => game.locator("body").evaluate((_, value) => { window.__pkDevRandomnessDelayMs = value; }, ms);
+    const waitFor = (want, ms = 4000) => game.locator("body").evaluate((_, [key, value, limit]) => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.()[key] === value ? resolve(true) : Date.now() - start > limit ? reject(new Error(`never ${key}=${value}: ${JSON.stringify(window.__pkFlow?.())}`)) : setTimeout(poll, 40)); poll(); }), [want[0], want[1], ms]);
+    await waitShootable();
+    const before8b = await kicks();
+    await setDelay(5000);
+    await swipe();
+    await waitFor(["waiting", "penalty"]);
+    await game.getByTestId("randomness-wait").waitFor({ timeout: 2000 });
+    await page.waitForTimeout(1200);
+    assert.equal(await game.getByTestId("menu").isDisabled(), true, "no mode switch while the keeper is deciding");
+    assert.equal(await game.locator(".pk-banner").count(), 0, "no result before the beacon");
+    assert.equal(await kicks(), before8b);
+    await page.getByRole("button", { name: "Open Friend wallet" }).click();
+    await waitFor(["waiting", null]);
+    assert.equal((await flow()).inFlight, 0, "the pending kick is gone");
+    await page.waitForTimeout(4500); // paused past the moment the aborted beacon would have landed (the shot clock is frozen)
+    assert.equal(await game.locator(".pk-banner").count(), 0, "the cancelled wait never scores");
+    assert.equal(await kicks(), before8b, "no kick recorded");
+    await page.getByRole("button", { name: /^Close / }).first().click();
+    await waitShootable();
+    ok("randomness wait (5 s, simulated): Menu disabled, a pause cancels it, nothing scored");
+
+    // 8c. A 2 s wait that lands: the strike plays once, then back to instant (0 s) for everything else.
+    await setDelay(2000);
+    await swipe();
+    await waitFor(["waiting", "penalty"]);
+    await waitIdleKick();
+    assert.equal(await kicks(), before8b + 1, "exactly one kick after the beacon");
+    await setDelay(0);
+    const waited = (await flow()).timing.filter(entry => entry.wait >= 1000);
+    assert.ok(waited.length === 1 && waited[0].wait >= 1800, `the waited kick is logged with its wait: ${JSON.stringify(waited)}`);
+    ok("randomness wait (2 s, simulated) lands: one strike, one kick");
+
     // 9. Quick shot during a free kick (double click) → one kick.
     await game.getByTestId("menu").click();
     await game.getByRole("button", { name: "Change mode", exact: true }).click();
@@ -174,9 +210,15 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByText("2 balls bought.").waitFor();
+    await setDelay(3000); // FD-3b: the pack stays sealed while its (simulated) roll is on the way
     await game.getByTestId("open-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByTestId("pack-sealed").waitFor({ timeout: 5000 });
+    const sealed = await flow();
+    assert.equal(sealed.pack, true); assert.equal(sealed.sealed, true); assert.equal(sealed.shootable, false, "not shootable while the pack is sealed");
+    assert.equal(await game.getByTestId("pack").count(), 0, "no card is shown before the roll lands");
     await game.getByTestId("pack").waitFor({ timeout: 10_000 });
+    await setDelay(0);
     const during = await flow();
     assert.equal(during.pack, true); assert.equal(during.shootable, false, "not shootable while the pack is open");
     await page.keyboard.down(" "); await page.keyboard.up(" ");
@@ -197,8 +239,9 @@ await testGame("./games/penalty-kings", {
     ok("Big Match aim with menu open is not shootable");
 
     // 13. Speed (round 6 B3): penalties go release → result ≤ 1.2 s and result → next kick ready ≤ 1.5 s.
-    const timing = (await flow()).timing.filter(entry => entry.kind === "penalty");
-    console.log(`  timing (ms): ${timing.map(entry => `${entry.toResult}/${entry.toReady}`).join(" ")}`);
+    // Instant randomness (the judged default): the waited kick of 8c is excluded, every other one must meet the targets.
+    const timing = (await flow()).timing.filter(entry => entry.kind === "penalty" && entry.wait < 500);
+    console.log(`  timing (ms, release→result/→ready, beacon kicks: release→strike): ${timing.map(entry => `${entry.toResult}/${entry.toReady}${entry.wait ? ` (${entry.wait})` : ""}`).join(" ")}`);
     assert.ok(timing.length >= 4, "enough penalty kicks timed");
     for (const entry of timing) { assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`); }
     ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after");

@@ -10,6 +10,8 @@ export type CommentaryContext =
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
   | "timeout" | "level-up" | "stamp" | "tutorial-1" | "here-comes-trouble" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
   | "first-walkout" | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
+  /** FD-3b waits for randomness: the sealed pack, and the keeper deciding after your shot is locked in. */
+  | "pack-wait" | "pack-wait-long" | "keeper-deciding"
   /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
   | `line:${string}`;
 
@@ -56,6 +58,9 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   "lucky-ball": ["Out comes the lucky ball...", "The lucky ball is back! The crowd knows it.", "{friend} kisses the lucky ball. Superstition? Absolutely."],
   "veteran-ball": ["A veteran ball. It's seen a few goals, this one.", "That ball has more goals than most strikers."],
   pack: ["A fresh pack! Let's see what's inside.", "New balls, new dreams."],
+  "pack-wait": ["Sealed tight. The randomness is on its way...", "What's in the pack? Nobody knows. Not even me!", "Hands off the foil, the draw isn't in yet."],
+  "pack-wait-long": ["Still sealed! The suspense is unbearable.", "Listen to that drumroll...", "Any second now. Any second..."],
+  "keeper-deciding": ["Your shot is locked in. Now {keeper} has to guess...", "{keeper} is still picking a side...", "The shot's in. Which way will {keeper} go?", "Locked in. The keeper is deciding..."],
   showreel: ["Welcome to Penalty Kings!", "Easy to play, hard to master.", "Swipe, curl, dip, SCORE."],
   "intro:mouse": ["Squeak is tiny but lightning quick. Go high!", "The little mouse can't reach the top corners."],
   "intro:squirrel": ["Nibbles always goes early. Watch the lean!", "Too much coffee for this squirrel."],

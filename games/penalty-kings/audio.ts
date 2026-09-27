@@ -167,6 +167,19 @@ export function createCrowd() {
       [0, 4, 7, 12].forEach((step, index) => tone(base * 2 ** (step / 12), 0.22, "square", 0.05, 1.05 + index * 0.07));
       if (top) { [0, 7, 12, 19, 24].forEach((step, index) => tone(base * 2 ** (step / 12), 0.4, "triangle", 0.06, 1.5 + index * 0.1)); this.roar(); }
     },
+    /** FD-3b: one bar of crowd drumroll while randomness is on its way (called every ~0.45 s; louder as `level` → 1). */
+    drumroll(level: number) {
+      if (muted || !context || context.state !== "running") return;
+      const k = Math.max(0, Math.min(1, level)), hits = 4 + Math.round(k * 6);
+      for (let i = 0; i < hits; i++) hit(context.destination, 150 + k * 60, 0.12 + 0.3 * k, 0.07, "bandpass", (i * 0.45) / hits);
+    },
+    /** FD-3b: the building sting before a pack's best ball; its size follows the TRUE best rarity (0–6). */
+    sting(rarity: number) {
+      duck(0.4, 1.4);
+      const k = Math.max(0, Math.min(6, rarity)) / 6, steps = 3 + Math.round(k * 3);
+      for (let i = 0; i < steps; i++) tone(220 * 2 ** ((i * 2) / 12), 0.18, "triangle", 0.03 + 0.03 * k, i * 0.14);
+      this.drumroll(0.4 + 0.6 * k);
+    },
     duck,
     get ducked() { return ducked; },
     dispose() { window.clearTimeout(musicTimer); void context?.close().catch(() => undefined); context = null; musicGain = null; ambienceGain = null; ambience = null; },

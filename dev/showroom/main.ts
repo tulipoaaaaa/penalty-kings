@@ -2,7 +2,7 @@
 // It renders the SAME Stage the game uses; outcomes are produced by the real engine
 // (resolveShot), searched until the requested result comes up, so nothing is faked visually.
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
-import { KEEPERS, keeperById, keeperFrame, resolveShot, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
+import { KEEPERS, keeperById, keeperFrame, resolveShot, shotTarget, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
 import { spawnTargets, targetAt } from "../../games/penalty-kings/game/target.js";
 import { Stage, CELEBRATIONS, RARITY_NAMES, STRIKE_AT } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
@@ -19,6 +19,8 @@ import { sampleFriendSprites } from "../../node_modules/@rarefriends/friendsdk/e
 import { COMMENTARY_COUNT, ALL_COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
 import type { CelebrationId } from "../../games/penalty-kings/gfx/friend.js";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.js";
+import { simulatedBeacon, packDraws } from "../../games/penalty-kings/game/randomness.js";
+import { rollKeeper, packCommitment, packRevealSequence, isAbort } from "../../games/penalty-kings/game/suspense.js";
 import { CATALOGUE, MOMENT_STAGE, createGameDirector, applyBeat, playMoment, type Moment, type Beat } from "../../games/penalty-kings/game/director.js";
 import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
 import type { PlayMode } from "@penalty-kings/game-director";
@@ -281,9 +283,59 @@ document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(element => {
 const logElement = $<HTMLPreElement>("#log");
 function log(line: string) { logElement.textContent = `${(performance.now() / 1000).toFixed(1)}s  ${line}\n${logElement.textContent}`.slice(0, 3000); }
 stage.onEvent = (event, data) => {
-  log(event === "sfx" ? `sfx: ${data}` : `${event}${data ? `: ${data}` : ""}`);
+  log(event === "sfx" ? `sfx: ${data}` : event === "wait" ? `wait: ${JSON.stringify(data)}` : `${event}${data ? `: ${data}` : ""}`);
   if (event === "resolved" && $<HTMLInputElement>("#freeze").checked) { paused = true; $("#pause").textContent = "Resume"; }
 };
+
+// ── FD-3b: randomness waits (0 / 5 / 15 s) — the same Stage code paths the game uses ─────────
+// PENALTY: a random shot is fixed and committed, THEN the simulated beacon is requested; its value
+// seeds only the keeper (keeperSeed) and the engine resolves the strike. PACK: a sealed pack waits,
+// then the sequence reveals lowest → highest with a sting before the best ball (Showroom draws only;
+// the Showroom's rarities are dev draws from the beacon, never a paid reveal).
+let waitAbort: AbortController | null = null, packTimers: number[] = [];
+function stopWaits() { waitAbort?.abort(); waitAbort = null; stage.endWait(); packTimers.forEach(id => window.clearTimeout(id)); packTimers = []; }
+async function penaltyWait(ms: number) {
+  stopWaits(); toPenalty(); stage.cancel(); stage.ballVisible = true;
+  const controller = new AbortController(); waitAbort = controller;
+  const shot = { aimX: Math.random() * 1.6 - 0.8, aimY: Math.random() * 0.9 + 0.05, power: 0.45 + Math.random() * 0.4, curl: Math.random() * 1.2 - 0.6 };
+  stage.reticle = { ...shotTarget(shot), power: shot.power, curl: shot.curl, active: false };
+  const index = Math.floor(Math.random() * 5), released = performance.now();
+  try {
+    const roll = await rollKeeper(shot, { friendId: "336583", sessionId: "showroom", kickIndex: index }, simulatedBeacon(ms), controller.signal, commitment => {
+      stage.startWait("penalty", ms); log(`penalty: shot committed ${commitment.slice(0, 18)}… → beacon requested (${ms / 1000} s)`);
+    });
+    const waited = stage.endWait();
+    const outcome = resolveShot(shot, keeperById(stage.keeper), roll.seed, { kickIndex: index, history: [] });
+    log(`penalty: beacon #${roll.beacon.round} after ${waited.toFixed(1)} s (${Math.round(performance.now() - released)} ms) → keeperSeed ${roll.seed} → ${outcome.result}`);
+    stage.play(outcome, shot.curl);
+  } catch (error) { if (!isAbort(error)) log(`penalty wait failed: ${(error as Error).message}`); else log("penalty wait cancelled: nothing scored"); }
+}
+async function packWait(ms: number, count: number) {
+  stopWaits(); stage.cancel();
+  const controller = new AbortController(), started = performance.now(); waitAbort = controller;
+  stage.startWait("pack", ms, count);
+  try {
+    const commitment = await packCommitment(Array.from({ length: count }, (_, i) => `showroom-${Date.now()}-${i}`), { friendId: "336583" });
+    const beacon = await simulatedBeacon(ms).next("pack", commitment, controller.signal);
+    stage.endWait();
+    // DEV draws only (uniform over the 7 rarities, NOT the stadium odds): exercises the sequencing.
+    const rarities = (await packDraws(beacon, commitment, count)).map(draw => Math.floor(draw * 7));
+    const plan = packRevealSequence(rarities, performance.now() - started);
+    log(`pack: beacon #${beacon.round} → rarities ${rarities.map(r => RARITY_NAMES[r].replace(" Ball", "")).join(", ")}; order ${plan.steps.map(step => step.index).join("→")}, sting at ${plan.stingAt} ms (level ${plan.stingLevel})`);
+    for (const step of plan.steps) packTimers.push(window.setTimeout(() => { if (step.best) stage.showReveal(revealPlan(step.shows + 1)); else log(`pack: card ${step.index} flips: ${RARITY_NAMES[step.shows]}`); }, step.at));
+    if (plan.stingAt !== null) packTimers.push(window.setTimeout(() => { stage.crowd.react("tense"); log(`pack: sting (level ${plan.stingLevel}) before the best ball`); }, plan.stingAt));
+  } catch (error) { if (!isAbort(error)) log(`pack wait failed: ${(error as Error).message}`); else { stage.endWait(); log("pack wait cancelled"); } }
+}
+for (const seconds of [0, 5, 15]) button("#randomness", `Penalty · ${seconds} s`, () => void penaltyWait(seconds * 1000)).dataset.testid = `wait-penalty-${seconds}`;
+for (const seconds of [0, 5, 15]) button("#randomness", `Pack ×5 · ${seconds} s`, () => void packWait(seconds * 1000, 5)).dataset.testid = `wait-pack-${seconds}`;
+button("#randomness", "Cancel wait", () => { stopWaits(); log("wait cancelled (AbortSignal): nothing scored"); });
+// The game preview's delay (npm run play:dev): the dev server injects it into the game frame. The judged preview stays 0 s.
+const previewDelayInfo = $<HTMLSpanElement>("#randomness-preview");
+const setPreviewDelay = (ms?: number) => fetch(`/showroom/randomness-delay${ms === undefined ? "" : `?ms=${ms}`}`).then(response => response.json())
+  .then((body: { ms: number }) => { previewDelayInfo.textContent = `game preview (play:dev): ${body.ms / 1000} s — reload the game tab`; })
+  .catch(() => { previewDelayInfo.textContent = "game preview delay: needs npm run play:dev"; });
+for (const seconds of [0, 5, 15]) button("#randomness-game", `Randomness delay: ${seconds} s`, () => void setPreviewDelay(seconds * 1000)).dataset.testid = `preview-delay-${seconds}`;
+void setPreviewDelay();
 
 // ── Loop ─────────────────────────────────────────────────────────────────────
 let last = performance.now();
