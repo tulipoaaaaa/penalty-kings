@@ -46,6 +46,16 @@ await testGame("./games/penalty-kings", {
     assert.equal(await game.locator(".pk-toast").isVisible(), false, "no coaching toast over the net-cam replay");
     await game.getByTestId("results").waitFor({ timeout: 15_000 });
     ok("BQ-X7: the tutorial's net-cam replay plays with no coaching toast over it");
+    await game.getByRole("button", { name: "Modes", exact: true }).click();
+
+    // The Kit shop and the Rules are one tap from the modes screen (≥ 44 px targets).
+    const modes = game.locator(".pk-modescreen");
+    for (const name of ["Kit shop", "Rules"]) {
+      assert.equal(await modes.getByRole("button", { name, exact: true }).count(), 1, `${name} on the modes screen`);
+      const box = await modes.getByRole("button", { name, exact: true }).boundingBox();
+      assert.ok(box && box.width >= 44 && box.height >= 44, `${name} on the modes screen, ≥ 44 px (${box && `${box.width}×${box.height}`})`);
+    }
+    ok("Kit shop and Rules on the modes screen, ≥ 44 px");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }

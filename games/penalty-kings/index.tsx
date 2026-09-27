@@ -1569,7 +1569,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <button type="button" onClick={() => setMenu("book")}>Scouting Book</button>
         <button type="button" onClick={() => setMenu("balls")} data-testid="ball-shop">Ball shop</button>
         <button type="button" onClick={() => setMenu("bag")} data-testid="my-bag">My Bag</button>
+        <button type="button" onClick={() => setMenu("shop")}>Kit shop</button>
         <button type="button" onClick={() => setMenu("cups")}>Cups</button>
+        <button type="button" onClick={() => setMenu("rules")}>Rules</button>
         <button type="button" onClick={() => setMenu("settings")}>Settings</button>
       </div>
       <ChallengeBox onPlay={startChallenge} />
