@@ -400,12 +400,47 @@ contract BallVaultTest is VaultFixture {
         (,,, bool discontinued) = vault.edition(edition);
         assertTrue(discontinued);
         assertEq(vault.floorOf(id), floor, "discontinuing never changes the floor");
-        // A discontinued edition can still be wrapped from balls that remain (redemption has no deadline).
-        _wrap(outcome, 1, alice);
+        // Discontinuing closes wrapping forever: no new Vault Balls of this edition, ever.
+        vm.prank(tba);
+        vm.expectRevert(BallVault.EditionClosed.selector);
+        vault.commitWrap(edition, FRIEND, outcome, 1);
+        // Existing Vault Balls keep their full floor.
         vm.prank(alice);
-        vault.unwrap(id, 3);
+        vault.unwrap(id, 2);
         assertEq(vault.backing(), 0);
         _solvent();
+    }
+
+    function testEditionCapIsOneTimeAndLimitsEverMinted() public {
+        vm.prank(curator);
+        vault.capEdition(edition, 3);
+        vm.prank(curator);
+        vm.expectRevert(BallVault.InvalidConfiguration.selector);
+        vault.capEdition(edition, 10); // never raised
+        uint256 id = _wrap(outcome, 3, alice);
+        assertEq(vault.everMinted(id), 3);
+        // Unwrapping does not free room under the cap: the cap counts every Vault Ball ever minted.
+        vm.prank(alice);
+        vault.unwrap(id, 3);
+        vm.startPrank(tba);
+        vault.commitWrap(edition, FRIEND, outcome, 1);
+        game.redeem(FRIEND, outcome, 1);
+        vm.expectRevert(BallVault.EditionCapReached.selector);
+        vault.wrap(edition, FRIEND, outcome, alice);
+        vm.stopPrank();
+        _solvent();
+    }
+
+    function testCommitBeforeDiscontinueCannotFinish() public {
+        vm.prank(tba);
+        vault.commitWrap(edition, FRIEND, outcome, 1);
+        vm.prank(curator);
+        vault.discontinue(edition);
+        vm.startPrank(tba);
+        game.redeem(FRIEND, outcome, 1);
+        vm.expectRevert(BallVault.EditionClosed.selector);
+        vault.wrap(edition, FRIEND, outcome, alice);
+        vm.stopPrank();
     }
 
     // ── Market ─────────────────────────────────────────────────────────────────────────────

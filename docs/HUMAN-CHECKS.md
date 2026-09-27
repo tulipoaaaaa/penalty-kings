@@ -15,7 +15,7 @@
    - the Skill Cup pot is capped at 250k $GBOOT per week;
    - the solvency figure is ≤ 8e-5, from the exact Lundberg bound (the brief's 1e-5 used the
      normal approximation).
-6. **Legal review** of token-priced random rewards before any live promotion.
+6. **Legal review before live promotion** (required): paid chance with a redeemable token prize resembles gambling in many places. Needed before any live stadium is promoted: an 18+ gate, a restricted-regions notice (e.g. Belgium), responsible-play copy, odds before purchase. See `docs/LEGAL.md`. The judged preview stays simulated.
 7. **Before announcing Wildcards:** one real mainnet Wildcard draw must fulfil. The Dice
    provider delivers off-chain, and a private fork cannot prove delivery. The callback signature
    is test-checked against the SDK's ChanceGame.

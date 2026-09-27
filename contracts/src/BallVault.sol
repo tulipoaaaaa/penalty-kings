@@ -80,7 +80,13 @@ contract BallVault is ERC1155, ReentrancyGuard {
         string season; // e.g. "S1"
         string tier; // "park" | "pro" | "champions"
         bool discontinued;
+        /// Max Vault Balls EVER minted per ball id of this edition (0 = uncapped). Set once, never raised.
+        uint256 cap;
     }
+
+    /// Vault Balls ever minted per ball id (never decreases, unlike totalSupply) and per edition.
+    mapping(uint256 id => uint256) public everMinted;
+    mapping(uint256 editionId => uint256) public editionMinted;
 
     struct PendingWrap {
         address committer;
@@ -124,9 +130,12 @@ contract BallVault is ERC1155, ReentrancyGuard {
     error PriceBelowFloor();
     error NotSeller();
     error InvalidListing();
+    error EditionClosed();
+    error EditionCapReached();
 
     event EditionAdded(uint256 indexed editionId, address indexed game, string season, string tier);
     event EditionDiscontinued(uint256 indexed editionId);
+    event EditionCapped(uint256 indexed editionId, uint256 maxPerBall);
     event WrapCommitted(
         uint256 indexed editionId, uint256 indexed friendId, uint256 outcomeId, uint256 quantity
     );
@@ -163,16 +172,27 @@ contract BallVault is ERC1155, ReentrancyGuard {
         }
         if (editionOfGame[address(game)] != 0) revert EditionExists();
         editionId = ++editionCount;
-        _editions[editionId] = Edition(game, season, tier, false);
+        _editions[editionId] = Edition(game, season, tier, false, 0);
         editionOfGame[address(game)] = editionId;
         emit EditionAdded(editionId, address(game), season, tier);
     }
 
-    /// One-way label. The floor, wraps and unwraps are unaffected.
+    /// One-way. Discontinuing CLOSES WRAPPING for this edition forever: no new Vault Balls of it can
+    /// ever be minted (on-chain scarcity for the tradeable supply). Floors and unwraps are unaffected.
     function discontinue(uint256 editionId) external {
         if (msg.sender != curator) revert OnlyCurator();
         _edition(editionId).discontinued = true;
         emit EditionDiscontinued(editionId);
+    }
+
+    /// One-time edition cap: the most Vault Balls that can EVER be minted per ball id (rarity) of
+    /// this edition. Can be set once, only before any ball of the edition exists, and never raised.
+    function capEdition(uint256 editionId, uint256 maxPerBall) external {
+        if (msg.sender != curator) revert OnlyCurator();
+        Edition storage e = _edition(editionId);
+        if (e.cap != 0 || maxPerBall == 0 || editionMinted[editionId] != 0) revert InvalidConfiguration();
+        e.cap = maxPerBall;
+        emit EditionCapped(editionId, maxPerBall);
     }
 
     // ── Wrap / unwrap ──────────────────────────────────────────────────────────────────────────
@@ -184,7 +204,9 @@ contract BallVault is ERC1155, ReentrancyGuard {
         nonReentrant
     {
         if (quantity == 0) revert InvalidQuantity();
-        IVaultChanceGame game = _edition(editionId).game;
+        Edition storage e = _edition(editionId);
+        if (e.discontinued) revert EditionClosed();
+        IVaultChanceGame game = e.game;
         _floor(game, outcomeId);
         address account = _controller(game, friendId);
         uint256 held = game.balanceOf(account, outcomeId);
@@ -202,7 +224,10 @@ contract BallVault is ERC1155, ReentrancyGuard {
     {
         PendingWrap memory pending = pendingWrap[editionId][friendId][outcomeId];
         if (pending.quantity == 0 || pending.committer != msg.sender) revert NoCommit();
-        IVaultChanceGame game = _edition(editionId).game;
+        Edition storage e = _edition(editionId);
+        // A commit made before `discontinue` cannot finish (the redeemed RF simply stays in the TBA).
+        if (e.discontinued) revert EditionClosed();
+        IVaultChanceGame game = e.game;
         address account = _controller(game, friendId);
         // Transfers of ChanceGame balls revert, so the only way this balance falls is `redeem`.
         // New settlements can only raise it, which makes this check fail safe (commit again).
@@ -212,6 +237,9 @@ contract BallVault is ERC1155, ReentrancyGuard {
         delete pendingWrap[editionId][friendId][outcomeId];
         uint256 amount = _floor(game, outcomeId) * pending.quantity;
         id = ballId(editionId, outcomeId);
+        if (e.cap != 0 && everMinted[id] + pending.quantity > e.cap) revert EditionCapReached();
+        everMinted[id] += pending.quantity;
+        editionMinted[editionId] += pending.quantity;
         backing += amount;
         totalSupply[id] += pending.quantity;
         rf.safeTransferFrom(msg.sender, address(this), amount);

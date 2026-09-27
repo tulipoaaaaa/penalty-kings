@@ -120,10 +120,13 @@ tier labels. Once an edition is discontinued:
   floor, and a premium can disappear at any time. The game and this document make no claim about
   future prices. The preview's asks (e.g. "180 RF" for an S0 Golden Boot Ball) are
   **simulated examples**, and the preview says so.
-- **"Discontinued" is a label, not an on-chain guarantee of scarcity.** ChanceGame has no stop
-  switch. The team can withdraw free stake so that `canBuy` is false, but **anyone** can call
-  `fund` and make plays possible again, and committed plays can still settle. The vault's
-  `discontinued` flag is set by the curator and is one-way. It changes nothing else.
+- **What "discontinued" guarantees, and what it doesn't.** The vault ENFORCES it: `discontinue`
+  closes wrapping for that edition forever. `commitWrap` and `wrap` revert with `EditionClosed`, so
+  **no new tradeable Vault Balls of a discontinued edition can ever be minted**. An optional one-time
+  `capEdition(editionId, maxPerBall)` also caps the Vault Balls ever minted per rarity; unwraps don't
+  free room under the cap. The vault does NOT control the SDK ChanceGame: it has no stop switch, and
+  **anyone** can call `fund` to make plays possible again. So new *friend-bound* balls of an old
+  season can exist, but they can never become tradeable Vault Balls.
 
 ## What is enforced on-chain, and what is assumed
 
