@@ -116,7 +116,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [menu, setMenu] = useState<Menu>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [message, setMessage] = useState("");
-  const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false), [haptics, setHaptics] = useState(true);
+  const [muted, setMuted] = useState(true), [haptics, setHaptics] = useState(true);
+  /** Reduced motion: the device's prefers-reduced-motion OR the player's own Settings choice (a device change never undoes it). */
+  const [osReduced, setOsReduced] = useState(false), [motionChoice, setMotionChoice] = useState(false), reducedMotion = osReduced || motionChoice;
   const [phase, setPhase] = useState<Phase>("idle");
   const [session, setSession] = useState<Session | null>(null);
   const [banner, setBanner] = useState<{ text: string; sub: string; tone: string } | null>(null);
@@ -340,7 +342,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     createFriendReader().read(friendId).then(value => { if (version === epoch.current) { sprites.current = value; setArtStatus(""); } })
       .catch(() => { if (version === epoch.current) setArtStatus("Friend artwork unavailable. Playing with a placeholder."); });
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
+    const update = () => setOsReduced(preference.matches); update(); preference.addEventListener("change", update);
     return () => { epoch.current++; packRoll.current?.abort(); packRoll.current = null; clearPackTimers(); sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
   }, [client, friendId]);
 
@@ -1679,7 +1681,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {menu === "settings" && <div className="pk-settings">
         <button type="button" aria-pressed={!muted} data-sound-toggle onClick={toggleSound}>{muted ? "Sound off" : "Sound on"}</button>
-        <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations)</label>
+        <label><input type="checkbox" checked={reducedMotion} disabled={osReduced} onChange={event => setMotionChoice(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations){osReduced ? ": on, your device's reduce motion setting asks for it" : ""}</label>
         <label><input type="checkbox" checked={haptics} onChange={event => setHaptics(event.target.checked)} /> Vibration (Android)</label>
         <p>Level {playerLevel} · {progress.xp} XP · ★ {Object.values(progress.stars).reduce((a, b) => a + b, 0)} · {progress.stamps.length}/12 keepers stamped</p>
         <p>Best: penalties {formatNumber(progress.best.penalties)} · free kicks {formatNumber(progress.best.freekicks)} · target {formatNumber(progress.best.target)}</p>

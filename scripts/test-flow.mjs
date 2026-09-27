@@ -128,6 +128,29 @@ await testGame("./games/penalty-kings", {
     assert.match(second, /No packs opened this session/, "the next match's Results start from zero");
     assert.match(second, /\$GBOOT dropped by your packs this session: \+0 /);
     ok("Big Match Results show the packs opened (and their RF, $GBOOT, Cup points) for that match only");
+
+    // Settings "Reduce motion": the device's setting turns it on (and the label says so); with no device preference
+    // the player's own choice turns it on, and a device change never undoes that choice.
+    await game.getByRole("button", { name: "Modes", exact: true }).click();
+    await modes.getByRole("button", { name: "Settings", exact: true }).click();
+    const reduce = game.locator(".pk-settings label").filter({ hasText: "Reduce motion" }), box = reduce.locator("input");
+    const rooted = () => game.locator("section.pk").evaluate(node => node.classList.contains("pk-reduce-motion"));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await game.locator("section.pk.pk-reduce-motion").waitFor({ state: "attached", timeout: 3000 });
+    assert.equal(await box.isChecked(), true, "the device setting turns it on");
+    assert.equal(await box.isDisabled(), true, "the device setting cannot be overridden here");
+    assert.match(await reduce.innerText(), /your device/i, "the label says the device already asks for it");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await game.locator("section.pk:not(.pk-reduce-motion)").waitFor({ state: "attached", timeout: 3000 });
+    assert.equal(await box.isChecked(), false); assert.equal(await box.isDisabled(), false);
+    assert.doesNotMatch(await reduce.innerText(), /your device/i);
+    await box.check();
+    assert.equal(await rooted(), true, "the setting forces reduced motion with no device preference");
+    await page.emulateMedia({ reducedMotion: "reduce" }); await page.waitForTimeout(200);
+    await page.emulateMedia({ reducedMotion: "no-preference" }); await page.waitForTimeout(200);
+    assert.equal(await box.isChecked(), true, "a device change never undoes the player's choice");
+    assert.equal(await rooted(), true);
+    ok("Reduce motion: forced on by the setting, and the label says when the device already asks for it");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
