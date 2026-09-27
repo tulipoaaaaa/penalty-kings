@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, type KeeperId } from "@penalty-kings/engine";
-import { RARITIES, TIERS, formatNumber, type Tier } from "./economy.js";
+import { RARITIES, TIERS, TOKEN_LINES, formatNumber, type Tier } from "./economy.js";
 import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
@@ -95,6 +95,11 @@ export function RfPriceLine({ price, now }: { price: RfPrice; now: number }) {
   return <p className="pk-note" data-testid="rf-price" data-status={isShowable(price, now) ? "live" : "error"}>
     RF price: {rfPriceText(price, now)}{isShowable(price, now) ? ` · ${priceAgeLabel(price, now)}` : ""} <small>(Uniswap v4 RF/WETH × WETH/USDG on Robinhood Chain)</small>
   </p>;
+}
+
+/** "RF: … / Ball: … / $GBOOT: … / Lace: … / Burn: …" (economy TOKEN_LINES, word for word). */
+export function TokenExplainer() {
+  return <ul className="pk-tokens" data-testid="token-lines">{TOKEN_LINES.map(([term, text]) => <li key={term}><b>{term}:</b> {text}</li>)}</ul>;
 }
 
 export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (mode: ModeId) => void }) {

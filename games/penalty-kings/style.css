@@ -191,6 +191,10 @@
 .pk-explain h3 { margin: 0 0 4px; color: var(--pk-gold); font-size: 1em; }
 .pk-explain p, .pk-explain ul { margin: 0.3em 0; }
 .pk-explain ul { padding-left: 1.2em; }
+.pk-tokens { margin: 0.3em 0; padding-left: 1.2em; }
+.pk-tokens li { margin: 0.15em 0; }
+.pk-confirm { border: 2px solid var(--pk-red); padding: 6px 10px; margin: 6px 0; }
+.pk-confirm p { margin: 0 0 6px; }
 .pk-loss { color: var(--pk-red); }
 .pk-gain { color: var(--pk-volt); }
 .pk-counts { display: flex; flex-wrap: wrap; gap: 8px; font-weight: 700; }

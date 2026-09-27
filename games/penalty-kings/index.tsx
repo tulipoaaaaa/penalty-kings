@@ -32,7 +32,7 @@ import { MatchDirector, type KickFacts } from "./game/director.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
-import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
+import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
@@ -85,6 +85,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [gboot, setGboot] = useState(simulated ? SIM_STARTING_GBOOT : 0), [burned, setBurned] = useState(0);
   const [cupRF, setCupRF] = useState(SIM_CUP_SEED_RF), [cupGboot, setCupGboot] = useState(SIM_CUP_SEED_GBOOT);
   const [race, setRace] = useState(0), [wildcards, setWildcards] = useState(0);
+  /** A Wildcard spend waits for this confirmation (round 6 C11). */
+  const [confirmWildcard, setConfirmWildcard] = useState(false);
+  useEffect(() => { setConfirmWildcard(false); }, [menu]);
   const [lastBigPull, setLastBigPull] = useState<string | null>(null);
   const [owned, setOwned] = useState<Set<string>>(() => new Set(ALL_COSMETICS.filter(item => item.price === 0 && !item.name.includes("★")).map(item => item.id)));
   const [equipped, setEquipped] = useState<Record<Cosmetic["kind"], string>>({ boots: "boots-classic", kit: "kit-white", net: "net-white", celebration: "cele-knee-slide" });
@@ -945,13 +948,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} onShare={() => void shareCard(`Penalty Kings Daily ${today}: ${formatNumber(progress.daily.best)} pts`)} />}
 
       {menu === "cups" && <>
+        <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
         <h3>Golden Boot Cup: this week</h3>
         <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium (Park ×1, Pro ×100, Champions ×1,000), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
         {simulated && <><ol className="pk-table">{raceTable.slice(0, 10).map((row, index) => <li key={row.name} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.points)}</b></li>)}</ol>
           {raceRank > 10 && <p>You: #{raceRank} with {formatNumber(race)} pts{tag}.</p>}
           <p>Pot $GBOOT: {formatNumber(cupGboot)}{tag}</p>
-          <button type="button" disabled={gboot < WILDCARD_PRICE || busy} onClick={() => { setGboot(value => value - WILDCARD_PRICE); setBurned(value => value + WILDCARD_PRICE / 2); setCupGboot(value => value + WILDCARD_PRICE / 2); setWildcards(value => value + 1); }}>
-            Wildcard entry · {WILDCARD_PRICE} $GBOOT (50% burned, 50% to pot)</button>
+          {confirmWildcard
+            ? <div className="pk-confirm" role="alertdialog" aria-label="Confirm Wildcard" data-testid="wildcard-confirm">
+              <p>Spend <b>{WILDCARD_PRICE} $GBOOT</b>{tag} on one Wildcard entry? Half ({WILDCARD_PRICE / 2}) is burned and gone forever; half goes to the Cup pot. A Wildcard is an extra draw, not a prize. You have {formatNumber(gboot)} $GBOOT{tag}.</p>
+              <div className="pk-buyrow">
+                <button type="button" className="pk-primary" disabled={gboot < WILDCARD_PRICE || busy} data-testid="wildcard-yes" onClick={() => { setConfirmWildcard(false); if (gboot < WILDCARD_PRICE) return; setGboot(value => value - WILDCARD_PRICE); setBurned(value => value + WILDCARD_PRICE / 2); setCupGboot(value => value + WILDCARD_PRICE / 2); setWildcards(value => value + 1); }}>Yes, spend {WILDCARD_PRICE} $GBOOT</button>
+                <button type="button" autoFocus onClick={() => setConfirmWildcard(false)}>Cancel</button>
+              </div>
+            </div>
+            : <button type="button" disabled={gboot < WILDCARD_PRICE || busy} onClick={() => setConfirmWildcard(true)} data-testid="wildcard">
+              Wildcard entry · {WILDCARD_PRICE} $GBOOT (50% burned, 50% to pot)</button>}
           <p className="pk-note">Wildcards: {wildcards}{tag}. Live wildcard draws use on-chain randomness (Clubhouse).</p></>}
         {!simulated && <p>The live pot, race table and payouts are computed each week from on-chain ball settlements by a public script and published with transaction links in docs/WEEKLY.md. This screen does not invent live numbers.</p>}
         <h3>Skill Cup: 5 kicks vs THE FINAL WALL</h3>

@@ -9,7 +9,7 @@ import { dailyScenario, dailyStreak, dailyState, utcDate } from "../../games/pen
 import { spawnTargets, resolveTargetShot, targetAt, MAX_COMBO } from "../../games/penalty-kings/game/target.ts";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.ts";
 import { potBanner, prizeLine, jumbotronSlides, cupEndsAt, PRICE_MAX_AGE_MS } from "../../games/penalty-kings/game/prizes.ts";
-import { ALL_COSMETICS, COSMETICS } from "../../games/penalty-kings/economy.ts";
+import { ALL_COSMETICS, COSMETICS, TOKEN_LINES } from "../../games/penalty-kings/economy.ts";
 
 const levels = levelsJson as unknown as Level[];
 const kick = (o: Partial<KickRecord>): KickRecord => ({ result: "goal", zone: "corner", points: 300, x: 0.8, y: 0.3, ...o });
@@ -100,6 +100,22 @@ test("target practice (round 6 C8): the hit is judged on the target positions at
   assert.equal(resolveTargetShot(shot, [moving], t, 0, delay).hit, moving, "aiming where the target is drawn at the crossing hits");
   const stale = { aimX: atRelease.x, aimY: atRelease.y, power: 0.6, curl: 0 };
   assert.equal(resolveTargetShot(stale, [moving], t, 0, delay).hit, null, "aiming where it was at release misses");
+});
+
+test("token explainer (round 6 C11): the five lines word for word, RF + $GBOOT only (no Coins anywhere)", () => {
+  assert.deepEqual(TOKEN_LINES.map(([term, text]) => `${term}: ${text}`), [
+    "RF: Rare Friends money. Buy balls with it; cash balls back into it.",
+    "Ball: your shot. Its RF value is printed on it.",
+    "$GBOOT: the game's token. Spend it on kits, cup entries and wildcards.",
+    "Lace: lock $GBOOT into your Friend for style + XP perks.",
+    "Burn: spent $GBOOT is gone forever.",
+  ]);
+  for (const file of ["index.tsx", "ui.tsx", "ballui.tsx", "economy.ts"]) {
+    const text = readFileSync(new URL(`../../games/penalty-kings/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(text, /\bcoins?\b/i, `${file} mentions an off-chain currency`);
+  }
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  assert.match(index, /setConfirmWildcard\(true\)/, "the Wildcard button only opens a confirmation");
 });
 
 test("ETHICS: the paid ball reveal is derived only from the settled outcome — no fake near-misses", () => {

@@ -8,7 +8,7 @@ import type { ChanceGameDefinition } from "@rarefriends/friendsdk/game";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import { TIERS, formatNumber, type Tier } from "./economy.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { BallSpin, ballGlow } from "./ui.js";
+import { BallSpin, ballGlow, TokenExplainer } from "./ui.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
@@ -30,6 +30,7 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
       <h3>Before your first pack</h3>
       <p>Each ball's rarity is decided when you open the pack, and every ball is worth the RF printed on it. <button type="button" className="pk-link" onClick={onOdds}>See odds</button></p>
       <p><b>{RARITY_NAMES[0]}:</b> {SCUFFED_LINE}.</p>
+      <TokenExplainer />
     </div>}
     <div className="pk-tiers" role="radiogroup" aria-label="Stadium">
       {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
@@ -71,7 +72,7 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
     {!done && <button type="button" className="pk-primary" onClick={onRevealAll} data-testid="reveal-all">Reveal all</button>}
     {done && <div className="pk-summary" data-testid="pack-summary">
       <h3>Pack summary</h3>
-      <p>Spent <b>{rf(summary.spent)}</b>{tag} on {summary.count} ball{summary.count === 1 ? "" : "s"}. Together they are worth <b>{rf(summary.pulled)}</b>{tag}: they are yours, and you can cash any of them back into RF from your Bag at any time.</p>
+      <p>Spent <b>{rf(summary.spent)}</b>{tag} on {summary.count} ball{summary.count === 1 ? "" : "s"}. Together they are worth <b>{rf(summary.pulled)}</b>{tag}{summary.pulled > 0n ? ": they are yours, and you can cash any of them back into RF from your Bag at any time." : "."}</p>
       <p>Difference: <b className={summary.net < 0n ? "pk-loss" : "pk-gain"}>{summary.net < 0n ? "−" : "+"}{rf(summary.net < 0n ? -summary.net : summary.net)}</b>{tag}. {summary.net < 0n ? "Most packs return less than they cost; a few return much more." : summary.net > 0n ? "This pack is worth more than it cost; most packs return less." : "This pack is worth exactly what it cost."}</p>
       <p>$GBOOT dropped: +{formatNumber(gboot)}{simulated ? " (simulated)" : " (paid weekly)"}. Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p>
       {scuffed > 0 && <p data-testid="scuffed-note"><b>{scuffed} {RARITY_NAMES[0]}{scuffed === 1 ? "" : "s"}:</b> {SCUFFED_LINE}.</p>}

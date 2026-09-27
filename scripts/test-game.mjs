@@ -97,6 +97,12 @@ await testGame("./games/penalty-kings", {
     // choose a ball → KICK (the ball is not consumed) → REDEEM one ball for RF.
     // (The SDK preview wallet holds 20 simulated RF, so the largest affordable Park pack is 2 balls.)
     await game.getByTestId("ball-shop").click();
+    // Round 6 C10/C11: the first purchase explains Scuffed balls and the tokens, word for word.
+    const first = await game.getByTestId("first-purchase").textContent();
+    assert.match(first, /Scuffed Ball: 0 RF, but still drops \$GBOOT and counts for your collection/);
+    assert.match(first, /RF: Rare Friends money\. Buy balls with it; cash balls back into it\./);
+    assert.match(first, /Burn: spent \$GBOOT is gone forever\./);
+    assert.doesNotMatch(first, /coins?/i);
     await game.getByTestId("pack-2").click();
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
@@ -137,6 +143,21 @@ await testGame("./games/penalty-kings", {
       assert.equal(await game.getByTestId("ball").count(), 1, "the redeemed ball left the Bag");
       console.log("redeemed one ball for RF");
     } else console.log("both balls were Scuffed (no RF value): nothing to redeem this run");
+
+    // Round 6 C11: the Cups screen explains the tokens, and a Wildcard spend asks first (Cancel spends nothing).
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await button("Cups").click();
+    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, cup entries and wildcards\./);
+    const potBefore = await game.getByText(/^Pot \$GBOOT:/).textContent();
+    await game.getByTestId("wildcard").click();
+    await game.getByTestId("wildcard-confirm").waitFor();
+    await button("Cancel").click();
+    assert.equal(await game.getByText(/^Pot \$GBOOT:/).textContent(), potBefore, "cancel spends nothing");
+    await game.getByTestId("wildcard").click();
+    await game.getByTestId("wildcard-yes").click();
+    await game.getByText(/^Wildcards: 1/).waitFor();
+    console.log("wildcard: confirmation shown, cancel spends nothing, confirm buys one");
 
     // Frame times (Stage render only) from a short idle window.
     const frames = await game.locator("canvas.pk-canvas").evaluate(async node => {

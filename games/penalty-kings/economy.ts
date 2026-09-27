@@ -88,4 +88,13 @@ export const WILDCARD_PRICE = 100;
 /** Skill Cup entry: one 5-kick shootout vs Ghost. 50% burned, 50% to the Skill Cup pot. */
 export const SKILL_CUP_ENTRY = 100;
 
-export const formatNumber = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+/** The token explainer (round 6 C11), word for word: shown at the first purchase and on the Cups screen. RF + $GBOOT only. */
+export const TOKEN_LINES: ReadonlyArray<readonly [term: string, text: string]> = [
+  ["RF", "Rare Friends money. Buy balls with it; cash balls back into it."],
+  ["Ball", "your shot. Its RF value is printed on it."],
+  ["$GBOOT", "the game's token. Spend it on kits, cup entries and wildcards."],
+  ["Lace", "lock $GBOOT into your Friend for style + XP perks."],
+  ["Burn", "spent $GBOOT is gone forever."],
+];
+
+export const formatNumber =(value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
