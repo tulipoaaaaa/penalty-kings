@@ -49,5 +49,6 @@ test("ReelPlayer drives the stage cut by cut, ends once (no loop), and reduced m
   const calm = new ReelPlayer(fake(true) as never, reel, { loop: false, friendName: "F" });
   for (let t = 0; t < 40; t += 0.05) calm.update(0.05);
   assert.ok(!calls.includes("play") && !calls.includes("reveal"), "reduced motion: no shots or reveal flashes");
+  assert.ok(calls.includes("taunt"), "reduced motion still introduces the keepers");
   assert.ok(findShot("mouse", "goal"), "engine finds a skill goal");
 });

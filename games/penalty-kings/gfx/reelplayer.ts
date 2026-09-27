@@ -9,9 +9,10 @@ import { W } from "./core.js";
 import { revealPlan } from "../game/reveal.js";
 import { cutAt, type Cut } from "./showreel.js";
 import type { Stage } from "./stage.js";
+import { CELEBRATIONS } from "./friend.js";
 
 /** The part of the Stage a reel drives (kept small so tests can use a fake). */
-export type ReelStage = Pick<Stage, "setStadium" | "stadium" | "weather" | "keeper" | "kind" | "freeKick" | "cue" | "say" | "taunt" | "play" | "walkout" | "wave" | "showReveal" | "startCelebration" | "busy" | "cancel" | "camera" | "reduced">;
+export type ReelStage = Pick<Stage, "celebration" | "setStadium" | "stadium" | "weather" | "keeper" | "kind" | "freeKick" | "cue" | "say" | "taunt" | "play" | "walkout" | "wave" | "showReveal" | "startCelebration" | "busy" | "cancel" | "camera" | "reduced">;
 
 /** Find an engine-resolved shot with the wanted result against this keeper (skill moments only). */
 export function findShot(keeper: string, want: ShotResult, bin = false, random: () => number = Math.random) {
@@ -23,6 +24,9 @@ export function findShot(keeper: string, want: ShotResult, bin = false, random: 
   }
   return null;
 }
+
+/** Title baseline: below the pot banner (which covers canvas y 0–38 at the top centre). */
+const TITLE_Y = 84;
 
 export class ReelPlayer {
   private index = -1;
@@ -53,7 +57,12 @@ export class ReelPlayer {
     if (s.stadium !== cut.stadium) s.setStadium(cut.stadium);
     s.weather = cut.weather; s.keeper = cut.keeper; s.kind = "penalty"; s.freeKick = null;
     if (!s.reduced && cut.push) s.camera.targetZoom = 1.08;
-    if (s.reduced) return; // calm slideshow: scenery + captions only
+    if (s.reduced) {
+      // Calm slideshow: scenery, captions, the keeper stepping forward with a taunt and a commentary line. No shots or flashes.
+      if (cut.kind === "logo") s.say("showreel"); else if (cut.kind === "friend") s.say("walkout"); else if (cut.kind === "commentator") { s.say("goal"); s.startCelebration(s.celebration); }
+      else if (cut.kind === "stadium" || cut.kind === "goal" || cut.kind === "top-bin") { s.say("goal"); s.startCelebration(CELEBRATIONS[this.index % CELEBRATIONS.length].id); } else { s.say(`intro:${cut.keeper}` as never); s.taunt(); }
+      return;
+    }
     const want: Record<Cut["kind"], () => void> = {
       logo: () => { s.cue = "showreel"; s.say("showreel"); },
       signature: () => { s.taunt(); const save = findShot(cut.keeper, "save"); if (save) s.play(save.outcome, save.curl); },
@@ -71,7 +80,7 @@ export class ReelPlayer {
     want[cut.kind]();
   }
 
-  /** Big type + caption in the top safe band (y 24–62), never over the goal or the striker. */
+  /** Big type + caption in the band under the pot banner (y 80–106), never over the goal or the striker. */
   drawOverlay(c: CanvasRenderingContext2D) {
     const cut = this.current; if (!cut) return;
     const p = this.progress, alpha = Math.min(1, p * 6, (1 - p) * 6);
@@ -79,15 +88,15 @@ export class ReelPlayer {
     if (cut.title) {
       const slam = this.stage.reduced ? 1 : 1 + Math.max(0, 0.35 - p * 2.5);
       c.font = `${Math.round(22 * slam)}px PixelifySans, monospace`;
-      c.fillStyle = "#0b0d1a"; c.fillText(cut.title, W / 2 + 2, 42 + 2);
-      c.fillStyle = cut.kind === "reveal" ? "#ffd23f" : "#ffffff"; c.fillText(cut.title, W / 2, 42);
+      c.fillStyle = "#0b0d1a"; c.fillText(cut.title, W / 2 + 2, TITLE_Y + 2);
+      c.fillStyle = cut.kind === "reveal" ? "#ffd23f" : "#ffffff"; c.fillText(cut.title, W / 2, TITLE_Y);
     }
     const caption = cut.kind === "friend" ? `${this.options.friendName} walks out` : cut.caption;
     if (caption) {
       c.font = "10px PixelifySans, monospace";
       const width = c.measureText(caption).width + 12;
-      c.fillStyle = "#0b0d1acc"; c.fillRect(Math.round(W / 2 - width / 2), 56, Math.round(width), 14);
-      c.fillStyle = "#ffffff"; c.fillText(caption, W / 2, 63);
+      c.fillStyle = "#0b0d1acc"; c.fillRect(Math.round(W / 2 - width / 2), TITLE_Y + 14, Math.round(width), 14);
+      c.fillStyle = "#ffffff"; c.fillText(caption, W / 2, TITLE_Y + 21);
     }
     c.restore();
   }

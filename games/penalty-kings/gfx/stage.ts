@@ -149,7 +149,7 @@ export class Stage {
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
 
   // ── Moments ───────────────────────────────────────────────────────────────
   say(context: CommentaryContext) {
@@ -159,7 +159,7 @@ export class Stage {
   /** A keeper taunt bubble with its signature sound. */
   taunt() {
     const taunts = KEEPER_TAUNTS[this.keeper]; this.bubble = { text: taunts[Math.floor(Math.random() * taunts.length)], t: 0 };
-    this.stats.taunts++; this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
+    this.stats.taunts++; this.stats.keepers.add(this.keeper); this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
   }
 
   /** Play the whole choreographed shot for an already-resolved outcome. */

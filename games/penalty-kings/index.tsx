@@ -15,6 +15,8 @@ import {
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
 import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
+import { ReelPlayer } from "./gfx/reelplayer.js";
+import { MONTAGE } from "./gfx/showreel.js";
 import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
@@ -106,6 +108,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
   /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
   const [persistent] = useState(() => canPersist());
+  /** Title screen: the cold-open showreel plays once per visit, then the shorter attract loop (owner's SHOW IT OFF). */
+  const [intro, setIntro] = useState<"cold" | "attract">("cold");
+  const reel = useRef<ReelPlayer | null>(null);
   const [restoreCode, setRestoreCode] = useState(""), [restoreNote, setRestoreNote] = useState("");
 
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -253,9 +258,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
       const dt = frozen ? 0 : Math.min(0.05, (time - last) / 1000); last = time;
       latest.current.tickAim(dt);
+      reel.current?.update(dt);
       scene.update(dt);
       latest.current.tickTargets(dt);
       scene.render(context);
+      reel.current?.drawOverlay(context);
       frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
@@ -265,9 +272,28 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  // Attract mode: a showreel of SKILL moments behind the title (engine-resolved shots, never paid reveals).
+  // Cold open (first view): the 20–30 s montage on the real Stage; any tap/key skips to the attract loop.
   useEffect(() => {
-    if (screen !== "title" || !ready) return;
+    const scene = stage.current;
+    if (screen !== "title" || !ready || intro !== "cold" || !scene) return;
+    const player = new ReelPlayer(scene, MONTAGE, { loop: false, friendName: `Friend #${friendId}` });
+    reel.current = player;
+    const skip = () => setIntro("attract");
+    const watch = window.setInterval(() => { if (player.done) skip(); }, 250);
+    window.addEventListener("keydown", skip);
+    return () => {
+      window.clearInterval(watch); window.removeEventListener("keydown", skip);
+      reel.current = null; scene.camera.targetZoom = 1;
+      if (scene.stadium !== tier.id) scene.setStadium(tier.id);
+      // Only reset the scene if we are still on the title (a session may have just started its walkout).
+      if (live.current.screen === "title") { scene.cancel(); scene.weather = weatherForDay(); scene.keeper = "squirrel"; }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, ready, intro]);
+
+  // Attract mode (after the cold open): a showreel of SKILL moments behind the title (engine-resolved shots, never paid reveals).
+  useEffect(() => {
+    if (screen !== "title" || !ready || intro === "cold") return;
     let beat = 0;
     const run = () => {
       const scene = stage.current;
@@ -304,7 +330,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const id = window.setInterval(run, 1200);
     return () => { window.clearInterval(id); const scene = stage.current; if (scene) { scene.kind = "penalty"; scene.freeKick = null; scene.cue = null; } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, ready]);
+  }, [screen, ready, intro]);
 
   // Keep the Stage in sync with settings, cosmetics and prize displays.
   useEffect(() => { stage.current?.setReduced(reducedMotion); setBallReducedMotion(reducedMotion || null); }, [reducedMotion, ready]);
@@ -414,6 +440,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     setSession(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
+      if (!inFlight.current) scene.cancel(); // clear any showreel/attract shot still playing on the Stage
+      if (scene.stadium !== tier.id) scene.setStadium(tier.id);
       scene.kind = next.kind; scene.keeper = next.keeper; scene.streak = 0; scene.setScore(0);
       scene.hints = next.mode === "tutorial" ? 1 : next.mode === "penalties" && assist > 0.5 ? 0.45 : 0;
       scene.freeKick = next.kind === "freekick" && next.setup ? { setup: next.setup, wall: resolveFreeKick(next.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(next.keeper)).wall } : null;
@@ -940,13 +968,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {(error || message) && phase !== "shooting" && screen === "play" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}
     </div>
 
-    {screen === "title" && !menu && <div className="pk-title pk-attract" role="dialog" aria-label="Penalty Kings">
+    {screen === "title" && !menu && <div className={`pk-title pk-attract${intro === "cold" ? " pk-coldopen" : ""}`} role="dialog" aria-label="Penalty Kings" data-intro={intro}
+      onPointerDown={event => { if (intro === "cold" && !(event.target as HTMLElement).closest("button")) setIntro("attract"); }}>
       <div className="pk-attract-top">
         <h1>PENALTY KINGS</h1>
         <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
       </div>
       <div className="pk-attract-bottom">
         <button type="button" className="pk-primary" autoFocus onClick={() => { void unlockAudio(); if (progress.tutorialDone) setScreen("modes"); else startMode("penalties"); }} data-testid="play">{progress.tutorialDone ? "Play" : "Kick off"}</button>
+        {intro === "cold" && <button type="button" className="pk-skip" onClick={() => setIntro("attract")} data-testid="skip-intro">Skip intro ▸</button>}
         <p className="pk-rule">{RULE}</p>
         {simulated && <p className="pk-note">Public preview: the economy (RF, balls, rewards, $GBOOT, Cup) is SIMULATED. Wallet and Friend ownership are real.</p>}
       </div>
