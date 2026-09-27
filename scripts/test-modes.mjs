@@ -56,6 +56,8 @@ await testGame("./games/penalty-kings", {
     const goal = await game.getByTestId("next-goal").textContent();
     assert.match(goal, /^NEXT GOAL /); assert.doesNotMatch(goal, /\bRF\b|pack|buy/i);
     console.log(`next goal: ${goal}`);
+    // D18: the first visit of the day checks in (XP only) and says so.
+    assert.match(await game.getByTestId("checkin").textContent(), /^Day 1 of 7 check-in: \+20 XP/);
     await game.getByTestId("mode-freekicks").click();
     await page.waitForTimeout(600);
     await frame.screenshot({ path: `${out}/freekick-aim-${width}.png` });

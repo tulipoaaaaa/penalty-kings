@@ -37,7 +37,7 @@ import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { nextGoal } from "./game/nextgoal.js";
-import { skillZoneOf, streakAfter, SKILL_ZONE_XP, SKILL_ZONE_LABEL } from "./game/rewards.js";
+import { skillZoneOf, streakAfter, checkIn, LOGIN_TRACK, SKILL_ZONE_XP, SKILL_ZONE_LABEL } from "./game/rewards.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
@@ -240,6 +240,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const raceRank = raceTable.findIndex(row => row.mine) + 1;
 
   useEffect(() => { saveProgress(progress); }, [progress]);
+  // D18 daily check-in (XP, a cosmetic on day 7; progression only): once per UTC day, on the modes screen after the tutorial.
+  const [checkinNote, setCheckinNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (screen !== "modes" || !progress.tutorialDone) return;
+    const { track, reward } = checkIn(progressRef.current.login, today); // the ref: a re-run can never pay twice
+    if (!reward) return;
+    updateProgress(p => ({ ...p, login: track, rewards: reward.cosmetic && !p.rewards.includes(reward.cosmetic) ? [...p.rewards, reward.cosmetic] : p.rewards }));
+    addXp(reward.xp);
+    setCheckinNote(`Day ${track.day} of ${LOGIN_TRACK.length} check-in: +${reward.xp} XP${reward.cosmetic ? " and the Lime net" : ""}. Come back tomorrow for day ${(track.day % LOGIN_TRACK.length) + 1}.`);
+  }, [screen, today, progress.tutorialDone]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { saveBag(bag); }, [bag]);
   // The on-chain inventory is the truth: records always match it exactly.
   useEffect(() => { if (snapshot) setBag(current => syncBag(current, snapshot.inventory, tier.id, Date.now())); }, [snapshot, tier.id]);
@@ -1307,6 +1317,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     {screen === "modes" && !menu && <div className="pk-title pk-modescreen" role="dialog" aria-label="Choose a mode">
       <h2>Level {playerLevel} · {into}/{next} XP</h2>
       {(() => { const goal = nextGoal(progress, LEVELS, today); return <button type="button" className="pk-nextgoal" data-testid="next-goal" data-mode={goal.mode} onClick={() => startMode(goal.mode)}><b>NEXT GOAL</b> {goal.text} ▸</button>; })()}
+      {checkinNote && <p className="pk-note" role="status" data-testid="checkin">{checkinNote}</p>}
       <ModeSelect progress={progress} onPick={startMode} />
       <div className="pk-buyrow">
         <button type="button" onClick={() => setMenu("book")}>Scouting Book</button>

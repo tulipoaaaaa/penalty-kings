@@ -27,11 +27,11 @@ const toBase64Url = (text: string) => btoa(unescape(encodeURIComponent(text))).r
 const fromBase64Url = (text: string) => decodeURIComponent(escape(atob(text.replace(/-/g, "+").replace(/_/g, "/"))));
 
 /** What a save code keeps (the shot history for the difficulty director is rebuilt by playing). */
-type Saved = Pick<Progress, "xp" | "stars" | "stamps" | "pulled" | "matches" | "tutorialDone" | "difficulty" | "daily" | "best" | "rewards" | "directorSeen" | "keepersSeen" | "stadiumsSeen">;
+type Saved = Pick<Progress, "xp" | "stars" | "stamps" | "pulled" | "matches" | "tutorialDone" | "difficulty" | "daily" | "best" | "rewards" | "directorSeen" | "keepersSeen" | "stadiumsSeen" | "login">;
 const STADIUMS = ["park", "pro", "champions"];
 
 export function encodeSaveCode(progress: Progress, friendId: bigint | string) {
-  const saved: Saved = { xp: progress.xp, stars: progress.stars, stamps: progress.stamps, pulled: progress.pulled, matches: progress.matches, tutorialDone: progress.tutorialDone, difficulty: progress.difficulty, daily: progress.daily, best: progress.best, rewards: progress.rewards, directorSeen: progress.directorSeen, keepersSeen: progress.keepersSeen, stadiumsSeen: progress.stadiumsSeen };
+  const saved: Saved = { xp: progress.xp, stars: progress.stars, stamps: progress.stamps, pulled: progress.pulled, matches: progress.matches, tutorialDone: progress.tutorialDone, difficulty: progress.difficulty, daily: progress.daily, best: progress.best, rewards: progress.rewards, directorSeen: progress.directorSeen, keepersSeen: progress.keepersSeen, stadiumsSeen: progress.stadiumsSeen, login: progress.login };
   const payload = toBase64Url(JSON.stringify(saved));
   return `${PREFIX}.${payload}.${crc32(`${friendId}:${payload}`)}`;
 }
@@ -60,6 +60,8 @@ export function decodeSaveCode(code: string, friendId: bigint | string): Restore
       directorSeen: typeof saved.directorSeen === "string" && /^[A-Za-z0-9_-]{0,32}$/.test(saved.directorSeen) ? saved.directorSeen : "",
       keepersSeen: Array.isArray(saved.keepersSeen) ? saved.keepersSeen.filter(id => typeof id === "string") : [],
       stadiumsSeen: Array.isArray(saved.stadiumsSeen) ? saved.stadiumsSeen.filter(id => STADIUMS.includes(id)) : [],
+      // D18 check-in track (added later: older codes restore with a fresh track).
+      login: saved.login && typeof saved.login.lastDay === "string" && /^(\d{4}-\d{2}-\d{2})?$/.test(saved.login.lastDay) ? { lastDay: saved.login.lastDay, day: Math.min(7, Math.floor(num(saved.login.day, 0))) } : base.login,
     } };
   } catch { return { ok: false, reason: "This save code is damaged." }; }
 }

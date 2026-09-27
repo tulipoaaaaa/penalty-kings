@@ -40,3 +40,12 @@ test("save code keeps the Discovery meter (Director seen code, keepers, stadiums
   assert.ok(cleaned.ok);
   if (cleaned.ok) { assert.equal(cleaned.progress.directorSeen, ""); assert.deepEqual(cleaned.progress.stadiumsSeen, ["pro"]); }
 });
+
+test("save code keeps the D18 check-in track; older codes without it restore a fresh track", () => {
+  const progress = { ...fresh(), xp: 300, login: { lastDay: "2026-09-27", day: 4 } };
+  const restored = decodeSaveCode(encodeSaveCode(progress, 7730n), 7730n);
+  assert.ok(restored.ok); if (restored.ok) assert.deepEqual(restored.progress.login, { lastDay: "2026-09-27", day: 4 });
+  const { login: _drop, ...old } = progress;
+  const legacy = decodeSaveCode(encodeSaveCode(old as typeof progress, 7730n), 7730n);
+  assert.ok(legacy.ok); if (legacy.ok) assert.deepEqual(legacy.progress.login, { lastDay: "", day: 0 });
+});
