@@ -57,7 +57,7 @@ jobs:
         run: npm run test:game
       - name: Every free mode played in the real runtime (tutorial, free kicks, target, tour, daily)
         run: npm run test:modes
-      - name: 90-second first-session QA (what the viewer sees, with minimums)
+      - name: 90-second first-session QA (reduced motion AND full motion, 960 + 360 px, with minimums)
         run: npm run qa:90s
       - name: Action-flow audit (every awkward interleaving, 960 + 360 px)
         run: npm run test:flow
