@@ -17,6 +17,13 @@ export const GOAL_ASPECT = 0.89;
 export const ART_UNIT = 90;
 /** Ball radius at the goal line, goal units (the Stage draws the ball this size at the crossing). */
 export const BALL_RADIUS = 0.045;
+/** Lowest height (goal units) of the top-bin zone: |x| ≥ 0.66 and y ≥ TOP_BIN_Y (shotZone "bin"). */
+export const TOP_BIN_Y = 0.66;
+/**
+ * A keeper whose maxY is under TOP_BIN_Y "cannot reach the top corners": his whole rig (tipped body, arms,
+ * gloves) stays strictly under the lowest top-bin ball, so no top-bin shot can touch him (BQ-P1-3).
+ */
+const TOP_BIN_CEILING = TOP_BIN_Y * GOAL_ASPECT - BALL_RADIUS - 1e-3;
 /** Trailing leg: radius of the leg capsule (a boot is drawn inside it), iso units. */
 export const LEG_RADIUS = 0.05;
 /** Chance a diving keeper leaves a trailing leg across the middle (decided per kick, drawn when present). */
@@ -776,12 +783,21 @@ export function keeperFrame(id: KeeperId, plan: KeeperPlan, t: number): KeeperFr
   // Never below the grass: lift the body until its lowest pixel is on the ground.
   const [bx0, by0, bx1, by1] = rigGeometry(id, pose).bounds, sin = Math.sin(rotate), cos = Math.cos(rotate);
   const lowest = Math.min(...[[bx0, by0], [bx1, by0], [bx0, by1], [bx1, by1]].map(([lx, ly]) => -lx * sin + ly * cos));
-  if (y + lowest < 0) y = -lowest;
   const angle = ARM_IDLE + (armEnd - ARM_IDLE) * p;
   const armFor = (side: number): KeeperArm => {
     const shoulder = { x: side * g.shoulderX, y: g.shoulderY };
     return { shoulder, hand: { x: shoulder.x + side * Math.cos(angle) * arm, y: shoulder.y + Math.sin(angle) * arm } };
   };
+  const arms: [KeeperArm, KeeperArm] = [armFor(-1), armFor(1)];
+  if (plan.maxY < TOP_BIN_Y) {
+    // Cannot reach the top corners: lower the rig until its highest point (a tipped body corner, a glove's
+    // outer corner or a shoulder's arm edge) is under the lowest top-bin ball.
+    const up = (lx: number, ly: number) => -lx * sin + ly * cos, half = g.glove / 2;
+    const highest = Math.max(...[[bx0, by0], [bx1, by0], [bx0, by1], [bx1, by1]].map(([lx, ly]) => up(lx, ly)),
+      ...arms.flatMap(({ shoulder, hand }) => [up(shoulder.x, shoulder.y) + g.armWidth / 2, ...[[-half, -half], [half, -half], [-half, half], [half, half]].map(([ox, oy]) => up(hand.x + ox, hand.y + oy))]));
+    y = Math.min(y, TOP_BIN_CEILING - highest);
+  }
+  if (y + lowest < 0) y = -lowest;
   let leg: KeeperFrame["leg"] = null;
   if (plan.leg && !plan.teleport && tip !== 0 && p > 0) {
     // The trailing leg: from the hip back towards where he stood (the middle for penalties), along the grass.
@@ -790,7 +806,7 @@ export function keeperFrame(id: KeeperId, plan: KeeperPlan, t: number): KeeperFr
     const vx = target.x - hip.x, vy = target.y - hip.y, length = Math.hypot(vx, vy) || 1, k = Math.min(1, (g.h * 1.25) / length) * p;
     leg = { hip, foot: { x: hip.x + vx * k, y: hip.y + vy * k } };
   }
-  return { id, progress: p, pose, x, y, rotate, arms: [armFor(-1), armFor(1)], armWidth: g.armWidth, glove: g.glove, leg, wall: plan.wall ?? null };
+  return { id, progress: p, pose, x, y, rotate, arms, armWidth: g.armWidth, glove: g.glove, leg, wall: plan.wall ?? null };
 }
 
 /**

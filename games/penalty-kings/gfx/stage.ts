@@ -84,7 +84,7 @@ export class Stage {
   time = 0;
   stadium: StadiumId = "park"; weather: Weather = "sun"; keeper: KeeperId = "squirrel";
   reduced = false;
-  rarity = 7; streak = 0; score = 0;
+  rarity = 7; streak = 0; score = 0; // streak: goals in a row, set by the game in its "resolved" handler (the Stage never counts it)
   layers: FriendLayers = { halo: "#ffffff", boots: "#111111", headband: null, cape: false, laced: 0 };
   celebration: CelebrationId = "knee-slide";
   friendName = "Your Friend";
@@ -309,7 +309,7 @@ export class Stage {
     const shot = this.shot!, result = shot.outcome.result, art = toScreen(shot.outcome.target.x, shot.outcome.target.y), end = this.goalPoint(art);
     if (this.fk?.result === "wall") {
       const hit = fkProject(this.freeKick!.setup, this.fk.path[this.fk.path.length - 1]);
-      this.crowd.react("ooh"); this.say(this.cue ?? "wall"); this.cue = null; this.stats.saves++; this.onEvent("resolved", "wall"); this.streak = 0; this.reaction = "save";
+      this.crowd.react("ooh"); this.say(this.cue ?? "wall"); this.cue = null; this.stats.saves++; this.onEvent("resolved", "wall"); this.reaction = "save";
       this.camera.addTrauma(0.3); this.camera.hitStop = 2 / 60; this.sfx("glove"); this.sfx("ooh");
       this.particles.emit("dust", hit.x, hit.y, 12, { color: ["#ffffff", "#c8b99a"], speed: 60, spread: Math.PI * 2, life: 0.4 });
       this.scoreFlip = { from: this.score, t: 0 };
@@ -336,9 +336,9 @@ export class Stage {
       this.particles.emit("confetti", end.x, end.y - 10, 60, { color: THEMES[this.stadium].confetti, speed: 140, spread: Math.PI * 1.2, gravity: 70, life: 2.4 });
       this.particles.emit("thread", end.x, end.y, 8, { color: "#ffffff", speed: 60, life: 0.5, gravity: 60 });
       this.sfx("net"); this.sfx("roar");
-      this.streak += 1; if (this.streak >= 2) this.sfx("chant");
+      if (this.streak >= 2) this.sfx("chant"); // the game owns streak: its "resolved" handler has already set it (BQ-P1-1)
     } else {
-      this.streak = 0; this.reaction = result === "post" ? "post" : result === "save" ? "save" : "miss";
+      this.reaction = result === "post" ? "post" : result === "save" ? "save" : "miss";
       if (result === "save") {
         this.particles.emit("spark", end.x, end.y, 16, { color: ["#ffffff", "#ffd23f"], speed: 90, spread: Math.PI * 2, life: 0.4, gravity: 0 });
         if (this.keeper === "octopus") this.particles.emit("ink", end.x, end.y, 20, { color: "#1a0f2e", speed: 40, spread: Math.PI * 2, life: 1, gravity: 20, size: 2 });
