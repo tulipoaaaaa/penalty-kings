@@ -8,7 +8,7 @@ import { Stage, CELEBRATIONS, RARITY_NAMES } from "../../games/penalty-kings/gfx
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
 import { THEMES, type StadiumId, type Weather } from "../../games/penalty-kings/gfx/stadium.js";
 import { drawKeeper } from "../../games/penalty-kings/gfx/keepers.js";
-import { drawBall, RARITY_FX } from "../../games/penalty-kings/gfx/ball.js";
+import { drawBall, drawBallSprite, drawBallShadow, ballSprite, ballSpriteCacheSize, BALL_FRAMES, BALL_IDENTITY, RARITY_FX, seasonFx, type Season } from "../../games/penalty-kings/gfx/ball.js";
 import { CROWD_TYPES } from "../../games/penalty-kings/gfx/crowd.js";
 import { COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
 import type { CelebrationId } from "../../games/penalty-kings/gfx/friend.js";
@@ -129,6 +129,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(element => {
     document.querySelectorAll("[data-panel]").forEach(panel => panel.toggleAttribute("hidden", (panel as HTMLElement).dataset.panel !== element.dataset.tab));
     document.querySelectorAll("[data-tab]").forEach(tab => tab.classList.toggle("active", tab === element));
     if (element.dataset.tab === "cast") drawCast();
+    if (element.dataset.tab === "balls") drawBallSheet();
   };
 });
 
@@ -168,5 +169,44 @@ function drawCast() {
   RARITY_FX.forEach((fx, index) => { const x = 36 + index * 58; drawBall(c, x, 370, 8, fx); c.fillStyle = "#ffffff"; c.fillText(RARITY_NAMES[index].replace(" Ball", ""), x, 392); });
   $("#crowd-types").textContent = `${CROWD_TYPES.length} crowd types: ${CROWD_TYPES.join(", ")}`;
 }
+
+// ── Ball sheet: rarities × seasons × sizes × spin frames ─────────────────────
+const LABEL = 96, GAP = 4;
+function drawBallSheet() {
+  const sheet = $<HTMLCanvasElement>("#balls"), c = sheet.getContext("2d")!, reduced = $<HTMLInputElement>("#balls-reduced").checked;
+  const zoom = Number($<HTMLSelectElement>("#balls-zoom").value);
+  const small = ballSprite(0, "S1", 24)!.cell + GAP, big = ballSprite(0, "S1", 32)!.cell + GAP, rowH = 58;
+  const x24 = LABEL, x32 = x24 + small * BALL_FRAMES + 12, xStill = x32 + big * BALL_FRAMES + 12, xGame = xStill + 48;
+  const rows: { rarity: number; season: Season }[] = [];
+  for (const season of ["S1", "S0"] as const) for (let rarity = 0; rarity < 8; rarity++) rows.push({ rarity, season });
+  sheet.width = xGame + 110; sheet.height = 34 + rows.length * rowH + 14;
+  sheet.style.width = `${sheet.width * zoom}px`;
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = "#12162b"; c.fillRect(0, 0, sheet.width, sheet.height);
+  c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillStyle = "#ffd23f";
+  c.fillText(`24 px · frames 0–${BALL_FRAMES - 1}`, x24, 12); c.fillText(`32 px · frames 0–${BALL_FRAMES - 1}`, x32, 12);
+  c.fillText("still", xStill + 8, 12); c.fillText("in game 9 px · reveal 28 px", xGame, 12);
+  c.fillStyle = "#9aa3d0"; c.fillText(reduced ? "reduced motion: no sheen sweep, no twinkle" : "sheen sweeps frames 1–4 on Pro and above", x24, 24);
+  rows.forEach(({ rarity, season }, index) => {
+    const y = 34 + index * rowH, cy = y + rowH / 2 - 4;
+    if (index % 2 === 0) { c.fillStyle = "#171c38"; c.fillRect(0, y, sheet.width, rowH); }
+    if (season === "S0" && rarity === 0) { c.fillStyle = "#ffd23f"; c.fillRect(0, y, sheet.width, 1); }
+    c.fillStyle = "#ffffff"; c.fillText(rarity === 7 ? "Standard (fx 7)" : RARITY_NAMES[rarity].replace(" Ball", ""), 6, cy - 6);
+    c.fillStyle = "#9aa3d0"; c.fillText(`${season}${season === "S0" ? " vintage" : ""} · ${BALL_IDENTITY[rarity].pattern}`, 6, cy + 6);
+    for (let f = 0; f < BALL_FRAMES; f++) {
+      const sx = x24 + f * small + small / 2, bx = x32 + f * big + big / 2;
+      drawBallShadow(c, sx, cy + 14, 24); drawBallSprite(c, sx, cy, 24, rarity, season, f, reduced);
+      drawBallShadow(c, bx, cy + 18, 32); drawBallSprite(c, bx, cy, 32, rarity, season, f, reduced);
+    }
+    drawBallShadow(c, xStill + 20, cy + 18, 32); drawBallSprite(c, xStill + 20, cy, 32, rarity, season, 0, true);
+    const fx = season === "S0" ? seasonFx("S0", rarity) : RARITY_FX[rarity];
+    drawBall(c, xGame + 10, cy, 4.5, fx, 0); drawBall(c, xGame + 26, cy, 2.5, fx, 0);
+    drawBallShadow(c, xGame + 64, cy + 16, 28); drawBall(c, xGame + 64, cy, 14, fx, 0);
+  });
+  $("#balls-info").textContent = `${ballSpriteCacheSize()} sprite strips cached (each rendered once, drawn with one drawImage per ball).`;
+}
+$<HTMLInputElement>("#balls-reduced").onchange = () => drawBallSheet();
+$<HTMLSelectElement>("#balls-zoom").onchange = () => drawBallSheet();
+(window as unknown as { __drawBallSheet: () => void }).__drawBallSheet = drawBallSheet;
 
 loadFriend("336583");

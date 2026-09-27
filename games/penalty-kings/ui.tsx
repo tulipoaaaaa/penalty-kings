@@ -4,7 +4,7 @@ import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, type KeeperId } from "@penalty-kings/engine";
 import { RARITIES, TIERS, formatNumber, type Tier } from "./economy.js";
-import { drawBall, seasonFx } from "./gfx/ball.js";
+import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
 import { MODES, isUnlocked, levelFromXp, totalStars, STADIUM_STARS, LADDER, type Progress, type ModeId } from "./game/progress.js";
@@ -12,30 +12,53 @@ import { describe, type Level } from "./game/objectives.js";
 import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 
-/** A rotating ball (8-frame spin cycle) on a small canvas. */
-export function BallSpin({ rarity, size, spinning = true, season = "S1" }: { rarity: number; size: number; spinning?: boolean; season?: "S0" | "S1" }) {
+// One shared 90 ms ticker drives every spinning ball on screen (drawing = one drawImage from a cached strip).
+const spinners = new Set<(frame: number) => void>();
+let spinTimer = 0, spinFrame = 0;
+function subscribeSpin(draw: (frame: number) => void) {
+  spinners.add(draw);
+  if (!spinTimer) spinTimer = window.setInterval(() => { spinFrame = (spinFrame + 1) % BALL_FRAMES; spinners.forEach(fn => fn(spinFrame)); }, 90);
+  return () => { spinners.delete(draw); if (!spinners.size) { window.clearInterval(spinTimer); spinTimer = 0; } };
+}
+
+/** A rotating pixel ball (8-frame spin, sheen on the higher tiers) with its ground shadow, on a small canvas. */
+export function BallSpin({ rarity, size, spinning = true, season = "S1", pedestal = false }: { rarity: number; size: number; spinning?: boolean; season?: "S0" | "S1"; pedestal?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const sprite = size >= 30 ? 32 : 24, margin = Math.max(1, Math.round(sprite / 7)), cell = sprite + margin * 2, height = cell + (pedestal ? 7 : 3);
   useEffect(() => {
     const context = ref.current?.getContext("2d");
     if (!context) return;
     context.imageSmoothingEnabled = false;
-    let frame = 0, raf = 0, last = 0;
-    const draw = (now: number) => {
-      if (now - last > 90) { last = now; frame = (frame + 1) % 8; context.clearRect(0, 0, 32, 32); drawBall(context, 16, 15, 12, seasonFx(season, rarity), spinning ? (frame / 8) * Math.PI * 2 : 0); }
-      raf = spinning ? requestAnimationFrame(draw) : 0;
+    const reduced = ballReducedMotion(), id = BALL_IDENTITY[rarity] ?? BALL_IDENTITY[7];
+    const draw = (frame: number) => {
+      context.clearRect(0, 0, cell, height);
+      if (pedestal) {
+        context.fillStyle = "#0b0d1a"; context.fillRect(3, height - 5, cell - 6, 5);
+        context.fillStyle = id.trim === id.base ? id.accent : id.trim; context.fillRect(4, height - 5, cell - 8, 1);
+        context.fillStyle = "#2a3160"; context.fillRect(4, height - 4, cell - 8, 3);
+      }
+      drawBallShadow(context, cell / 2, margin + sprite + (pedestal ? 0 : 1), sprite);
+      drawBallSprite(context, cell / 2, margin + sprite / 2, sprite, rarity, season, frame, reduced);
     };
-    draw(performance.now() + 100);
-    if (spinning) raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [rarity, spinning, season]);
-  return <canvas ref={ref} width={32} height={32} className="pk-ballspin" style={{ width: size, height: size }} aria-hidden="true" />;
+    draw(0);
+    return spinning && !reduced ? subscribeSpin(draw) : undefined;
+  }, [rarity, spinning, season, pedestal, sprite, cell, height, margin]);
+  return <canvas ref={ref} width={cell} height={height} className="pk-ballspin" style={{ width: size, height: Math.round(size * height / cell) }} aria-hidden="true" />;
+}
+
+/** CSS glow behind a ball, in its rarity colours (display case and pack cards). */
+export function ballGlow(rarity: number, season: "S0" | "S1" = "S1"): string {
+  const id = BALL_IDENTITY[rarity] ?? BALL_IDENTITY[7];
+  const color = season === "S0" ? "#c9b08a" : rarity >= 5 ? "#ffd23f" : rarity === 0 ? "#8a7a66" : id.accent;
+  return `radial-gradient(circle at 50% 38%, ${color}${rarity >= 4 ? "66" : "40"} 0, ${color}00 62%)`;
 }
 
 /** Kit bag display case: each ball on a pedestal with its name, odds and RF value. */
 export function BallCase({ definition, tag }: { definition: GameDefinition; tag: string }) {
   return <div className="pk-case" role="list">
-    {definition.outcomes.map((outcome, index) => <div className="pk-pedestal" role="listitem" key={outcome.name} data-rarity={index}>
-      <BallSpin rarity={index} size={44} />
+    {definition.outcomes.map((outcome, index) => <div className="pk-pedestal" role="listitem" key={outcome.name} data-rarity={index}
+      style={{ backgroundImage: `${ballGlow(index)}, linear-gradient(transparent 55%, #8883 56%)`, borderColor: index >= 5 ? "#ff8c00" : index === 4 ? "#d7dde5" : undefined }}>
+      <BallSpin rarity={index} size={48} pedestal />
       <strong>{RARITY_NAMES[index]}</strong>
       <small>{outcome.chanceBps / 100}% · {formatGameAmount(outcome.reward, 18)} RF{tag}</small>
     </div>)}
