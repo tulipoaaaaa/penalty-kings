@@ -343,6 +343,12 @@ export const AIM_CEILING = 0.9;
 export const AIM_POST_DEG = 45;
 /** Shorter upward travel than this (CSS px) is a tap, not a kick. */
 export const MIN_SWIPE_CSS = 12;
+/**
+ * BQ-P2-4: a swipe whose timestamps span less than this (ms) has no trustworthy speed (coalesced or
+ * duplicated events, a clock step): its pace is measured over this floor and it can never be an overhit.
+ */
+export const MIN_SWIPE_MS = 30;
+const finitePoint = (point: SwipePoint) => Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.t);
 
 export type SwipeOptions = {
   width: number; height: number;
@@ -364,7 +370,10 @@ const DEFAULT_GOAL = { cx: 240, line: 176, unitX: 90, unitY: 80 }, DEFAULT_BALL 
  * samples, evaluated at lift-off (unbiased at any speed), blended 50/50 with the raw last sample so a
  * skidding lift-off moves the aim only half as far.
  */
-export function releasePoint(points: readonly SwipePoint[], window = RELEASE_BUFFER_MS) {
+export function releasePoint(input: readonly SwipePoint[], window = RELEASE_BUFFER_MS) {
+  // BQ-P2-4: a non-finite sample (NaN/Infinity from a broken pointer event) is ignored, never averaged in.
+  const points = input.filter(finitePoint);
+  if (!points.length) return { x: NaN, y: NaN };
   const last = points[points.length - 1];
   const recent = points.filter(point => last.t - point.t <= window);
   if (recent.length < 3) return { x: last.x, y: last.y };
@@ -402,19 +411,24 @@ export function swipeAim(points: readonly SwipePoint[], options: SwipeOptions) {
  * deliberate bend (beyond the dead-zone) sets curl. Returns null for a tap or a downward swipe.
  */
 export function swipeToShot(points: readonly SwipePoint[], options: SwipeOptions): ShotInput | null {
-  if (points.length < 2) return null;
+  // BQ-P2-4: NaN/Infinity anywhere (a sample or the display scale) is not a kick.
+  if (points.length < 2 || !points.every(finitePoint)) return null;
   const px = options.pxPerUnit ?? 1;
+  if (!Number.isFinite(px) || px <= 0) return null;
   const first = points[0], last = points[points.length - 1];
   if ((first.y - last.y) * px < MIN_SWIPE_CSS) return null;
   const { aimX, aimY } = swipeAim(points, options);
   // Pace: path length in CSS px over the swipe's duration.
   let length = 0;
   for (let i = 1; i < points.length; i++) length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  const speed = (length * px) / Math.max(0.03, (last.t - first.t) / 1000);
+  const duration = last.t - first.t;
+  const speed = (length * px) / (Math.max(MIN_SWIPE_MS, duration) / 1000);
   const [slow, fast, huge] = SPEED_CALIBRATION[options.input ?? "touch"];
-  const power = speed <= fast
+  const paced = speed <= fast
     ? 0.35 + (OVERHIT - 0.35) * Math.sqrt(clamp((speed - slow) / (fast - slow), 0, 1))
     : OVERHIT + (1 - OVERHIT) * clamp((speed - fast) / (huge - fast), 0, 1);
+  // Near-zero (or backwards) duration: the speed is a guess, so it may not add an overhit's rise.
+  const power = duration < MIN_SWIPE_MS ? Math.min(paced, OVERHIT) : paced;
   // Curl: the largest signed deviation of the path from its chord (start → smoothed release), as a fraction of the chord.
   const end = releasePoint(points, options.bufferMs ?? RELEASE_BUFFER_MS);
   const dx = end.x - first.x, dy = end.y - first.y, chord = Math.hypot(dx, dy) || 1;

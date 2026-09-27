@@ -1,7 +1,7 @@
 // Bug Quest P2 (engine / difficulty): one test per item, each failed before its fix.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEEPERS, resolveShot, kickSeed, prng, aimWobble, assistShot, keeperPlan, shotTarget, DIFFICULTY_LADDER } from "../src/index.ts";
+import { KEEPERS, resolveShot, kickSeed, prng, aimWobble, assistShot, keeperPlan, shotTarget, DIFFICULTY_LADDER, swipeToShot, releasePoint, OVERHIT, MIN_SWIPE_MS } from "../src/index.ts";
 
 const gauss = (random: () => number) => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
 
@@ -43,4 +43,27 @@ test("BQ-P2-3: after the read, the squirrel's and disco's lean and the robot's s
     }
   }
   assert.ok(reversed > 500, `only ${reversed} reversing reads`);
+});
+
+test("BQ-P2-4: swipes with NaN/Infinity are rejected; a near-zero or backwards duration is never an overhit", () => {
+  const swipe = (dy: number, ms: number) => Array.from({ length: 8 }, (_, i) => ({ x: 240 + i * 2, y: 250 - (dy * i) / 7, t: 1000 + (ms * i) / 7 }));
+  const opts = { width: 480, height: 320 };
+  assert.ok(swipeToShot(swipe(200, 150), opts)); // a normal flick still kicks
+  for (const key of ["x", "y", "t"] as const) for (const bad of [NaN, Infinity, -Infinity]) {
+    for (const at of [0, 3, 7]) {
+      const points = swipe(200, 150); points[at] = { ...points[at], [key]: bad };
+      assert.equal(swipeToShot(points, opts), null, `${key}=${bad} at sample ${at}`);
+    }
+  }
+  assert.equal(swipeToShot(swipe(200, 150), { ...opts, pxPerUnit: NaN }), null);
+  const mixed = swipe(200, 150); mixed[4] = { ...mixed[4], x: NaN };
+  const release = releasePoint(mixed);
+  assert.ok(Number.isFinite(release.x) && Number.isFinite(release.y), "releasePoint ignores the NaN sample");
+  for (const input of ["touch", "mouse", "trackpad"] as const) for (const ms of [0, 5, 20, -40]) {
+    const shot = swipeToShot(swipe(260, ms), { ...opts, input })!;
+    assert.ok(shot && shot.power <= OVERHIT, `${input} ${ms} ms: power ${shot?.power}`);
+    assert.ok(shotTarget(shot).y <= shot.aimY + 1e-9, `${input} ${ms} ms: an overhit's rise`);
+  }
+  // A genuinely fast (≥ MIN_SWIPE_MS) huge flick can still overhit: the cap is only for untrustworthy timing.
+  assert.ok(swipeToShot(swipe(400, MIN_SWIPE_MS + 10), opts)!.power > OVERHIT);
 });
