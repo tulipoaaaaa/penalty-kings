@@ -28,6 +28,7 @@ await testGame("./games/penalty-kings", {
       return { x: box.x + (box.width - 480 * scale) / 2 + x * scale, y: box.y + (box.height - 320 * scale) / 2 + y * scale, scale };
     };
     // A swipe from the ball: up and slightly right, ~180 ms, with a bowed middle.
+    const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable: " + JSON.stringify(window.__pkFlow?.()))) : setTimeout(poll, 50)); poll(); }));
     const swipe = async (dx = 0.35) => {
       const start = await toScreen(240, 250);
       await page.mouse.move(start.x, start.y); await page.mouse.down();
@@ -60,7 +61,7 @@ await testGame("./games/penalty-kings", {
     assert.equal(await game.getByTestId("pot").getAttribute("data-tag"), "SIMULATED", "pot banner is tagged SIMULATED in the preview");
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");
     for (let kick = 1; kick <= 3; kick++) {
-      await page.waitForTimeout(400);
+      await waitShootable();
       await swipe(kick === 2 ? -0.4 : 0.4);
       await game.locator(".pk-banner").waitFor({ timeout: 8000 });
       const banner = await game.locator(".pk-banner strong").textContent();
@@ -94,7 +95,7 @@ await testGame("./games/penalty-kings", {
     const rfBefore = Number(await game.getByTestId("rf").textContent().catch(() => "0"));
     void rfBefore;
     await cards.first().getByTestId("shoot-ball").click();
-    await page.waitForTimeout(400);
+    await waitShootable();
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (Big Match)");
     await swipe(0.3);
     await game.locator(".pk-banner").waitFor({ timeout: 8000 });

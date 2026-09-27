@@ -15,6 +15,7 @@ await testGame("./games/penalty-kings", {
     const started = Date.now(), elapsed = () => (Date.now() - started) / 1000;
     const button = name => game.getByRole("button", { name, exact: true });
     const canvas = game.locator("canvas.pk-canvas");
+    const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable: " + JSON.stringify(window.__pkFlow?.()))) : setTimeout(poll, 50)); poll(); }));
     const swipe = async (dx, fromY = 250, step = 12) => {
       const box = await canvas.boundingBox(), scale = Math.min(box.width / 480, box.height / 320);
       const x = box.x + (box.width - 480 * scale) / 2 + 240 * scale, y = box.y + (box.height - 320 * scale) / 2 + fromY * scale;
@@ -23,7 +24,7 @@ await testGame("./games/penalty-kings", {
       await page.mouse.up();
     };
     const kick = async (dx, fromY, step) => {
-      await page.waitForTimeout(300); await swipe(dx, fromY, step);
+      await waitShootable(); await swipe(dx, fromY, step);
       await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
       await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
     };
