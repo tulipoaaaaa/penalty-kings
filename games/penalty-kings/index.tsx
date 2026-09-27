@@ -444,13 +444,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <span className={`pk-chip ${simulated ? "pk-sim" : "pk-live"}`}>{tier.name.toUpperCase()} · {simulated ? "SIMULATED" : "LIVE RF"}</span>
         <span className="pk-stat" title="RF balance of your Friend's wallet">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{simTag}</span>
         <span className="pk-stat">Balls <b data-testid="balls">{balls.toString()}</b></span>
-        <span className="pk-stat">$GBOOT <b data-testid="gboot">{formatNumber(gboot)}</b>{simulated ? " (sim)" : " (est.)"}</span>
+        <span className="pk-stat">$GBOOT <b data-testid="gboot">{formatNumber(gboot)}</b>{simulated ? " (sim)" : " (est., paid weekly)"}</span>
       </header>
       <header className="pk-hud pk-hud-right">
         <span className="pk-stat">Score <b data-testid="score">{formatNumber(score)}</b></span>
         <span className="pk-stat">Streak <b>×{streakMultiplier(streak)}</b></span>
-        <span className="pk-stat">Cup <b>{formatCompact(cupRF)} RF</b>{simTag}</span>
-        <span className="pk-stat">Race <b>#{raceRank}</b>{simTag}</span>
+        {simulated ? <>
+          <span className="pk-stat">Cup <b>{formatCompact(cupRF)} RF</b>{simTag}</span>
+          <span className="pk-stat">Race <b>#{raceRank}</b>{simTag}</span>
+        </> : <span className="pk-stat">Cup <b>weekly</b> · see report</span>}
       </header>
       <div className="pk-round" aria-label={`Keeper ${keeperById(keeper).name}. Round kick ${inRound} of 5${round.suddenDeath ? ", sudden death" : ""}`}>
         <span className="pk-keeper">{keeperById(keeper).name} ×{keeperById(keeper).mult}</span>
@@ -523,7 +525,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <p className="pk-note">You can change keeper between rounds. Tougher keepers score more points; they never change ball rarity or rewards.</p>
       </div>}
 
-      {menu === "cup" && <>
+      {menu === "cup" && !simulated && <>
+        <h3>Golden Boot Cup (live)</h3>
+        <p>The live pot, race table and payouts are computed each week from on-chain ball settlements by a public script and published with transaction links in the project's docs/WEEKLY.md. This screen does not invent live numbers.</p>
+        <p>Race points this session (from your settled balls): <b>{formatNumber(race)}</b>. Gold = 1 pt, Golden Boot = 2 pts, × stadium weight.</p>
+        <h3>Skill Cup</h3>
+        <p className="pk-note">The replay referee is not connected to this build yet, so Skill Cup entries are not available in live mode.</p>
+      </>}
+      {menu === "cup" && simulated && <>
         <h3>Golden Boot Cup — this week{simTag}</h3>
         <p>Pot: <b>{formatNumber(cupRF)} RF</b> + <b>{formatNumber(cupGboot)} $GBOOT</b>{simTag}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium (Park ×1, Pro ×100, Champions ×1,000), share the pot: {CUP_CURVE.join(" / ")}%.</p>
         <ol className="pk-table">{raceTable.slice(0, 10).map((row, index) => <li key={row.name} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.points)}</b></li>)}</ol>
@@ -539,14 +548,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </>}
 
       {menu === "shop" && <>
-        <p>Cosmetics are bought with $GBOOT, which is burned{simTag}. Balance: <b>{formatNumber(gboot)}</b> · burned so far {formatNumber(burned)}.</p>
+        {simulated ? <p>Cosmetics are bought with $GBOOT, which is burned{simTag}. Balance: <b>{formatNumber(gboot)}</b> · burned so far {formatNumber(burned)}.</p>
+          : <p>Try-on only: nothing is spent or burned here. On-chain KitShop purchases ($GBOOT burned, unlocks per Friend) need a bridge action the SDK does not supply yet (roadmap v1.1).</p>}
         {(["boots", "kit", "net", "celebration"] as const).map(kind => <div key={kind} className="pk-shopgroup"><h3>{kind === "kit" ? "Kits (halo colour)" : kind === "net" ? "Net colours" : kind === "celebration" ? "Celebrations" : "Boots"}</h3>
           {COSMETICS.filter(item => item.kind === kind).map(item => {
             const has = owned.has(item.id), on = equipped[kind] === item.id;
-            return <button key={item.id} type="button" aria-pressed={on} disabled={!has && gboot < item.price} onClick={() => {
-              if (!has) { setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase"); }
+            return <button key={item.id} type="button" aria-pressed={on} disabled={simulated && !has && gboot < item.price} onClick={() => {
+              if (!has && simulated) { setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase"); }
               setEquipped(value => ({ ...value, [kind]: item.id }));
-            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : `${item.price} $GBOOT`}</button>;
+            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has || !simulated ? on ? "equipped" : simulated ? "equip" : "try on" : `${item.price} $GBOOT`}</button>;
           })}</div>)}
       </>}
 
