@@ -62,6 +62,10 @@
 .pk-art-status, .pk-toast { position: absolute; left: 1.2cqw; bottom: 16cqh; margin: 0; max-width: 46cqw; font-size: clamp(7px, 1.35cqw, 13px); background: #0b0d1ad9; padding: 0.4em 0.8em; pointer-events: none; }
 .pk-art-status { bottom: auto; top: 20cqh; }
 .pk-toast { background: var(--pk-paper); color: var(--pk-ink); }
+/* Discovery toast ("NEW: Kiss Cam!"): small, non-blocking, top-left above the pitch, clear of the goal
+   (starts at ~36% of the width) and the striker (bottom-left), under the HUD chips. */
+.pk-discover { position: absolute; left: 1.2cqw; top: 21cqh; margin: 0; max-width: 28cqw; font-size: clamp(7px, 1.3cqw, 12px); color: var(--pk-ink); background: var(--pk-gold, #ffd23f); border: 2px solid #0b0d1a; box-shadow: 2px 2px 0 #000; padding: 0.3em 0.6em; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pk-discover-in 0.3s ease-out; }
+@keyframes pk-discover-in { from { transform: translateX(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
 /* First-session keeper-unlock card: it flips into its Scouting Book page. */
 .pk-unlockcard { display: grid; justify-items: center; gap: 4px; margin: 6px 0; }
 .pk-unlock-flip { position: relative; width: min(260px, 70cqw); height: 84px; perspective: 600px; }
@@ -74,9 +78,13 @@
 @keyframes pk-unlock-front { 0%, 55% { transform: rotateY(0); } 100% { transform: rotateY(-180deg); } }
 @keyframes pk-unlock-back { 0%, 55% { transform: rotateY(180deg); } 100% { transform: rotateY(0); } }
 /* The in-game "Reduce motion" setting: the same still layout as prefers-reduced-motion below. */
+.pk-reduce-motion .pk-discover { animation: none; }
 .pk-reduce-motion .pk-unlock-flip { height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; perspective: none; }
 .pk-reduce-motion .pk-unlock-front, .pk-reduce-motion .pk-unlock-back { position: static; animation: none; transform: none; }
+.pk-discovery { margin: 0 0 8px; padding: 5px 8px; background: var(--pk-card, #1b1f3a); border: 2px solid var(--pk-line, #444); font-weight: bold; }
+.pk-keepercard[data-seen="true"][data-stamped="false"] { border-color: var(--pk-gold, #ffd23f); }
 @media (prefers-reduced-motion: reduce) {
+  .pk-discover { animation: none; }
   /* No flip: the card and its Scouting Book page are shown side by side, still. */
   .pk-unlock-flip { height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; perspective: none; }
   .pk-unlock-front, .pk-unlock-back { position: static; animation: none; transform: none; }

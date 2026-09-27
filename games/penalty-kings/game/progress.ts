@@ -27,14 +27,24 @@ export type Progress = {
   rewards: string[];
   /** Match Director moments seen (the Director's encoded seen code, for the Discovery meter). */
   directorSeen: string;
+  /** Keepers met on the pitch or scouted (Discovery meter; stamps count too). */
+  keepersSeen: KeeperId[];
+  /** Stadiums played in (Discovery meter). */
+  stadiumsSeen: string[];
 };
 
 export const STORAGE_KEY = "penalty-kings/progress/v1";
 export const fresh = (): Progress => ({
   version: 1, xp: 0, stars: {}, stamps: [], pulled: [], matches: 0, tutorialDone: false, difficulty: 3, history: [],
   daily: { date: "", attempts: 0, best: 0, played: [] }, best: { target: 0, penalties: 0, freekicks: 0 }, rewards: [],
-  directorSeen: "",
+  directorSeen: "", keepersSeen: [], stadiumsSeen: [],
 });
+/** Discovery meter: "Seen N/60 moments · K/12 keepers · S/3 stadiums" (moments from the Director's seen code). */
+export const STADIUM_COUNT = 3;
+export function discoveryLabel(progress: Progress, moments: { seen: number; total: number }) {
+  const keepers = new Set<string>([...progress.stamps, ...progress.keepersSeen]).size, stadiums = new Set(progress.stadiumsSeen).size;
+  return { moments, keepers, stadiums, label: `Seen ${moments.seen}/${moments.total} moments · ${keepers}/${LADDER.length} keepers · ${stadiums}/${STADIUM_COUNT} stadiums` };
+}
 
 export function loadProgress(storage: Pick<Storage, "getItem"> | null = safeStorage()): Progress {
   try {

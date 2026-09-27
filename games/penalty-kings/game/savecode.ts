@@ -27,10 +27,11 @@ const toBase64Url = (text: string) => btoa(unescape(encodeURIComponent(text))).r
 const fromBase64Url = (text: string) => decodeURIComponent(escape(atob(text.replace(/-/g, "+").replace(/_/g, "/"))));
 
 /** What a save code keeps (the shot history for the difficulty director is rebuilt by playing). */
-type Saved = Pick<Progress, "xp" | "stars" | "stamps" | "pulled" | "matches" | "tutorialDone" | "difficulty" | "daily" | "best" | "rewards" | "directorSeen">;
+type Saved = Pick<Progress, "xp" | "stars" | "stamps" | "pulled" | "matches" | "tutorialDone" | "difficulty" | "daily" | "best" | "rewards" | "directorSeen" | "keepersSeen" | "stadiumsSeen">;
+const STADIUMS = ["park", "pro", "champions"];
 
 export function encodeSaveCode(progress: Progress, friendId: bigint | string) {
-  const saved: Saved = { xp: progress.xp, stars: progress.stars, stamps: progress.stamps, pulled: progress.pulled, matches: progress.matches, tutorialDone: progress.tutorialDone, difficulty: progress.difficulty, daily: progress.daily, best: progress.best, rewards: progress.rewards, directorSeen: progress.directorSeen };
+  const saved: Saved = { xp: progress.xp, stars: progress.stars, stamps: progress.stamps, pulled: progress.pulled, matches: progress.matches, tutorialDone: progress.tutorialDone, difficulty: progress.difficulty, daily: progress.daily, best: progress.best, rewards: progress.rewards, directorSeen: progress.directorSeen, keepersSeen: progress.keepersSeen, stadiumsSeen: progress.stadiumsSeen };
   const payload = toBase64Url(JSON.stringify(saved));
   return `${PREFIX}.${payload}.${crc32(`${friendId}:${payload}`)}`;
 }
@@ -55,8 +56,10 @@ export function decodeSaveCode(code: string, friendId: bigint | string): Restore
       rewards: Array.isArray(saved.rewards) ? saved.rewards.filter(id => typeof id === "string") : [],
       daily: { ...base.daily, ...(saved.daily ?? {}) },
       best: { ...base.best, ...(saved.best ?? {}) },
-      // Match Director moments seen (added later: older codes without it restore with none seen).
+      // Discovery meter (added later: older codes without these fields restore with empty discovery).
       directorSeen: typeof saved.directorSeen === "string" && /^[A-Za-z0-9_-]{0,32}$/.test(saved.directorSeen) ? saved.directorSeen : "",
+      keepersSeen: Array.isArray(saved.keepersSeen) ? saved.keepersSeen.filter(id => typeof id === "string") : [],
+      stadiumsSeen: Array.isArray(saved.stadiumsSeen) ? saved.stadiumsSeen.filter(id => STADIUMS.includes(id)) : [],
     } };
   } catch { return { ok: false, reason: "This save code is damaged." }; }
 }

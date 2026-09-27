@@ -43,7 +43,7 @@ await testGame("./games/penalty-kings", {
     const overlaps = async () => {
       const [g1, g2, s1, s2, b1, b2] = await Promise.all([toScreen(GOAL.left, GOAL.top), toScreen(GOAL.right, GOAL.bottom), toScreen(STRIKER.left, STRIKER.top), toScreen(STRIKER.right, STRIKER.bottom), toScreen(SCOREBOARD.left, SCOREBOARD.top), toScreen(SCOREBOARD.right, SCOREBOARD.bottom)]);
       const zones = { goal: { x1: g1.x, y1: g1.y, x2: g2.x, y2: g2.y }, striker: { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y }, scoreboard: { x1: b1.x, y1: b1.y, x2: b2.x, y2: b2.y } };
-      const boxes = await game.locator(".pk-hud .pk-stat, .pk-hud .pk-chip, .pk-pot, .pk-actions button").evaluateAll(nodes => nodes.filter(n => n.offsetParent).map(n => { const r = n.getBoundingClientRect(); return { name: n.textContent.slice(0, 24), x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; }));
+      const boxes = await game.locator(".pk-hud .pk-stat, .pk-hud .pk-chip, .pk-pot, .pk-actions button, .pk-discover").evaluateAll(nodes => nodes.filter(n => n.offsetParent).map(n => { const r = n.getBoundingClientRect(); return { name: n.textContent.slice(0, 24), x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; }));
       const frame = await game.locator("canvas.pk-canvas").evaluate(n => { const r = n.ownerDocument.defaultView.frameElement?.getBoundingClientRect(); return r ? { x: r.left, y: r.top } : { x: 0, y: 0 }; });
       const hits = [];
       for (const box of boxes) for (const [zone, z] of Object.entries(zones)) {
@@ -87,6 +87,14 @@ await testGame("./games/penalty-kings", {
       const banner = await game.locator(".pk-banner strong").textContent();
       assert.match(banner, /GOAL!|SAVED!|OFF THE POST!|OVER THE BAR!|WIDE!/);
       console.log(`tutorial kick ${kick}: ${banner}`);
+      if (kick === 1) {
+        // SIO-4: the first Director moment ever seen shows a small "NEW: …!" toast; it never covers the goal, the striker or the HUD.
+        const toast = game.getByTestId("discover-toast");
+        await toast.waitFor({ timeout: 5000 });
+        assert.match(await toast.textContent(), /^NEW: .+!$/);
+        assert.deepEqual(await overlaps(), [], "the discovery toast overlaps nothing (goal, striker, HUD, pot, actions)");
+        console.log(`discovery toast: ${await toast.textContent()}`);
+      }
       await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
     }
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
@@ -94,7 +102,15 @@ await testGame("./games/penalty-kings", {
     // SIO-2: the keeper-unlock card (flips into the Scouting Book) and the Free Kicks teaser.
     assert.match(await game.getByTestId("unlock-card").textContent(), /New rival scouted: Octavia!/);
     assert.match(await game.getByTestId("teaser").textContent(), /Free Kicks/);
-    await button("Modes").click();
+    // SIO-4: the Scouting Book's Discovery meter.
+    await game.getByTestId("open-book").click();
+    const meter = await game.getByTestId("discovery").textContent();
+    assert.match(meter, /^Seen \d+\/60 moments · \d+\/12 keepers · 1\/3 stadiums$/);
+    assert.ok(Number(/Seen (\d+)/.exec(meter)[1]) >= 1 && Number(/(\d+)\/12 keepers/.exec(meter)[1]) >= 3, `discovery after the first session: ${meter}`);
+    console.log(`scouting book: ${meter}`);
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await button("Change mode").click();
 
     // Big Match, founder flow: BUY a pack → OPEN (SDK play + settle) → REVEAL ALL → true summary → BAG →
     // choose a ball → KICK (the ball is not consumed) → REDEEM one ball for RF.

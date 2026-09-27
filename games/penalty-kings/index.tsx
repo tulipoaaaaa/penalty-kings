@@ -22,7 +22,7 @@ import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
-import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
+import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, discoveryLabel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
@@ -32,7 +32,7 @@ import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
-import { MatchDirector, createGameDirector, applyBeat, playMoment, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
+import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal } from "./game/firstsession.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
@@ -75,6 +75,10 @@ const KEEPER_MOMENTS = new Set(["keeper-taunt", "keeper-tell", "keeper-banter", 
 const FIRST_GOAL_CELEBRATION: CelebrationId = "trophy-lift";
 /** How long a Director jumbotron message holds before the prize slides come back. */
 const JUMBOTRON_HOLD_MS = 6000;
+/** Discovery toasts ("NEW: Kiss Cam!"): on screen time and how many may wait. */
+const DISCOVER_MS = 1700, DISCOVER_QUEUE = 4;
+/** Discovery counts from a stored seen code (before the Director exists). */
+const discoverySeen = (code: string) => { const found = discovery(decodeSeen(code)); return { seen: found.seen, total: found.total }; };
 const timeOfDay = (hour = new Date().getHours()): TimeOfDay => (hour < 11 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night");
 const vibrate = (pattern: number | number[]) => { try { navigator.vibrate?.(pattern); } catch { /* iPhone Safari: unsupported, skip */ } };
 
@@ -143,6 +147,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
    * Created per Friend with the seen moments from progress (the Discovery meter).
    */
   const dir = useRef<GameDirector | null>(null);
+  /** Moments this player had seen before (a new one shows the "NEW: …!" toast once). */
+  const knownMoments = useRef(new Set<string>());
   /** Bumped on every session start/leave: queued Director lines from an old session never play. */
   const sessionEpoch = useRef(0);
   /** Director lines are said one after another from this time (ms), so each can be read. */
@@ -155,6 +161,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const afterBeat = useRef<Beat | null>(null);
   /** First session: every tutorial kick's engine outcome (for the net-cam replay of the best goal). */
   const tutorialShots = useRef<{ outcome: ShotOutcome; curl: number; keeper: KeeperId; result: string; points: number }[]>([]);
+  const [discover, setDiscover] = useState<{ key: number; text: string } | null>(null);
+  const discoverQueue = useRef<string[]>([]);
   const kicksTaken = useRef(0);
   const progressRef = useRef(progress); progressRef.current = progress;
   const bagRef = useRef(bag); bagRef.current = bag;
@@ -395,6 +403,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function director(): GameDirector {
     if (!dir.current) {
       dir.current = createGameDirector((Number(friendId % 1000003n) * 7919 + Date.now()) >>> 0, { name: `Friend #${friendId}`, number: String(friendId) }, progressRef.current.directorSeen);
+      knownMoments.current = new Set(dir.current.seenIds());
     }
     return dir.current;
   }
@@ -414,6 +423,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (!slots.includes(moment.slot) || (kind === "target" && KEEPER_MOMENTS.has(moment.id))) continue;
       const played = playMoment(scene, moment, lineLater);
       if (played.jumbotron) jumboHold.current = Date.now() + JUMBOTRON_HOLD_MS;
+      noteMoment(moment);
     }
   }
   /** A beat before a kick / at a session start: its keeper change (walk-on), hush, lines and "before" moments. */
@@ -422,11 +432,31 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const moments = kind === "target" ? beat.moments.filter(moment => !KEEPER_MOMENTS.has(moment.id)) : beat.moments;
     const played = applyBeat(scene, { ...beat, moments, keeperChanged: kind !== "target" && beat.keeperChanged }, ["before"], lineLater);
     if (played.jumbotron) jumboHold.current = Date.now() + JUMBOTRON_HOLD_MS;
+    moments.filter(moment => moment.slot === "before").forEach(noteMoment);
   }
-  /** Persist the Director's seen moments (its seen code) into progress and so into the save code. */
-  function syncDiscovery() {
+  /** Discovery: toast a moment the first time this player ever sees it. */
+  function noteMoment(moment: Moment) {
+    if (knownMoments.current.has(moment.id)) return;
+    knownMoments.current.add(moment.id);
+    if (discoverQueue.current.length >= DISCOVER_QUEUE) return; // the Scouting Book still lists it
+    discoverQueue.current.push(`NEW: ${moment.name}!`);
+    if (discoverQueue.current.length === 1) nextDiscovery();
+  }
+  function nextDiscovery() {
+    const text = discoverQueue.current[0];
+    if (!text) { setDiscover(null); return; }
+    setDiscover({ key: performance.now(), text });
+    window.setTimeout(() => { discoverQueue.current.shift(); nextDiscovery(); }, DISCOVER_MS);
+  }
+  /** Persist the Discovery meter: the Director's seen code, keepers met, stadiums played. */
+  function syncDiscovery(extra: { keeper?: KeeperId; stadium?: string } = {}) {
     const seenCode = dir.current?.seenCode();
-    if (seenCode !== undefined) updateProgress(p => (seenCode === p.directorSeen ? p : { ...p, directorSeen: seenCode }));
+    updateProgress(p => {
+      const directorSeen = seenCode ?? p.directorSeen;
+      const keepersSeen = extra.keeper && !p.keepersSeen.includes(extra.keeper) ? [...p.keepersSeen, extra.keeper] : p.keepersSeen;
+      const stadiumsSeen = extra.stadium && !p.stadiumsSeen.includes(extra.stadium) ? [...p.stadiumsSeen, extra.stadium] : p.stadiumsSeen;
+      return directorSeen === p.directorSeen && keepersSeen === p.keepersSeen && stadiumsSeen === p.stadiumsSeen ? p : { ...p, directorSeen, keepersSeen, stadiumsSeen };
+    });
   }
   /** Session changes the next event/frame must see immediately (keeper swaps before a kick). */
   const setSessionNow = (next: Session) => { live.current = { ...live.current, session: next }; setSession(next); };
@@ -535,7 +565,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (next.mode === "tutorial") scene.walkout("first-walkout");
       else if (opening) playBeat({ ...opening, keeperChanged: false }, next.kind);
     }
-    syncDiscovery();
+    syncDiscovery({ stadium: tier.id });
     if (next.mode === "match") { setPhaseNow("idle"); return; }
     startAim(next);
   }
@@ -600,7 +630,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.kind !== "target") {
         scene.tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
-        syncDiscovery();
+        syncDiscovery({ keeper: current.keeper });
       }
     }
     setPhaseNow("aim"); setMenu(null);
@@ -816,6 +846,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         // The first-session keeper-unlock card: it flips into the Scouting Book, plus the Free Kicks teaser.
         const open = levelFromXp(p.xp + XP.tutorial).level >= (MODES.find(mode => mode.id === "freekicks")?.level ?? 2);
         result.scouted = { keeper: FIRST_UNLOCK.keeper, card: FIRST_UNLOCK.card, teaser: open ? FIRST_UNLOCK.teaserOpen : FIRST_UNLOCK.teaser };
+        updated.keepersSeen = [...new Set([...p.keepersSeen, FIRST_UNLOCK.keeper])];
       }
       // Scouting Book stamp: 3 goals in the round. The tutorial's surprise keeper is a cameo, so it stamps the plan's first keeper.
       const stampKeeper = current.mode === "tutorial" ? FIRST_SESSION[0].keeper : current.keeper;
@@ -1109,6 +1140,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
       </nav>}
       {(error || message) && phase !== "shooting" && screen === "play" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}
+      {discover && screen === "play" && !menu && <p key={discover.key} className="pk-discover" role="status" aria-live="polite" data-testid="discover-toast">{discover.text}</p>}
     </div>
 
     {screen === "title" && !menu && <div className={`pk-title pk-attract${intro === "cold" ? " pk-coldopen" : ""}`} role="dialog" aria-label="Penalty Kings" data-intro={intro}
@@ -1165,7 +1197,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD uses an on-chain RF price snapshot (live stadiums read the price every 60 s)." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
       </>}
 
-      {menu === "book" && <ScoutingBook progress={progress} />}
+      {menu === "book" && <ScoutingBook progress={progress} discovery={discoveryLabel(progress, dir.current ? { seen: dir.current.discovery().seen, total: dir.current.discovery().total } : discoverySeen(progress.directorSeen))} />}
       {menu === "tour" && (pendingLevel
         ? <><h3>{pendingLevel.name}</h3><LevelBrief level={pendingLevel} /><div className="pk-buyrow"><button type="button" className="pk-primary" autoFocus onClick={() => startLevel(pendingLevel)}>Kick off</button><button type="button" onClick={() => setPendingLevel(null)}>Back</button></div></>
         : <TourMap levels={LEVELS} progress={progress} onPick={setPendingLevel} />)}

@@ -184,9 +184,11 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
   </div>;
 }
 
-export function ScoutingBook({ progress }: { progress: Progress }) {
+export function ScoutingBook({ progress, discovery }: { progress: Progress; discovery?: { label: string } }) {
   const streaks = [1, 2, 3, 4, 5].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
   return <div className="pk-book">
+    {/* Discovery meter: Match Director moments seen, keepers met or scouted, stadiums played. */}
+    {discovery && <p className="pk-discovery" data-testid="discovery">{discovery.label}</p>}
     {/* The numbers kept off the pitch (round 6 C15): difficulty, multipliers, keeper reads. */}
     <h3>How scoring works</h3>
     <ul className="pk-scoring" data-testid="scoring">
@@ -198,7 +200,7 @@ export function ScoutingBook({ progress }: { progress: Progress }) {
       <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
     </ul>
     <h3>Keepers ({progress.stamps.length}/{KEEPERS.length} stamped)</h3>
-    <div className="pk-book-grid">{LADDER.map(id => <KeeperCard key={id} id={id} stamped={progress.stamps.includes(id)} />)}</div>
+    <div className="pk-book-grid">{LADDER.map(id => <KeeperCard key={id} id={id} stamped={progress.stamps.includes(id)} seen={progress.keepersSeen.includes(id)} />)}</div>
     <h3>Ball Collection ({new Set(progress.pulled).size}/7 pulled)</h3>
     <div className="pk-case">{RARITY_NAMES.slice(0, 7).map((name, index) => <div className="pk-pedestal" key={name} data-pulled={progress.pulled.includes(index)}>
       <BallSpin rarity={index} size={36} spinning={progress.pulled.includes(index)} />
@@ -206,10 +208,10 @@ export function ScoutingBook({ progress }: { progress: Progress }) {
   </div>;
 }
 
-function KeeperCard({ id, stamped }: { id: KeeperId; stamped: boolean }) {
-  return <div className="pk-keepercard" data-stamped={stamped}>
-    <KeeperPortrait id={id} lit={stamped} />
-    <strong>{keeperById(id).name}{stamped ? " ✓" : ""}</strong>
+function KeeperCard({ id, stamped, seen = false }: { id: KeeperId; stamped: boolean; seen?: boolean }) {
+  return <div className="pk-keepercard" data-stamped={stamped} data-seen={seen || stamped}>
+    <KeeperPortrait id={id} lit={stamped || seen} />
+    <strong>{keeperById(id).name}{stamped ? " ✓" : seen ? " · scouted" : ""}</strong>
     <KeeperFacts id={id} />
   </div>;
 }

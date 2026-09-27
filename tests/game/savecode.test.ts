@@ -23,3 +23,20 @@ test("save code is bound to its Friend and rejects typos / junk", () => {
   assert.equal(decodeSaveCode("hello", 7730n).ok, false);
   assert.equal(decodeSaveCode(`  ${code}\n`, 7730n).ok, true, "whitespace from copy/paste is fine");
 });
+
+test("save code keeps the Discovery meter (Director seen code, keepers, stadiums) and old codes still restore", () => {
+  const progress = { ...fresh(), xp: 300, directorSeen: "gB-3", keepersSeen: ["mouse", "chameleon", "octopus"] as never[], stadiumsSeen: ["park"] };
+  const back = decodeSaveCode(encodeSaveCode(progress, 42n), 42n);
+  assert.ok(back.ok);
+  if (back.ok) { assert.equal(back.progress.directorSeen, "gB-3"); assert.deepEqual(back.progress.keepersSeen, ["mouse", "chameleon", "octopus"]); assert.deepEqual(back.progress.stadiumsSeen, ["park"]); }
+  const crc = (text: string) => { let c = ~0; for (let i = 0; i < text.length; i++) { c ^= text.charCodeAt(i); for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return (~c >>> 0).toString(16).padStart(8, "0"); };
+  const code = (value: unknown) => { const payload = Buffer.from(JSON.stringify(value), "utf8").toString("base64url"); return `PK1.${payload}.${crc(`42:${payload}`)}`; };
+  // A code made before the Discovery meter existed (no such fields) restores with empty discovery.
+  const old = decodeSaveCode(code({ xp: 120, stamps: ["mouse"], tutorialDone: true }), 42n);
+  assert.ok(old.ok);
+  if (old.ok) { assert.equal(old.progress.xp, 120); assert.equal(old.progress.directorSeen, ""); assert.deepEqual(old.progress.keepersSeen, []); assert.deepEqual(old.progress.stadiumsSeen, []); }
+  // Junk in the new fields is dropped, never trusted.
+  const cleaned = decodeSaveCode(code({ xp: 1, directorSeen: "<script>", stadiumsSeen: ["moon", "pro"] }), 42n);
+  assert.ok(cleaned.ok);
+  if (cleaned.ok) { assert.equal(cleaned.progress.directorSeen, ""); assert.deepEqual(cleaned.progress.stadiumsSeen, ["pro"]); }
+});
