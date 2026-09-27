@@ -3,8 +3,8 @@
 | Component | Status |
 |---|---|
 | Simulated preview (GitHub Pages: `/`, `/pro/`, `/champions/`) | built by `.github/workflows/pages.yml` |
-| Burner wallet | `0xDB454B035777692EB6bd599297781a7ACC3A25e4` (owner-created; key held by the owner and supplied only as a session environment variable). Balance 0 ETH at 05:45 UTC Sep 27: awaiting funding |
-| Hardwired Friend (burner) | scripted (`scripts/onchain/friend.mjs 6`) and rehearsed on a fork: Gen 6, SDK-eligible; not yet sent |
+| Burner wallet | `0xDB454B035777692EB6bd599297781a7ACC3A25e4` (owner-created; key held by the owner and supplied only as a session environment variable). Funded by the owner: 0.00596 ETH and 10,000 RF left after hardwiring (read via RPC, Sep 27) |
+| Hardwired Friend (burner) | **Friend #336583, Generation 2**: hardwired by the owner (tx in [TX-LOG](TX-LOG.md)) and verified on-chain (`ownerOf` = burner, `generation` = 2). The burner also holds a temporary Friend, #336584 |
 | $GBOOT token | not deployed |
 | Park / Pro / Champions ChanceGame | not deployed |
 | $GBOOT/RF Uniswap v4 pool | not created |
