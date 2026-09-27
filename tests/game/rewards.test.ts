@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { ALL_COSMETICS } from "../../games/penalty-kings/economy.ts";
 import { skillZoneOf, streakAfter, checkIn, challengeStreak, canClaim, nextClaimIn, CLAIM_EVERY_MS, LOGIN_TRACK } from "../../games/penalty-kings/game/rewards.ts";
 
 test("Skill Zones: top bin / post-in / bar-in, and they extend the streak by an extra step", () => {
@@ -19,6 +20,7 @@ test("7-day login track: consecutive days advance, a gap restarts, once per day,
   assert.equal(track.day, 7); assert.equal(last?.cosmetic, LOGIN_TRACK[6].cosmetic);
   assert.equal(checkIn(track, "2026-09-27").reward, null, "once per day");
   assert.equal(checkIn(track, "2026-09-29").track.day, 1, "missed a day: restart");
+  for (const step of LOGIN_TRACK) if (step.cosmetic) assert.ok(ALL_COSMETICS.some(c => c.id === step.cosmetic), `real cosmetic id ${step.cosmetic}`);
 });
 
 test("challenge streak: one freeze per ISO week bridges a single missed day", () => {

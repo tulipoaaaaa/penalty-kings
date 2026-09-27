@@ -21,7 +21,7 @@ export const streakAfter = (streak: number, zone: SkillZone | null) => Math.min(
 export type LoginTrack = { lastDay: string; day: number };
 /** Day 1..7 rewards: XP, with a cosmetic unlock on day 7 (the preview's free Park ball is simulated only). */
 export const LOGIN_TRACK: readonly { xp: number; cosmetic?: string }[] = [
-  { xp: 20 }, { xp: 25 }, { xp: 30 }, { xp: 35 }, { xp: 40 }, { xp: 50 }, { xp: 80, cosmetic: "net-gold" },
+  { xp: 20 }, { xp: 25 }, { xp: 30 }, { xp: 35 }, { xp: 40 }, { xp: 50 }, { xp: 80, cosmetic: "net-lime" },
 ];
 const dayAfter = (day: string) => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 
