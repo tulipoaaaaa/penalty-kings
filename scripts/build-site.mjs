@@ -60,8 +60,12 @@ for (const tier of ["park", "pro", "champions"]) {
 }
 await buildPractice(`${SITE}/practice`);
 console.log("built free practice → site/practice");
-await buildClubhouse(`${SITE}/live/clubhouse`);
-console.log("built clubhouse (live) → site/live/clubhouse");
+// The $GBOOT Clubhouse is part of the undeployed upgrade package (docs/GBOOT-UPGRADE.md): it is only published
+// once its contracts exist (deployments/live.json). The pilot ships without $GBOOT, so the public site has no Clubhouse.
+if (await exists(`${GAME}/deployments/live.json`)) {
+  await buildClubhouse(`${SITE}/live/clubhouse`);
+  console.log("built clubhouse (live) → site/live/clubhouse");
+}
 await writeFile(`${SITE}/.nojekyll`, "");
 await rm(WORK, { recursive: true, force: true });
 console.log(`site ready in ${SITE}/`);

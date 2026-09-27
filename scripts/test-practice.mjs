@@ -5,7 +5,7 @@
 //     (no RPC host, no provider, no wallet, nothing cross-origin, no POST);
 //   - no wallet/provider code in the bundle; the site root links to the practice page;
 //   - text >= 11 CSS px, no horizontal scroll, no console errors; works with storage blocked.
-// Screenshots: artifacts/practice-*.png (set PK_DOC_SHOTS=1 to refresh docs/screenshots/). Run after `npm run build:site`.
+// Screenshots: artifacts/practice-*.png (set PK_DOC_SHOTS=1 to refresh docs/screenshots/). `npm run test:practice` builds the site first.
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { chromium } from "playwright";
@@ -15,7 +15,7 @@ const SITE = "site", SHOTS = process.env.PK_DOC_SHOTS ? "docs/screenshots" : "ar
 const RPC_HOSTS = ["rpc.mainnet.chain.robinhood.com", "robinhood", "infura", "alchemy", "quicknode", "walletconnect", "privy", "moonpay", "blockscout", "rarefriends.com"];
 const BUNDLE_BANNED = [/window\.ethereum/, /eth_requestAccounts/, /eth_chainId/, /wallet_switchEthereumChain/, /privy/i, /moonpay/i, /walletconnect/i, /metamask:\/\//i, /isPenaltyKingsDevWallet/, /mock-wallet/];
 
-await readFile(`${SITE}/practice/index.html`).catch(() => { console.error("site/practice missing: run npm run build:site first"); process.exit(1); });
+await readFile(`${SITE}/practice/index.html`).catch(() => { console.error("site/practice missing: use npm run test:practice (it builds the site first)"); process.exit(1); });
 
 // Static checks on the built files.
 const bundle = await readFile(`${SITE}/practice/practice.js`, "utf8"), html = await readFile(`${SITE}/practice/index.html`, "utf8");
