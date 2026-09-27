@@ -10,17 +10,20 @@
  *  3. POST kick: the client sends its kick inputs. The referee STORES them first, then derives the
  *     keeper's dive seed = HMAC-SHA256(weekSecret, entryId ‖ kickIndex) and resolves the kick with
  *     the shared engine. The client can never supply or claim a result.
- *  4. After kick 5 the referee signs {week, entryId, friendId, score, kicks} with its ECDSA key.
+ *  4. After kick 5 the referee signs {week, entryId, friendId, score, kicks} with its ECDSA key, and,
+ *     when a reward signer is configured, the EIP-712 $GBOOT reward claims the entry earned
+ *     (rewards.ts; redeemed and capped on-chain by RewardsDistributor).
  *  5. Week end: the secret is revealed; anyone can recompute every dive and score from the
  *     published inputs (see replayEntry).
  */
 import { KEEPERS, keeperById, resolveShot, shotTarget, goalPoints, clamp, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
+import { KIND_SKILL, KIND_STREAK, STREAK_BONUS_RF, STREAK_DAYS, CLAIM_VALIDITY_S, rewardNonce, skillRewardRf, dayStreak, dayOf, toJson, type RewardClaim, type RewardSigner, type SignedReward } from "./rewards.ts";
 
 export const KICKS_PER_ENTRY = 5;
 export const SKILL_KEEPER = keeperById("finalwall");
 
 export type KickInput = ShotInput & { /** ms from aim start to release; recorded for review, not used by physics. */ releaseMs: number };
-export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number }[]; score: number; signature?: string };
+export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number }[]; score: number; signature?: string; rewards?: SignedReward[] };
 
 export interface Store {
   getEntry(id: number): Promise<Entry | null>;
@@ -66,7 +69,7 @@ export class RefereeError extends Error {
 }
 
 
-export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: number; store: Store; chain: Chain; signingKey: CryptoKey; now?: () => number }) {
+export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: number; store: Store; chain: Chain; signingKey: CryptoKey; now?: () => number; signReward?: RewardSigner }) {
   const now = options.now ?? Date.now;
   const { secret, week, store, chain } = options;
 
@@ -74,6 +77,23 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
     const payload = JSON.stringify({ week: entry.week, entryId: entry.id, friendId: entry.friendId, score: entry.score, kicks: entry.kicks.map(k => k.result) });
     const signature = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, options.signingKey, enc.encode(payload));
     return { payload, signature: hex(signature) };
+  }
+
+  /** EIP-712 reward claims for a finished entry (none without a reward signer). */
+  async function rewardsFor(entry: Entry): Promise<SignedReward[]> {
+    if (!options.signReward) return [];
+    const deadline = BigInt(Math.floor(now() / 1000) + CLAIM_VALIDITY_S);
+    const base = { friendId: BigInt(entry.friendId), entryId: BigInt(entry.id), deadline };
+    const claims: RewardClaim[] = [];
+    const skill = skillRewardRf(entry.kicks.map(k => k.result));
+    if (skill > 0n) claims.push({ ...base, kind: KIND_SKILL, rfValue: skill, nonce: rewardNonce(entry.id, KIND_SKILL) });
+    // Streak: the first finished entry of the day, after STREAK_DAYS consecutive days with a finished entry.
+    const finished = (await store.weekEntries(entry.week)).filter(e => e.friendId === entry.friendId && e.id !== entry.id && e.kicks.length === KICKS_PER_ENTRY);
+    const today = dayOf(entry.createdAt);
+    if (!finished.some(e => dayOf(e.createdAt) === today) && dayStreak([...finished.map(e => dayOf(e.createdAt)), today], today) >= STREAK_DAYS) {
+      claims.push({ ...base, kind: KIND_STREAK, rfValue: STREAK_BONUS_RF, nonce: rewardNonce(entry.id, KIND_STREAK) });
+    }
+    return Promise.all(claims.map(async claim => ({ claim: toJson(claim), signature: await options.signReward!(claim) })));
   }
 
   return {
@@ -111,9 +131,13 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
       entry.kicks.push({ input, result: scored.result, points: scored.points });
       entry.score += scored.points;
       let signed: { payload: string; signature: string } | undefined;
-      if (entry.kicks.length === KICKS_PER_ENTRY) { signed = await sign(entry); entry.signature = signed.signature; }
+      let rewards: SignedReward[] | undefined;
+      if (entry.kicks.length === KICKS_PER_ENTRY) {
+        signed = await sign(entry); entry.signature = signed.signature;
+        rewards = await rewardsFor(entry); entry.rewards = rewards;
+      }
       await store.putEntry(entry);
-      return { kickIndex: body.kickIndex, result: scored.result, points: scored.points, dive: { x: scored.plan.x, y: scored.plan.y }, score: entry.score, signed };
+      return { kickIndex: body.kickIndex, result: scored.result, points: scored.points, dive: { x: scored.plan.x, y: scored.plan.y }, score: entry.score, signed, rewards };
     },
   };
 }

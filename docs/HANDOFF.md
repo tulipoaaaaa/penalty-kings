@@ -51,7 +51,7 @@ Owner requirement: **no simulations outside the judged preview**. The SDK sandbo
 referee or sign (its CSP allows only the Robinhood RPC, and there is no signer), so live Skill
 Cup, KitShop purchases and Wildcards go on a trusted page, `/live/clubhouse/`:
 - the SDK wallet session and `readGenerationEligibility`;
-- `SkillCup.sol` for on-chain entries (100 $GBOOT: 50% burned, 50% to the pot, with on-chain
+- `SkillCup.sol` for on-chain entries (10 RF in $GBOOT at the TWAP: 50% burned, 50% to the pot, with on-chain
   rate limits);
 - a referee verifying the on-chain entry;
 - KitShop `buy`, and Wildcards drawn with Dice randomness.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.36;
 
+import { IGBootPriceFeed, ISinkLedger } from "./interfaces/IGBootPriceFeed.sol";
+
 interface IWildcardGenerations {
     function ownerOf(uint256 friendId) external view returns (address);
     function generation(uint256 friendId) external view returns (uint8);
@@ -23,15 +25,18 @@ interface IWildcardEntropy {
 /// The draw uses Dice randomness with the ball table's top odds: Gold 2.5% (1 race point),
 /// Golden Boot 1% (2 race points), otherwise nothing. Results are events read by the weekly script,
 /// which counts them at the Park weight (×1).
-/// PRICE = 100 $GBOOT ≈ 10 RF at the 0.1 RF launch price (tokenomics v2): the same gross price as a Park ball but
-/// with no RF payout, so Wildcards are a dearer route to race points than balls unless $GBOOT falls
-/// below ~0.1× its launch price (see docs/ECONOMY.md, "Wildcard farm check").
-contract Wildcards {
-    uint256 public constant PRICE = 100e18;
+/// PRICE_RF = 10 RF, paid in $GBOOT at the pool's 30-minute TWAP (GBootPriceFeed, rounded up; the
+/// buyer's `maxGbootIn` bounds it): the same gross price as a Park ball at every $GBOOT price but with
+/// no RF payout, so Wildcards are always a dearer route to race points than balls (docs/ECONOMY.md,
+/// "Wildcard farm check"). Burns are recorded per week (sink ledger).
+contract Wildcards is ISinkLedger {
+    uint256 public constant PRICE_RF = 10e18;
     uint32 public constant CALLBACK_GAS_LIMIT = 200_000;
 
     IWildcardGenerations public immutable generations;
     IWildcardToken public immutable gboot;
+    IGBootPriceFeed public immutable feed;
+    uint256 public immutable start;
     IWildcardEntropy public immutable entropy;
     address public immutable provider;
     address public immutable pot;
@@ -45,6 +50,8 @@ contract Wildcards {
     uint256 public draws;
     mapping(uint256 drawId => Draw) public drawOf;
     mapping(uint64 sequenceNumber => uint256 drawId) private _drawForSequence;
+    /// @notice $GBOOT burned per 0-based week from `start`.
+    mapping(uint256 week => uint256 amount) public burnedInWeek;
 
     error NotFriendOwner();
     error NotHardwired();
@@ -52,28 +59,53 @@ contract Wildcards {
     error UnauthorizedRandomness();
     error InvalidRandomness();
     error RefundFailed();
+    error Slippage(uint256 cost, uint256 maxGbootIn);
 
     event WildcardRequested(uint256 indexed drawId, uint256 indexed friendId, uint64 sequenceNumber);
     event WildcardDrawn(uint256 indexed drawId, uint256 indexed friendId, uint8 points);
 
-    constructor(IWildcardGenerations generations_, IWildcardToken gboot_, IWildcardEntropy entropy_, address provider_, address pot_) {
+    constructor(
+        IWildcardGenerations generations_,
+        IWildcardToken gboot_,
+        IGBootPriceFeed feed_,
+        IWildcardEntropy entropy_,
+        address provider_,
+        address pot_,
+        uint256 start_
+    ) {
         generations = generations_;
         gboot = gboot_;
+        feed = feed_;
+        start = start_;
         entropy = entropy_;
         provider = provider_;
         pot = pot_;
     }
 
-    function draw(uint256 friendId) external payable returns (uint256 drawId) {
+    /// @notice 0-based week from `start` (the sink ledger's key).
+    function week() public view returns (uint256) {
+        return block.timestamp < start ? 0 : (block.timestamp - start) / 1 weeks;
+    }
+
+    /// @notice Current $GBOOT price of one draw (PRICE_RF at the TWAP, rounded up).
+    function quote() public view returns (uint256) {
+        return feed.gbootForRf(PRICE_RF, true);
+    }
+
+    function draw(uint256 friendId, uint256 maxGbootIn) external payable returns (uint256 drawId) {
         if (generations.ownerOf(friendId) != msg.sender) revert NotFriendOwner();
         if (generations.generation(friendId) == 0) revert NotHardwired();
         uint256 fee = entropy.getFeeV2(provider, CALLBACK_GAS_LIMIT);
         if (msg.value < fee) revert IncorrectOracleFee();
+        uint256 cost = quote();
+        if (cost > maxGbootIn) revert Slippage(cost, maxGbootIn);
         drawId = ++draws;
         drawOf[drawId].friendId = friendId;
-        gboot.transferFrom(msg.sender, address(this), PRICE);
-        gboot.burn(PRICE / 2);
-        gboot.transfer(pot, PRICE / 2);
+        uint256 burned = cost / 2;
+        burnedInWeek[week()] += burned;
+        gboot.transferFrom(msg.sender, address(this), cost);
+        gboot.burn(burned);
+        gboot.transfer(pot, cost - burned);
         uint64 sequenceNumber = entropy.requestV2{ value: fee }(
             provider, keccak256(abi.encode(address(this), block.chainid, drawId)), CALLBACK_GAS_LIMIT
         );

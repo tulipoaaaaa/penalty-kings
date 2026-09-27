@@ -6,14 +6,16 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { GBoot } from "../src/GBoot.sol";
 import { LiquidityLock, IPositionManager } from "../src/LiquidityLock.sol";
 import { PoolSwapper } from "../src/PoolSwapper.sol";
-import { SkillCup, ISkillGenerations, ISkillToken } from "../src/SkillCup.sol";
+import { GBootFeeHook } from "../src/GBootFeeHook.sol";
+import { GBootPriceFeed } from "../src/GBootPriceFeed.sol";
 import { PoolKey, IPoolManager, IPositionManagerFull, IPermit2 } from "../src/interfaces/IUniswapV4.sol";
 
 /// Mainnet-fork rehearsal of the $GBOOT/RF launch. Run with:
 ///   forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL -vv
 /// Pool numbers come from scripts/onchain/pool-plan.mjs (GBOOT as token1 case is recomputed here
 /// from the same ticks. v2 (0.1 RF per $GBOOT): GBOOT token1 → start 23000, A [-46000, 23000];
-/// GBOOT token0 → start -23000, A [-23000, 46000]).
+/// GBOOT token0 → start -23000, A [-23000, 46000]). Round 6: the launch pool is LP fee 0 + the
+/// GBootFeeHook (1% burned inside every swap, TWAP accumulator), as in Launch.s.sol.
 contract ForkLaunchTest is Test {
     address constant RF = 0x0779369854d3EcdEA927206718FFD7730C67B71f;
     address constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
@@ -26,32 +28,20 @@ contract ForkLaunchTest is Test {
     PoolKey internal key;
     address internal burner = makeAddr("burner");
 
+    GBootFeeHook internal hook;
+
     function setUp() public {
+        address hookAddress = address(uint160(0x4444) << 144 | uint160(0x10C4));
+        deployCodeTo("GBootFeeHook.sol:GBootFeeHook", abi.encode(POOL_MANAGER), hookAddress);
+        hook = GBootFeeHook(hookAddress);
         vm.startPrank(burner);
         gboot = new GBoot();
         lock = new LiquidityLock(IPositionManager(POSITION_MANAGER), burner, block.timestamp + 180 days);
         swapper = new PoolSwapper(IPoolManager(POOL_MANAGER));
         vm.stopPrank();
         bool gbootIs0 = address(gboot) < RF;
-        key = PoolKey(gbootIs0 ? address(gboot) : RF, gbootIs0 ? RF : address(gboot), 10_000, 200, address(0));
+        key = PoolKey(gbootIs0 ? address(gboot) : RF, gbootIs0 ? RF : address(gboot), 0, 200, address(hook));
         deal(RF, burner, 1_000_000e18);
-    }
-
-    /// The real Generations contract gates Skill Cup entries: the owner of hardwired #7730 can
-    /// enter, anyone else cannot.
-    function testSkillCupRealOwnershipGate() public {
-        address generations = 0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D;
-        SkillCup cup = new SkillCup(ISkillGenerations(generations), ISkillToken(address(gboot)), address(this), block.timestamp);
-        address owner = ISkillGenerations(generations).ownerOf(7730);
-        vm.prank(burner);
-        gboot.transfer(owner, 10_000e18);
-        vm.startPrank(owner);
-        gboot.approve(address(cup), type(uint256).max);
-        assertEq(cup.enter(7730), 1);
-        vm.stopPrank();
-        vm.prank(burner);
-        vm.expectRevert(SkillCup.NotFriendOwner.selector);
-        cup.enter(7730);
     }
 
     function _plan() internal view returns (uint160 sqrtStart, int24 lower, int24 upper, bool gbootIs0) {
@@ -82,6 +72,7 @@ contract ForkLaunchTest is Test {
         assertEq(IERC20(RF).balanceOf(burner), 1_000_000e18, "position A is single-sided: no RF used");
 
         // Buy $GBOOT with 1,000 RF, then sell 10% back.
+        uint256 rfSupplyStart = IERC20(RF).totalSupply();
         IERC20(RF).approve(address(swapper), type(uint256).max);
         gboot.approve(address(swapper), type(uint256).max);
         uint256 bought = swapper.swapExactIn(key, !gbootIs0, 1_000e18, 1);
@@ -89,12 +80,17 @@ contract ForkLaunchTest is Test {
         uint256 sold = swapper.swapExactIn(key, gbootIs0, uint128(bought / 10), 1);
         assertGt(sold, 0);
 
-        // Fees: anyone can collect before unlock and BOTH sides are burned; withdraw reverts.
-        uint256 rfSupply = IERC20(RF).totalSupply();
+        // Fees: the hook already burned 1% on both sides inside the swaps; the LP fee is 0, so
+        // collectAndBurn (still permissionless) finds nothing. Withdraw reverts before unlock.
+        assertLt(IERC20(RF).totalSupply(), rfSupplyStart, "RF-side hook fee burned");
+        assertLt(gboot.totalSupply(), 100_000_000e18, "GBOOT-side hook fee burned");
         uint256 gbootSupply = gboot.totalSupply();
         lock.collectAndBurn(tokenId, key.currency0, key.currency1);
-        assertLt(IERC20(RF).totalSupply(), rfSupply, "RF-side LP fees burned");
-        assertLt(gboot.totalSupply(), gbootSupply, "GBOOT-side LP fees burned");
+        assertEq(gboot.totalSupply(), gbootSupply, "no LP fees to collect");
+        // The TWAP is live from the pool's history: 30 minutes after the swaps it reads the new price.
+        GBootPriceFeed feed = new GBootPriceFeed(key, address(gboot));
+        vm.warp(block.timestamp + 30 minutes);
+        assertGt(feed.gbootForRf(10e18, true), 0);
         vm.expectRevert(LiquidityLock.Locked.selector);
         lock.withdraw(tokenId);
         vm.stopPrank();

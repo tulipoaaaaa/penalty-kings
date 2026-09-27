@@ -115,7 +115,7 @@ contract BootroomTest is Test {
     /// its unlock or re-lock expired $GBOOT. Only the owner / token-bound account moves the lock.
     function testThirdPartyDustTopUpCannotMoveTheLock() public {
         _lace(owner, FRIEND, 10_000e18, 52);
-        assertEq(room.boostBps(FRIEND), 2 * BPS);
+        assertEq(room.perkTier(FRIEND), 3);
         uint256 originalUnlock = block.timestamp + 52 weeks;
         vm.warp(block.timestamp + 10 weeks);
         _lace(stranger, FRIEND, 1, 43); // would end 1 week after the original lace
@@ -123,7 +123,8 @@ contract BootroomTest is Test {
         assertEq(amount, 10_000e18 + 1);
         assertEq(lockWeeks, 52, "weeks unchanged");
         assertEq(unlockAt_, originalUnlock, "unlock unchanged");
-        assertEq(room.boostBps(FRIEND), 2 * BPS, "boost unchanged");
+        assertEq(room.progressBps(FRIEND), BPS, "progress unchanged");
+        assertEq(room.perkTier(FRIEND), 3, "tier unchanged");
     }
 
     function testThirdPartyCannotRelockExpiredLace() public {
@@ -232,53 +233,78 @@ contract BootroomTest is Test {
         vm.stopPrank();
     }
 
-    // ----------------------------------------------------------------- boost
+    // ------------------------------------------------------------- perk tier
 
-    function testNoLaceIsX1() public view {
-        assertEq(room.boostBps(FRIEND), BPS);
-        assertEq(room.dropBps(FRIEND), BPS);
+    function testNoLaceIsTier0() public view {
+        assertEq(room.progressBps(FRIEND), 0);
+        assertEq(room.perkTier(FRIEND), 0);
     }
 
-    function testMaxBoostAtMaxLaceFor52Weeks() public {
+    function testFullProgressAtMaxLaceFor52Weeks() public {
         _lace(owner, FRIEND, 10_000e18, 52);
-        assertEq(room.boostBps(FRIEND), 20_000);
-        assertEq(room.dropBps(FRIEND), 15_000);
+        assertEq(room.progressBps(FRIEND), BPS);
+        assertEq(room.perkTier(FRIEND), 3);
     }
 
-    /// Only MAX_LACE counts: 1M GBOOT for 52 weeks is still ×2 / ×1.5.
-    function testBoostCappedAboveMaxLace() public {
+    /// Only MAX_LACE counts: 1M GBOOT for 52 weeks is still tier 3 / 100%.
+    function testProgressCappedAboveMaxLace() public {
         _lace(owner, FRIEND, 1_000_000e18, 52);
-        assertEq(room.boostBps(FRIEND), 20_000);
-        assertEq(room.dropBps(FRIEND), 15_000);
+        assertEq(room.progressBps(FRIEND), BPS);
+        assertEq(room.perkTier(FRIEND), 3);
     }
 
-    /// Reference values from 1 + log2(1 + x) / log2(1 + 520000) (computed off-chain in float).
-    function testBoostCurveReferencePoints() public {
+    /// Reference values from log2(1 + x) / log2(1 + 520000) (computed off-chain in float).
+    function testProgressCurveReferencePoints() public {
         uint256[6] memory amounts = [uint256(1e18), 10_000e18, 5_000e18, 10_000e18, 10_000e18, 9_999e18];
         uint256[6] memory weeks_ = [uint256(1), 1, 52, 26, 12, 52];
-        uint256[6] memory expected = [uint256(10_526), 16_997, 19_473, 19_473, 18_885, 19_999];
+        uint256[6] memory expected = [uint256(526), 6_997, 9_473, 9_473, 8_885, 9_999];
+        uint8[6] memory tiers = [uint8(1), 2, 3, 3, 3, 3];
         for (uint256 i; i < 6; ++i) {
             uint256 id = 100 + i;
             _lace(owner, id, amounts[i], weeks_[i]);
-            assertApproxEqAbs(room.boostBps(id), expected[i], 1, "boost reference");
+            assertApproxEqAbs(room.progressBps(id), expected[i], 1, "progress reference");
+            assertEq(room.perkTier(id), tiers[i], "tier reference");
         }
     }
 
-    /// x counts whole GBOOT only: below 1 GBOOT the boost is ×1 while locked.
-    function testSubWholeTokenLaceGivesNoBoost() public {
-        _lace(owner, FRIEND, 1e18 - 1, 52);
-        assertEq(room.boostBps(FRIEND), BPS);
+    /// Tier boundaries: 50% ≈ 720 GBOOT-weeks, 85% ≈ 72,210 GBOOT-weeks.
+    function testTierThresholds() public {
+        _lace(owner, 1, 100e18, 7); // 700
+        _lace(owner, 2, 100e18, 8); // 800
+        _lace(owner, 3, 10_000e18, 7); // 70,000
+        _lace(owner, 4, 10_000e18, 8); // 80,000
+        assertEq(room.perkTier(1), 1);
+        assertEq(room.perkTier(2), 2);
+        assertEq(room.perkTier(3), 2);
+        assertEq(room.perkTier(4), 3);
     }
 
-    function testBoostExpiresAtUnlock() public {
+    /// Lacing is not yield: the Bootroom exposes no payout multiplier any more (the old boostBps and
+    /// dropBps selectors do not exist), so nothing can read a lace into race points or drops.
+    function testNoPayoutMultiplierExposed() public {
+        _lace(owner, FRIEND, 10_000e18, 52);
+        (bool okBoost,) = address(room).staticcall(abi.encodeWithSignature("boostBps(uint256)", FRIEND));
+        (bool okDrop,) = address(room).staticcall(abi.encodeWithSignature("dropBps(uint256)", FRIEND));
+        assertFalse(okBoost, "no boostBps");
+        assertFalse(okDrop, "no dropBps");
+    }
+
+    /// x counts whole GBOOT only: below 1 GBOOT the tier is 0 while locked.
+    function testSubWholeTokenLaceGivesNoPerk() public {
+        _lace(owner, FRIEND, 1e18 - 1, 52);
+        assertEq(room.progressBps(FRIEND), 0);
+        assertEq(room.perkTier(FRIEND), 0);
+    }
+
+    function testPerkExpiresAtUnlock() public {
         _lace(owner, FRIEND, 10_000e18, 12);
-        uint256 locked = room.boostBps(FRIEND);
-        assertGt(locked, BPS);
+        uint256 locked = room.progressBps(FRIEND);
+        assertGt(locked, 0);
         vm.warp(block.timestamp + 12 weeks - 1);
-        assertEq(room.boostBps(FRIEND), locked, "no decay during the lock");
+        assertEq(room.progressBps(FRIEND), locked, "no decay during the lock");
         vm.warp(block.timestamp + 1);
-        assertEq(room.boostBps(FRIEND), BPS, "x1 from unlockAt");
-        assertEq(room.dropBps(FRIEND), BPS);
+        assertEq(room.progressBps(FRIEND), 0, "tier 0 from unlockAt");
+        assertEq(room.perkTier(FRIEND), 0);
     }
 
     function testLog2WadKnownValues() public view {
@@ -291,46 +317,46 @@ contract BootroomTest is Test {
 
     // ------------------------------------------------------------------ fuzz
 
-    function testFuzzBoostBounded(uint256 amount, uint256 lockWeeks, uint256 elapsed) public {
+    function testFuzzPerkBounded(uint256 amount, uint256 lockWeeks, uint256 elapsed) public {
         amount = bound(amount, 1, 50_000_000e18);
         lockWeeks = bound(lockWeeks, 1, 52);
         elapsed = bound(elapsed, 0, 60 weeks);
         _lace(FRIEND, amount, lockWeeks);
         vm.warp(block.timestamp + elapsed);
-        uint256 b = room.boostBps(FRIEND);
-        assertGe(b, BPS);
-        assertLe(b, 2 * BPS);
-        uint256 d = room.dropBps(FRIEND);
-        assertGe(d, BPS);
-        assertLe(d, 15_000);
-        assertEq(d, BPS + (b - BPS) / 2);
+        uint256 p = room.progressBps(FRIEND);
+        uint8 t = room.perkTier(FRIEND);
+        assertLe(p, BPS);
+        assertLe(t, 3);
+        assertEq(t, p == 0 ? 0 : p >= 8_500 ? 3 : p >= 5_000 ? 2 : 1, "tier follows progress");
+        if (elapsed >= lockWeeks * 1 weeks) assertEq(t, 0, "expired: tier 0");
     }
 
-    function testFuzzBoostMonotonicInAmount(uint256 a1, uint256 a2, uint256 lockWeeks) public {
+    function testFuzzProgressMonotonicInAmount(uint256 a1, uint256 a2, uint256 lockWeeks) public {
         a1 = bound(a1, 1, 30_000e18);
         a2 = bound(a2, a1, 30_000e18);
         lockWeeks = bound(lockWeeks, 1, 52);
         _lace(1, a1, lockWeeks);
         _lace(2, a2, lockWeeks);
-        assertLe(room.boostBps(1), room.boostBps(2));
+        assertLe(room.progressBps(1), room.progressBps(2));
+        assertLe(room.perkTier(1), room.perkTier(2));
     }
 
-    function testFuzzBoostMonotonicInWeeks(uint256 amount, uint256 w1, uint256 w2) public {
+    function testFuzzProgressMonotonicInWeeks(uint256 amount, uint256 w1, uint256 w2) public {
         amount = bound(amount, 1, 30_000e18);
         w1 = bound(w1, 1, 52);
         w2 = bound(w2, w1, 52);
         _lace(1, amount, w1);
         _lace(2, amount, w2);
-        assertLe(room.boostBps(1), room.boostBps(2));
+        assertLe(room.progressBps(1), room.progressBps(2));
     }
 
-    /// Stacking many laces on one Friend never beats ×2.
+    /// Stacking many laces on one Friend never passes 100% / tier 3.
     function testFuzzStackedLacesCapped(uint256[5] memory amounts, uint256[5] memory ws, uint256[5] memory gaps) public {
         for (uint256 i; i < 5; ++i) {
             vm.warp(block.timestamp + bound(gaps[i], 0, 20 weeks));
             _lace(FRIEND, bound(amounts[i], 1, 5_000_000e18), bound(ws[i], 1, 52));
-            assertLe(room.boostBps(FRIEND), 2 * BPS);
-            assertLe(room.dropBps(FRIEND), 15_000);
+            assertLe(room.progressBps(FRIEND), BPS);
+            assertLe(room.perkTier(FRIEND), 3);
         }
     }
 

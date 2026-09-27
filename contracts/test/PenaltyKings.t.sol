@@ -4,6 +4,8 @@ pragma solidity ^0.8.36;
 import { Test } from "forge-std/Test.sol";
 import { GBoot } from "../src/GBoot.sol";
 import { KitShop, IGBoot } from "../src/KitShop.sol";
+import { IGBootPriceFeed } from "../src/interfaces/IGBootPriceFeed.sol";
+import { FixedPriceFeed } from "./Mocks.sol";
 import { LiquidityLock, IPositionManager } from "../src/LiquidityLock.sol";
 
 contract MockPositionManager {
@@ -41,39 +43,57 @@ contract GBootTest is Test {
 contract KitShopTest is Test {
     GBoot internal token;
     KitShop internal shop;
+    FixedPriceFeed internal feed;
     address internal player = address(0xBEEF);
 
     function setUp() public {
         token = new GBoot();
-        uint256[] memory prices = new uint256[](3);
-        prices[0] = 0; prices[1] = 60e18; prices[2] = 400e18;
-        shop = new KitShop(IGBoot(address(token)), prices);
+        feed = new FixedPriceFeed();
+        uint256[] memory pricesRf = new uint256[](3);
+        pricesRf[0] = 0; pricesRf[1] = 6e18; pricesRf[2] = 40e18; // RF: 60 / 400 $GBOOT at 0.1 RF
+        shop = new KitShop(IGBoot(address(token)), IGBootPriceFeed(address(feed)), block.timestamp, pricesRf);
         token.transfer(player, 1000e18);
     }
 
     function testBuyBurnsAndUnlocks() public {
         vm.startPrank(player);
         token.approve(address(shop), 60e18);
-        shop.buy(7730, 1);
+        shop.buy(7730, 1, 60e18);
         vm.stopPrank();
         assertTrue(shop.unlocked(7730, 1));
         assertEq(token.balanceOf(player), 940e18);
         assertEq(token.totalSupply(), 100_000_000e18 - 60e18);
         assertEq(token.balanceOf(address(shop)), 0);
+        assertEq(shop.burnedInWeek(0), 60e18, "sink ledger");
     }
 
     function testFreeItem() public {
-        vm.prank(player); shop.buy(1, 0);
+        vm.prank(player); shop.buy(1, 0, 0);
         assertTrue(shop.unlocked(1, 0));
     }
 
     function testRejectsUnknownAndRepeat() public {
         vm.startPrank(player);
         token.approve(address(shop), type(uint256).max);
-        vm.expectRevert(KitShop.UnknownItem.selector); shop.buy(1, 3);
-        shop.buy(1, 2);
-        vm.expectRevert(KitShop.AlreadyUnlocked.selector); shop.buy(1, 2);
+        vm.expectRevert(KitShop.UnknownItem.selector); shop.buy(1, 3, type(uint256).max);
+        shop.buy(1, 2, type(uint256).max);
+        vm.expectRevert(KitShop.AlreadyUnlocked.selector); shop.buy(1, 2, type(uint256).max);
         vm.stopPrank();
+    }
+
+    /// Prices are in RF: the $GBOOT cost follows the TWAP (rounded up) and maxGbootIn bounds it.
+    function testRfPricedAtTwapWithSlippage() public {
+        vm.startPrank(player);
+        token.approve(address(shop), type(uint256).max);
+        feed.setPrice(0.3e18); // 6 RF → 20 $GBOOT
+        assertEq(shop.quote(1), 20e18);
+        vm.expectRevert(abi.encodeWithSelector(KitShop.Slippage.selector, 20e18, 19e18));
+        shop.buy(7730, 1, 19e18);
+        shop.buy(7730, 1, 20e18);
+        feed.setPrice(3e17 + 1); // rounds up: 6e18 × 1e18 / (3e17 + 1) is not whole
+        assertEq(shop.quote(2), 133_333_333_333_333_332_889, "40e18 x 1e18 / (3e17 + 1), rounded up");
+        vm.stopPrank();
+        assertEq(token.balanceOf(player), 980e18);
     }
 }
 

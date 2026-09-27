@@ -132,9 +132,9 @@ contract FriendsAirdropTest is Test {
         assertEq(gboot.balanceOf(anyone), 0);
         assertEq(gboot.balanceOf(address(room)), 10_000e18);
         assertEq(gboot.balanceOf(address(drop)), FUNDED - 10_000e18);
-        // 10k × 12 = 120,000 GBOOT-weeks → ≈ ×1.889 boost, ≈ ×1.444 drops.
-        assertApproxEqAbs(room.boostBps(7730), 18_885, 1);
-        assertApproxEqAbs(room.dropBps(7730), 14_442, 1);
+        // 10k × 12 = 120,000 GBOOT-weeks → ≈ 88.85% progress → perk tier 3 (cosmetics / XP / seeding only).
+        assertApproxEqAbs(room.progressBps(7730), 8_885, 1);
+        assertEq(room.perkTier(7730), 3);
     }
 
     function testAllLeavesClaimable() public {

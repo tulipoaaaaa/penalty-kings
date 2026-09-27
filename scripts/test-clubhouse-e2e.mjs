@@ -45,6 +45,10 @@ const deployerWallet = createWalletClient({ account: { address: DEPLOYER, type: 
 const cupsVault = grab("CupsVault");
 assert.ok(cupsVault, "deployed CupsVault");
 await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: cupsVault, abi: parseAbi(["function release(address,uint256)"]), functionName: "release", args: [owner, parseEther("500")], chain: null }) });
+// The sinks are priced in RF at the pool's 30-minute TWAP (GBootFeeHook + GBootPriceFeed): let 30 minutes
+// of pool history pass on the fork before buying.
+await rpc("evm_increaseTime", [toHex(31 * 60)]);
+await rpc("evm_mine", []);
 
 // 2) Referee (real Worker code) and the Clubhouse build.
 const referee = spawn("node", ["--experimental-strip-types", "--no-warnings", "verifier/dev-server.ts", "--port", "8788", "--rpc", ANVIL, "--skill-cup", live.skillCup], { stdio: ["ignore", "inherit", "inherit"] });
@@ -87,20 +91,22 @@ try {
   await page.getByRole("button", { name: new RegExp(`^Friend #${FRIEND} `) }).click({ timeout: 120_000 });
   await button("Skill Cup").waitFor({ timeout: 60_000 });
 
-  // Kit shop: unlock Volt boots (item 1, 6 $GBOOT burned).
+  // Kit shop: unlock Volt boots (item 1: 0.6 RF, ≈ 6 $GBOOT at the launch TWAP, burned).
   const supplyBefore = await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" });
+  const voltQuote = await client.readContract({ address: live.kitShop, abi: parseAbi(["function quote(uint256) view returns (uint256)"]), functionName: "quote", args: [1n] });
+  assert.ok(voltQuote > parseEther("5.9") && voltQuote < parseEther("6.1"), `0.6 RF ≈ 6 $GBOOT at the launch TWAP (${voltQuote})`);
   await button("Kit shop").click();
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByRole("button").click();
   await confirmTx(); await confirmTx();
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByText("unlocked").waitFor({ timeout: 60_000 });
   const unlocked = await client.readContract({ address: live.kitShop, abi: parseAbi(["function unlocked(uint256,uint256) view returns (bool)"]), functionName: "unlocked", args: [FRIEND, 1n] });
   assert.equal(unlocked, true, "KitShop unlock recorded on-chain");
-  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), parseEther("6"), "6 $GBOOT burned");
-  console.log("PASS kit unlock: on-chain, 6 $GBOOT burned");
+  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), voltQuote, "the TWAP quote was burned");
+  console.log(`PASS kit unlock: on-chain, ${voltQuote} wei $GBOOT (0.6 RF at the TWAP) burned`);
 
   // Skill Cup: on-chain entry, then 5 flicks judged by the referee.
   await button("Skill Cup").click();
-  await button("Enter · 100 $GBOOT").click();
+  await button("Enter · 10 RF in $GBOOT").click();
   await confirmTx(); await confirmTx();
   const canvas = page.locator(".pitch canvas");
   await canvas.waitFor({ timeout: 60_000 });
@@ -119,7 +125,7 @@ try {
   assert.equal(board.length, 1); assert.equal(board[0].friendId, FRIEND.toString());
   console.log(`PASS Skill Cup: on-chain entry, 5 referee-judged kicks, signed score ${board[0].score}`);
 
-  // Wildcard: pays 100 $GBOOT + Dice fee; the request is on-chain (delivery needs the live provider).
+  // Wildcard: pays 10 RF in $GBOOT (TWAP) + Dice fee; the request is on-chain (delivery needs the live provider).
   await button("Wildcards").click();
   await button("Draw a wildcard").click();
   await confirmTx(); await confirmTx();

@@ -14,21 +14,27 @@ interface IBurnableToken {
 }
 
 /// @title Bootroom ("Lace your Boots")
-/// @notice Lock $GBOOT against a Friend for 1–52 weeks to earn a boost: Golden Boot race points ×
-/// boost and weekly drops × (1 + (boost − 1) / 2), applied by the public weekly script. The lace is
-/// keyed to the friendId: anyone may lace for a Friend (gifts, the pre-laced airdrop), but only the
-/// Friend's current owner or its token-bound account can unlace, and it goes to the caller. Early
-/// unlace burns 50%. Boost = min(2, 1 + log2(1 + x) / log2(1 + X_MAX)) with x = min(amount,
-/// MAX_LACE) × weeks, so it is log-scaled and capped per Friend. No owner, no fees.
+/// @notice Lock $GBOOT against a Friend for 1–52 weeks to earn a PERK TIER (0–3). Perks are
+/// progression only: cosmetic variants, an XP bonus and Cup seeding (display / draw order). A perk
+/// tier never changes a payout: it does not touch race points, drops, RF odds, Cup ranks or any
+/// $GBOOT reward (docs/ECONOMY.md, "Lacing"). The lace is keyed to the friendId: anyone may lace for a
+/// Friend (gifts, the pre-laced airdrop), but only the Friend's current owner or its token-bound
+/// account can unlace or move its lock, and the unlace goes to the caller. Early unlace burns 50%.
+/// The tier comes from a log-scaled progress curve, progressBps = 10,000 × log2(1 + x) /
+/// log2(1 + X_MAX) with x = min(amount, MAX_LACE) × weeks (whole $GBOOT-weeks), capped per Friend.
+/// No owner, no fees.
 contract Bootroom {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_WEEKS = 52;
-    /// @notice Only the first 10,000 $GBOOT laced per Friend count towards the boost.
+    /// @notice Only the first 10,000 $GBOOT laced per Friend count towards the perk curve.
     uint256 public constant MAX_LACE = 10_000e18;
-    /// @notice GBOOT-weeks for the maximum boost: MAX_LACE for 52 weeks.
+    /// @notice GBOOT-weeks for full progress: MAX_LACE for 52 weeks.
     uint256 public constant X_MAX = 520_000;
     uint256 public constant BPS = 10_000;
+    /// @notice Progress thresholds for perk tiers 2 and 3.
+    uint256 public constant TIER2_BPS = 5_000;
+    uint256 public constant TIER3_BPS = 8_500;
 
     struct Lace { uint128 amount; uint64 unlockAt; uint64 lockWeeks; }
 
@@ -78,19 +84,26 @@ contract Bootroom {
         emit Unlaced(friendId, msg.sender, l.amount - burned, burned);
     }
 
-    /// @notice Current boost in basis points (10,000 = ×1, 20,000 = ×2). Expired laces give ×1.
-    function boostBps(uint256 friendId) public view returns (uint256) {
+    /// @notice Lacing progress in basis points (0 … 10,000) on the log curve. 0 when nothing whole is
+    /// laced or the lace has expired. Progression only: never read by any payout.
+    function progressBps(uint256 friendId) public view returns (uint256) {
         Lace memory l = laces[friendId];
-        if (l.amount == 0 || block.timestamp >= l.unlockAt) return BPS;
+        if (l.amount == 0 || block.timestamp >= l.unlockAt) return 0;
         uint256 counted = l.amount > MAX_LACE ? MAX_LACE : l.amount;
         uint256 x = (counted / 1e18) * l.lockWeeks;
-        if (x >= X_MAX) return 2 * BPS;
-        return BPS + (BPS * log2Wad(1e18 + x * 1e18)) / log2Wad(1e18 + X_MAX * 1e18);
+        if (x >= X_MAX) return BPS;
+        return (BPS * log2Wad(1e18 + x * 1e18)) / log2Wad(1e18 + X_MAX * 1e18);
     }
 
-    /// @notice Drop multiplier in basis points: 1 + (boost − 1) / 2 (×1 … ×1.5).
-    function dropBps(uint256 friendId) external view returns (uint256) {
-        return BPS + (boostBps(friendId) - BPS) / 2;
+    /// @notice Perk tier 0–3 for cosmetics, the XP bonus and Cup seeding. 0: no live lace (or less than
+    /// one whole $GBOOT); 1: any live lace; 2: progress ≥ 50% (≈ 720 $GBOOT-weeks, e.g. 100 for 8 weeks);
+    /// 3: progress ≥ 85% (≈ 72,210 $GBOOT-weeks, e.g. 10,000 for 8 weeks). Not a payout multiplier.
+    function perkTier(uint256 friendId) external view returns (uint8) {
+        uint256 p = progressBps(friendId);
+        if (p == 0) return 0;
+        if (p >= TIER3_BPS) return 3;
+        if (p >= TIER2_BPS) return 2;
+        return 1;
     }
 
     /// @dev log2 of a 1e18 fixed-point number ≥ 1e18, result in 1e18 fixed point (≈1e-9 precision).

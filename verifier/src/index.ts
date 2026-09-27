@@ -1,18 +1,31 @@
 /**
  * Cloudflare Worker entry for the Penalty Kings Skill Cup referee.
  *
- * Secrets (wrangler secret put): WEEK_SECRET (64 hex chars), SIGNING_KEY (ECDSA P-256 private JWK).
- * Vars: WEEK, RPC_URL (Robinhood mainnet), SKILL_CUP (contract address), ALLOWED_ORIGIN.
+ * Secrets (wrangler secret put): WEEK_SECRET (64 hex chars), SIGNING_KEY (ECDSA P-256 private JWK),
+ * optional REWARD_KEY (the long-lived secp256k1 key whose address is RewardsDistributor.referee;
+ * scripts/cup/reward-signer.mjs creates it outside the repo).
+ * Vars: WEEK, RPC_URL (Robinhood mainnet), SKILL_CUP (contract address), ALLOWED_ORIGIN, optional
+ * REWARDS (RewardsDistributor address) and CHAIN_ID (4663). Without REWARD_KEY + REWARDS no reward is signed.
  * KV binding: ENTRIES.
  *
  * Routes: GET /week → { week, secretHash, publicKey }, POST /entry { txHash }, POST /kick,
  *         GET /entry/:id, GET /leaderboard.
  */
 import { createPublicClient, http, parseAbi, parseEventLogs, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { createReferee, RefereeError, type Entry, type Store, type Chain } from "./core.ts";
+import { REWARD_TYPES, rewardDomain, type RewardSigner } from "./rewards.ts";
 
 type KV = { get(key: string): Promise<string | null>; put(key: string, value: string): Promise<void>; list(options: { prefix: string }): Promise<{ keys: { name: string }[] }> };
-export type Env = { WEEK_SECRET: string; SIGNING_KEY: string; WEEK: string; RPC_URL: string; SKILL_CUP: string; ALLOWED_ORIGIN: string; ENTRIES: KV };
+export type Env = { WEEK_SECRET: string; SIGNING_KEY: string; WEEK: string; RPC_URL: string; SKILL_CUP: string; ALLOWED_ORIGIN: string; ENTRIES: KV; REWARD_KEY?: string; REWARDS?: string; CHAIN_ID?: string };
+
+/** EIP-712 reward signer, only when both the key and the distributor address are configured. */
+export function rewardSigner(env: Pick<Env, "REWARD_KEY" | "REWARDS" | "CHAIN_ID">): { address: string; sign: RewardSigner } | null {
+  if (!env.REWARD_KEY || !env.REWARDS || !/^0x[0-9a-fA-F]{40}$/.test(env.REWARDS)) return null;
+  const account = privateKeyToAccount(env.REWARD_KEY as Hex);
+  const domain = rewardDomain(Number(env.CHAIN_ID ?? 4663), env.REWARDS as Hex);
+  return { address: account.address, sign: claim => account.signTypedData({ domain, types: REWARD_TYPES, primaryType: "RewardClaim", message: claim }) };
+}
 
 const fromHex = (value: string) => Uint8Array.from(value.replace(/^0x/, "").match(/../g)!.map(byte => parseInt(byte, 16)));
 const ENTERED = parseAbi(["event Entered(uint256 indexed entryId, uint256 indexed friendId, address indexed player, uint256 week)"]);
@@ -54,11 +67,12 @@ export default {
     try {
       const signingKey = await crypto.subtle.importKey("jwk", JSON.parse(env.SIGNING_KEY), { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
       const store = kvStore(env.ENTRIES);
-      const referee = createReferee({ secret: fromHex(env.WEEK_SECRET), week: Number(env.WEEK), store, chain: rpcChain(env.RPC_URL, env.SKILL_CUP), signingKey });
+      const rewards = rewardSigner(env);
+      const referee = createReferee({ secret: fromHex(env.WEEK_SECRET), week: Number(env.WEEK), store, chain: rpcChain(env.RPC_URL, env.SKILL_CUP), signingKey, signReward: rewards?.sign });
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/week") {
         const { d: _private, ...publicJwk } = JSON.parse(env.SIGNING_KEY);
-        return json({ week: Number(env.WEEK), secretHash: await referee.hash(), publicKey: { ...publicJwk, key_ops: ["verify"] }, skillCup: env.SKILL_CUP });
+        return json({ week: Number(env.WEEK), secretHash: await referee.hash(), publicKey: { ...publicJwk, key_ops: ["verify"] }, skillCup: env.SKILL_CUP, rewards: env.REWARDS ?? null, rewardSigner: rewards?.address ?? null });
       }
       if (request.method === "GET" && url.pathname === "/leaderboard") return json(await referee.leaderboard());
       if (request.method === "POST" && url.pathname === "/entry") return json(await referee.enter(await request.json()));

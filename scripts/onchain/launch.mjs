@@ -26,7 +26,7 @@ const forge = args => execFileSync("forge", ["script", "script/Launch.s.sol", "-
 
 console.log(`[launch] simulating on a fork of Robinhood mainnet as ${account.address}…`);
 const simulated = forge(["--fork-url", RPC_URL]);
-console.log(simulated.split("\n").filter(line => /GBOOT|KitShop|LiquidityLock|PoolSwapper|SkillCup|Wildcards|positionA|unlockTime|Estimated|gas/i.test(line)).join("\n"));
+console.log(simulated.split("\n").filter(line => /GBOOT|KitShop|LiquidityLock|PoolSwapper|SkillCup|Wildcards|Hook|PriceFeed|Rewards|positionA|unlockTime|Estimated|gas/i.test(line)).join("\n"));
 const dry = JSON.parse(await readFile(join(CONTRACTS, "broadcast/Launch.s.sol/4663/dry-run/run-latest.json"), "utf8"));
 const planned = dry.transactions.map((tx, index) => ({
   purpose: `launch ${index + 1}/${dry.transactions.length} ${tx.contractName ?? ""} ${tx.function ?? "create"}`.trim(),
@@ -54,10 +54,11 @@ for (const [index, receipt] of run.receipts.entries()) {
 const grab = name => output.match(new RegExp(`${name}\\s+(0x[0-9a-fA-F]{40})`))?.[1];
 const live = { chainId: 4663, gboot: grab("GBOOT"), kitShop: grab("KitShop"), liquidityLock: grab("LiquidityLock"), poolSwapper: grab("PoolSwapper"), skillCup: grab("SkillCup"), wildcards: grab("Wildcards"),
   bootroom: grab("Bootroom"), dropVault: grab("DropVault"), cupsVault: grab("CupsVault"), bountyVault: grab("BountyVault"), friendsAirdrop: grab("FriendsAirdrop"), edgeSplitter: grab("EdgeSplitter"),
+  gbootFeeHook: grab("GBootFeeHook"), priceFeed: grab("GBootPriceFeed"), rewards: grab("RewardsDistributor"),
   rf: "0x0779369854d3EcdEA927206718FFD7730C67B71f",
   positionA: output.match(/positionA\s+(\d+)/)?.[1], unlockTime: output.match(/unlockTime\s+(\d+)/)?.[1], launchBlock: BigInt(run.receipts[0].blockNumber).toString() };
 for (const [key, value] of Object.entries(live)) if (!value) throw new Error(`FREEZE: could not read ${key} from the broadcast output`);
-for (const key of ["gboot", "kitShop", "liquidityLock", "poolSwapper", "skillCup", "wildcards", "bootroom", "dropVault", "cupsVault", "bountyVault", "friendsAirdrop", "edgeSplitter"]) {
+for (const key of ["gboot", "kitShop", "liquidityLock", "poolSwapper", "skillCup", "wildcards", "bootroom", "dropVault", "cupsVault", "bountyVault", "friendsAirdrop", "edgeSplitter", "gbootFeeHook", "priceFeed", "rewards"]) {
   const code = await client.getCode({ address: live[key] });
   if (!code || code === "0x") throw new Error(`FREEZE: no code at ${key} ${live[key]}`);
 }
