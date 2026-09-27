@@ -1382,7 +1382,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
             </div>
             : <button type="button" disabled={gboot < WILDCARD_PRICE || busy} onClick={() => setConfirmWildcard(true)} data-testid="wildcard">
               Wildcard entry · {WILDCARD_PRICE} $GBOOT (50% burned, 50% to pot)</button>}
-          <p className="pk-note">Wildcards: {wildcards}{tag}. Live wildcard draws use on-chain randomness (Clubhouse).</p></>}
+          <p className="pk-note">Wildcards: {wildcards}{tag}. Live Wildcards belong to the $GBOOT upgrade (not in the Rare Friends pilot) and would draw with on-chain randomness.</p></>}
         {!simulated && <p>The live pot, race table and payouts are computed each week from on-chain ball settlements by a public script and published with transaction links in docs/WEEKLY.md. This screen does not invent live numbers.</p>}
         <h3>Skill Cup: 5 kicks vs THE FINAL WALL</h3>
         <p>Pot: {formatNumber(cupGboot)} $GBOOT{tag} · entry {SKILL_CUP_ENTRY} $GBOOT (50% burned, 50% to the pot). Scores use placement (corners ×3, top bins ×5).</p>
