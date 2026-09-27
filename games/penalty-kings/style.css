@@ -601,11 +601,14 @@
   .pk-pot .pk-age-short { display: inline; }
   .pk-actions { right: 6px; bottom: calc(var(--pk-tb) + 4px); gap: 4px; width: clamp(88px, calc(var(--pk-pl) - 12px), 140px); min-width: 0; }
   .pk-actions button { font-size: 12px; min-height: 44px; padding: 0 0.5em; }
-  .pk-toast { box-sizing: border-box; left: 6px; bottom: calc(var(--pk-tb) + 4px); font-size: 11px; line-height: 1.25; padding: 0.35em 0.6em;
-    max-width: max(88px, calc(var(--pk-pl) + 104 * var(--pk-s) - 10px)); max-height: calc(100cqh - var(--pk-tb) - 84px); overflow: hidden; }
+  /* Coaching toast (owner review 3): a banner in the sky, centred over the pitch, under the pot banner and the
+     commentary ticker (logical y ≈ 50) and above the crossbar (y 146), so the striker, the ball and the goal stay clear. */
+  .pk-toast { box-sizing: border-box; left: 50%; transform: translateX(-50%); bottom: auto; top: max(58px, calc(var(--pk-pt) + 52 * var(--pk-s)));
+    width: max-content; max-width: calc(480 * var(--pk-s) - 12px); max-height: calc(var(--pk-pt) + 138 * var(--pk-s) - max(58px, calc(var(--pk-pt) + 52 * var(--pk-s))));
+    font-size: 11px; line-height: 1.2; padding: 0.3em 0.6em; text-align: center; overflow: hidden; box-shadow: 2px 2px 0 #000; }
   .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 108 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
-  /* Discovery toast: top right, under the kick chip, over the crowd right of the goal (the coaching toast has the left). */
-  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 96 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
+  /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
+  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 96 * var(--pk-s)); max-width: max(88px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
   .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
