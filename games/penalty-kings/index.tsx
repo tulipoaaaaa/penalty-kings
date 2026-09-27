@@ -209,6 +209,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const setPhaseNow = (next: Phase) => { live.current = { ...live.current, phase: next }; setPhase(next); };
   const pointer = useRef<number | null>(null);
   const timeoutTimer = useRef(0);
+  /** XP the current session's kicks already added (goals, placement, Skill Zones): part of the Results total (BQ-P1-5). */
+  const sessionXp = useRef(0);
   /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
   const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
@@ -574,7 +576,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function beginSession(start: Session) {
     const scene = stage.current;
     if (inFlight.current) cancelKick();
-    sessionEpoch.current++; lineCursor.current = 0; afterBeat.current = null;
+    sessionEpoch.current++; lineCursor.current = 0; afterBeat.current = null; sessionXp.current = 0;
     targetMotion.current = { t: 0, release: null }; pendingTarget.current = null; hitTargets.current = new Set();
     // The Match Director opens the session (replaces the old round intro). It keeps the shell's keeper in
     // paid, ranked and scripted modes, and may rotate it in free play (Pro/Champions between sessions).
@@ -850,7 +852,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + (skillZone ? SKILL_ZONE_XP[skillZone] : XP.zoneBonus[record.zone]) : 0;
-    if (xp) addXp(xp);
+    if (xp) { addXp(xp); sessionXp.current += xp; } // the Results card counts it too (BQ-P1-5)
     if (skillZone) sub += ` · SKILL ZONE: ${SKILL_ZONE_LABEL[skillZone]} +${SKILL_ZONE_XP[skillZone]} XP, streak +2`;
     // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
@@ -982,9 +984,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
         result.title = `Skill Cup entry: ${formatNumber(current.points)} pts${tag}`;
       }
-      result = { ...result, xp: result.xp + xp };
+      // The kicks' XP is already in p.xp: the Results total and the level-ups count from the session's start.
+      const kickXp = sessionXp.current; sessionXp.current = 0;
+      result = { ...result, xp: result.xp + kickXp + xp };
       updated.xp = p.xp + xp;
-      const before = levelFromXp(p.xp).level, after = levelFromXp(updated.xp).level;
+      const before = levelFromXp(p.xp - kickXp).level, after = levelFromXp(updated.xp).level;
       if (after > before) result.unlocked = [...(result.unlocked ?? []), `Level ${after}`];
       progressRef.current = updated;
       setProgress(updated);

@@ -93,6 +93,44 @@ await testGame("./games/penalty-kings", {
     assert.equal(await kicks(), 0);
     ok("first matches after the tutorial: shot clock off");
 
+    // 5a2. BQ-P1-5: Results "XP earned" includes every kick's XP (goals, placement, Skill Zones), and a level
+    //      reached mid-session shows under "Unlocked". Start 1 XP short of level 3 (save code), kick 5 at a corner.
+    const hudXp = async () => {
+      const [, level, into] = (await game.locator(".pk-hud-left .pk-stat").textContent()).match(/LV\s*(\d+)\s*·\s*(\d+)\//);
+      return 100 * Number(level) * (Number(level) - 1) / 2 + Number(into); // levelFromXp: 100, 200, 300 … per level
+    };
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Settings", exact: true }).click();
+    await game.getByTestId("save-code-in").fill(editSaveCode(await game.getByTestId("save-code-out").inputValue(), friendId, { xp: 299 }));
+    await game.getByTestId("save-code-restore").click();
+    await game.getByTestId("save-code-note").filter({ hasText: /restored/ }).waitFor();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await waitShootable();
+    const xpBefore = await hudXp();
+    assert.equal(xpBefore, 299, "1 XP short of level 3");
+    let goals5a2 = 0;
+    for (let kick = 0; kick < 5; kick++) {
+      await waitShootable();
+      if (kick === 0) { // aim high to the right (kept between kicks): 0.5 → ~0.8 across, ~0.85 up
+        await page.keyboard.down("ArrowRight"); await page.waitForTimeout(250); await page.keyboard.up("ArrowRight");
+        await page.keyboard.down("ArrowUp"); await page.waitForTimeout(600); await page.keyboard.up("ArrowUp");
+      }
+      await game.getByTestId("quick").click();
+      await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+      if (/GOAL/.test(await game.locator(".pk-banner strong").textContent())) goals5a2++;
+      await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+    }
+    await game.getByTestId("results").waitFor({ timeout: 10_000 });
+    const resultsText = await game.getByTestId("results").textContent();
+    const resultsXp = Number(resultsText.match(/\+(\d+)\s*XP earned/)?.[1] ?? 0), xpAfter = await hudXp();
+    console.log(`  ${goals5a2} goals · HUD XP ${xpBefore} → ${xpAfter} · Results +${resultsXp}`);
+    assert.ok(goals5a2 > 0, "at least one goal (needed for kick XP)");
+    assert.equal(resultsXp, xpAfter - xpBefore, "Results XP equals the HUD's XP gain over the session");
+    assert.match(resultsText, /Unlocked:\s*Level 3/, "the mid-session level-up shows under Unlocked");
+    ok("BQ-P1-5: Results XP == HUD XP gain (kick XP included); mid-session level-up listed");
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await waitShootable();
+
     // Restore a save code with 3 matches played after the tutorial, so the clock is on from here.
     await game.getByTestId("menu").click();
     await game.getByRole("button", { name: "Settings", exact: true }).click();
