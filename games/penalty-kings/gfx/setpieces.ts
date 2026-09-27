@@ -13,7 +13,7 @@ import { GOAL, toScreen, CAM_FX, CAM_FY, PENALTY_CAMERA, type PitchCamera } from
 
 const FX = CAM_FX, FY = CAM_FY;
 /** Free-kick broadcast camera: 14 m behind the ball, 3.6 m up. */
-export const FK_CAMERA: PitchCamera = { back: 14, height: 3.6, horizon: 101 };
+export const FK_CAMERA: PitchCamera = { back: 20, height: 5, horizon: 101 };
 export { PENALTY_CAMERA };
 /** The penalty spot as a "setup" for the shared projection: 11 m straight out from the goal. */
 export const PENALTY_SETUP: FreeKickSetup = { distance: 11, angle: 0, wallSize: 3, wallHeight: 1.8, wallJumpAt: 0, wind: 0, seed: 0 };
@@ -136,7 +136,10 @@ export const WALL_BASE_ROWS = WALL_HEADS[0].rows.length + BODY_PROTECT.length;
 export function wallDrawScale(target: number) {
   const scale = Math.max(1, Math.floor(target / (WALL_BASE_ROWS - 3)));
   const legs = Math.max(-3, Math.min(4, Math.round(target / scale) - WALL_BASE_ROWS));
-  return { scale, legs, height: (WALL_BASE_ROWS + legs) * scale };
+  const height = (WALL_BASE_ROWS + legs) * scale;
+  if (Math.abs(height / target - 1) <= 0.06) return { scale, legs, height };
+  // No whole-pixel scale fits: draw at the exact (non-integer) scale, nearest-neighbour.
+  return { scale: target / WALL_BASE_ROWS, legs: 0, height: target };
 }
 
 /**
