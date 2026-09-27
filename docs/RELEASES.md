@@ -4,8 +4,8 @@ The root preview (https://tulipoaaaaa.github.io/penalty-kings/) is the judged bu
 
 | Tag | Commit | Date (UTC) | Evidence |
 |---|---|---|---|
-| `judging-stable-1` | `135c2db` | 2026-09-27 16:09 UTC | **GitHub CI runs 100–102 fully green** (all jobs; 135c2db = run 102), deployed to Pages. Includes the phone-landscape tutorial banner, the deterministic Skill Zones test, the pot price tag, the celebration fix, the freeze fix, free practice `/practice/`, phone layouts, the 0–15 s randomness waits, next goal, odds on every pack, Skill Zones, the daily check-in. The session's git proxy refuses tag pushes (`send-pack: unexpected disconnect`; branch pushes work), so create it on GitHub: Releases → Draft a new release → tag `judging-stable-1` → target `135c2db`. |
-| (previous baseline) | `8a895fe` | 2026-09-27 | The earlier judged baseline (local full run green; CI's real-gate step was then failing on a stale assertion, fixed in `74d7fad`). Revert target of last resort. |
+| `judging-stable-1` | `18b4bc8` | 2026-09-27 | **Tagged** by the owner (via the frozen branch `judging-1`; neither may be moved, rebased or deleted). CI run 100 fully green, deployed to Pages at 15:27 UTC. |
+| `judging-stable-2` | (at the code freeze, Sep 29 12:00 UTC) | — | Everything from `135c2db` on (CI run 102 green) plus the Bug Quest fixes and the design round. The exact sha is reported at the freeze. Earlier baseline for reference: `8a895fe`. |
 
 **Freeze plan:**
 - **Sep 29 12:00 UTC:** code freeze for the judged preview; bug fixes only after this.
