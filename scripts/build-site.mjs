@@ -6,6 +6,7 @@
 // Each tier is a copy of the game directory with that tier's game.json (one SDK ChanceGame per tier).
 import { cp, rm, mkdir, writeFile, readFile, access, copyFile } from "node:fs/promises";
 import { buildGame, readGameDeployment } from "@rarefriends/friendsdk/build";
+import { buildClubhouse } from "./build-clubhouse.mjs";
 
 const GAME = "games/penalty-kings", WORK = ".build", SITE = "site";
 const exists = path => access(path).then(() => true, () => false);
@@ -16,6 +17,8 @@ async function buildTier(tier, outdir, deploymentFile) {
   const dir = `${WORK}/${tier}${deploymentFile ? "-live" : ""}`;
   await cp(GAME, dir, { recursive: true, filter: source => !source.includes(".friendsdk") });
   await copyFile(`${GAME}/tiers/${tier}.json`, `${dir}/game.json`);
+  // Live builds read on-chain cosmetic unlocks from the deployed KitShop.
+  if (deploymentFile && await exists(`${GAME}/deployments/live.json`)) await copyFile(`${GAME}/deployments/live.json`, `${dir}/live.json`);
   const deployment = deploymentFile ? await readGameDeployment(deploymentFile) : undefined;
   const build = await buildGame(dir, { outdir, deployment });
   await build.close();
@@ -33,7 +36,7 @@ async function addStadiumBar(outdir, tier, live) {
   const base = live ? `${root}live/` : root;
   const href = id => (id === "park" ? base : `${base}${id}/`);
   const links = TIERS.map(([id, label]) => id === tier ? `<strong aria-current="page">${label}</strong>` : `<a href="${href(id)}">${label}</a>`).join(" ");
-  const other = live ? `<a href="${root}">Simulated preview</a>` : liveTiers.size ? `<a href="${root}live/">Live — real RF</a>` : "";
+  const other = live ? `<a href="${root}">Simulated preview</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : liveTiers.size ? `<a href="${root}live/">Live — real RF</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : "";
   const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : "SIMULATED preview"}</span> ${links} ${other}</nav>`;
   const style = "<style>.pk-stadiums{max-width:var(--rf-game-max-width,960px);margin:0 auto;padding:6px 8px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font:12px ui-monospace,monospace}.pk-stadiums a{color:#111}.pk-stadiums span{padding:2px 6px;font-weight:700}.pk-stadiums .sim{background:#ffd23f}.pk-stadiums .live{background:#ff5a6e;color:#fff}</style>";
   const file = `${outdir}/index.html`;
@@ -49,6 +52,8 @@ for (const tier of ["park", "pro", "champions"]) {
   const file = `${GAME}/deployments/${tier}.json`;
   if (await exists(file)) await buildTier(tier, tier === "park" ? `${SITE}/live` : `${SITE}/live/${tier}`, file);
 }
+await buildClubhouse(`${SITE}/live/clubhouse`);
+console.log("built clubhouse (live) → site/live/clubhouse");
 await writeFile(`${SITE}/.nojekyll`, "");
 await rm(WORK, { recursive: true, force: true });
 console.log(`site ready in ${SITE}/`);

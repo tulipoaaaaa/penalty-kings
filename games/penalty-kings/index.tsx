@@ -14,6 +14,7 @@ import {
 import { RARITIES, TIERS, COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, tierForPrice, formatNumber, type Cosmetic } from "./economy.js";
 import { renderScene, ballFlightScreen, keeperPose, toScreen, drawBall, drawMask, SPOT, W, H, type SceneState } from "./scene.js";
 import { createCrowd, type Crowd } from "./audio.js";
+import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
 import "./style.css";
 
@@ -97,6 +98,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
     return () => { epoch.current++; sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
   }, [client, friendId]);
+
+  // Live mode: cosmetics come from on-chain KitShop unlocks for this Friend (read-only RPC).
+  useEffect(() => {
+    const kitShop = (liveConfig as { kitShop?: string }).kitShop;
+    if (simulated || !kitShop) return;
+    let active = true;
+    const word = (value: bigint) => value.toString(16).padStart(64, "0");
+    // unlocked(uint256 friendId, uint256 itemId) — selector 0x310f2de6 (cast sig); plain eth_call keeps the bundle small.
+    const read = (index: number) => fetch("https://rpc.mainnet.chain.robinhood.com", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: index, method: "eth_call", params: [{ to: kitShop, data: `0x310f2de6${word(friendId)}${word(BigInt(index))}` }, "latest"] }) })
+      .then(response => response.json()).then(body => { if (body.error || typeof body.result !== "string") throw new Error("read failed"); return BigInt(body.result) === 1n; });
+    Promise.all(COSMETICS.map((_, index) => read(index)))
+      .then(values => { if (active) setOwned(new Set(COSMETICS.filter((item, index) => item.price === 0 || values[index]).map(item => item.id))); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [simulated, friendId]);
 
   // Animation loop.
   useEffect(() => {
@@ -565,14 +582,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {menu === "shop" && <>
         {simulated ? <p>Cosmetics are bought with $GBOOT, which is burned{simTag}. Balance: <b>{formatNumber(gboot)}</b> · burned so far {formatNumber(burned)}.</p>
-          : <p>Try-on only: nothing is spent or burned here. On-chain KitShop purchases ($GBOOT burned, unlocks per Friend) need a bridge action the SDK does not supply yet (roadmap v1.1).</p>}
+          : <p>Your Friend's on-chain unlocks are shown here. Unlock more in the <b>Clubhouse</b> (link above the game): $GBOOT is burned by the KitShop contract and the unlock is recorded for this Friend.</p>}
         {(["boots", "kit", "net", "celebration"] as const).map(kind => <div key={kind} className="pk-shopgroup"><h3>{kind === "kit" ? "Kits (halo colour)" : kind === "net" ? "Net colours" : kind === "celebration" ? "Celebrations" : "Boots"}</h3>
           {COSMETICS.filter(item => item.kind === kind).map(item => {
             const has = owned.has(item.id), on = equipped[kind] === item.id;
-            return <button key={item.id} type="button" aria-pressed={on} disabled={simulated && !has && gboot < item.price} onClick={() => {
+            return <button key={item.id} type="button" aria-pressed={on} disabled={simulated ? !has && gboot < item.price : !has} onClick={() => {
               if (!has && simulated) { setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase"); }
               setEquipped(value => ({ ...value, [kind]: item.id }));
-            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has || !simulated ? on ? "equipped" : simulated ? "equip" : "try on" : `${item.price} $GBOOT`}</button>;
+            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : simulated ? `${item.price} $GBOOT` : "unlock in Clubhouse"}</button>;
           })}</div>)}
       </>}
 
