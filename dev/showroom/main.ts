@@ -10,9 +10,12 @@ import { THEMES, type StadiumId, type Weather } from "../../games/penalty-kings/
 import { drawKeeper } from "../../games/penalty-kings/gfx/keepers.js";
 import { drawBall, drawBallSprite, drawBallShadow, ballSprite, ballSpriteCacheSize, BALL_FRAMES, BALL_IDENTITY, RARITY_FX, seasonFx, type Season } from "../../games/penalty-kings/gfx/ball.js";
 import { CROWD_TYPES } from "../../games/penalty-kings/gfx/crowd.js";
-import { COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
+import { COMMENTARY_COUNT, ALL_COMMENTARY_COUNT, type CommentaryContext } from "../../games/penalty-kings/gfx/commentary.js";
 import type { CelebrationId } from "../../games/penalty-kings/gfx/friend.js";
 import { revealPlan } from "../../games/penalty-kings/game/reveal.js";
+import { CATALOGUE, MOMENT_STAGE, createGameDirector, applyBeat, playMoment, type Moment, type Beat } from "../../games/penalty-kings/game/director.js";
+import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
+import type { PlayMode } from "@penalty-kings/game-director";
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 const canvas = $<HTMLCanvasElement>("#stage"), context = canvas.getContext("2d")!;
@@ -129,7 +132,77 @@ button("#moments", "Mexican wave", () => stage.wave());
 button("#moments", "Score +250", () => stage.setScore(stage.score + 250));
 const contexts: CommentaryContext[] = ["walkout", "buildup", "goal", "save", "post", "over", "wide", "streak2", "streak3", "rarity-high", "rarity-top", "keeper", "sudden-death", "boss"];
 for (const topic of contexts) button("#commentary", topic, () => stage.say(topic));
-$<HTMLSpanElement>("#line-count").textContent = String(COMMENTARY_COUNT);
+$<HTMLSpanElement>("#line-count").textContent = `${COMMENTARY_COUNT} + ${ALL_COMMENTARY_COUNT - COMMENTARY_COUNT} Director`;
+
+// ── Director debug: the seeded Game Director driving this Stage, its state overlaid, every moment on a button ─────
+let director = createGameDirector(1, { name: stage.friendName, number: "336583" });
+let jumboHold = 0, lastBeat: Beat | null = null;
+const directorMode = () => $<HTMLSelectElement>("#director-mode").value as PlayMode;
+function directorSession() {
+  director = createGameDirector(Math.floor(Math.random() * 1e6), { name: stage.friendName, number: $<HTMLInputElement>("#friend-id").value.trim() }, director.seenCode());
+  toPenalty();
+  showBeat(director.startSession({ mode: directorMode(), stadium: stage.stadium, keeper: stage.keeper, weather: stage.weather, timeOfDay: "evening" }), "session");
+}
+function showBeat(beat: Beat, label: string, slots?: Moment["slot"][]) {
+  lastBeat = beat;
+  const played = applyBeat(stage, beat, slots);
+  if (played.jumbotron) jumboHold = performance.now() + 6000;
+  if (beat.keeperChanged) ($<HTMLSelectElement>("#keeper")).value = beat.keeper;
+  log(`director ${label}: ${beat.phase} · intensity ${beat.intensity} · ${beat.moments.map(m => `${m.tier}:${m.id}`).join(", ") || "no moments"}${beat.skillScoreMultiplier === 2 ? " · ×2 skill (Golden Hour)" : ""}`);
+  refreshDirector();
+}
+/** One kick the way the game will run it: beforeKick → real engine outcome → afterKick (line cued for the resolve) → reaction, then between-kick moments. */
+function directorKick(result: ShotResult) {
+  const before = director.beforeKick({ now: performance.now() / 1000 });
+  showBeat(before, "before kick");
+  try {
+    const { outcome, curl } = findShot(result, stage.keeper);
+    const after = director.afterKick({ kind: "penalty", result: outcome.result, zone: outcome.zone, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y, now: performance.now() / 1000 });
+    if (after.lines[0]) stage.cue = cueLine(after.lines[0]);
+    stage.play(outcome, curl);
+    window.setTimeout(() => showBeat({ ...after, lines: after.lines.slice(1) }, "reaction", ["reaction"]), 1600);
+    window.setTimeout(() => showBeat({ ...after, lines: [], keeperChanged: false }, "between kicks", ["between"]), 4200);
+  } catch (error) { log((error as Error).message); }
+}
+function refreshDirector() {
+  const state = director.debugState();
+  $("#director-overlay").textContent = [
+    `DIRECTOR  kick ${state.kick} · round ${state.round} (${state.kickInRound}/5)`,
+    `phase ${state.phase.toUpperCase()}  intensity ${state.intensity.toFixed(2)}`,
+    `  ${Object.entries(state.intensityParts).map(([k, v]) => `${k} ${v}`).join(" · ")}`,
+    `streak ${state.streak} · misses ${state.misses} · keeper ${state.keeper} (${state.keeperRun})${state.pendingKeeper ? ` → ${state.pendingKeeper}` : ""}`,
+    `weather ${state.weather}${state.goldenHour ? " · GOLDEN HOUR" : ""} · skill ×${state.skillScoreMultiplier}`,
+    `next: ${state.nextMoment ? `${state.nextMoment.tier} ${state.nextMoment.name}` : "—"} · set piece in ${state.nextSetPieceInKicks} · notable in ${state.nextNotableInKicks.join("–")}`,
+    `cooldowns: ${Object.entries(state.cooldowns).map(([id, left]) => `${id} ${left}`).join(", ") || "none"}`,
+    `recent: ${state.recent.join(", ")}`,
+    state.discovery,
+    lastBeat ? `last: ${lastBeat.moments.map(m => m.name).join(" + ") || "—"} | ${[...lastBeat.lines, ...lastBeat.moments.flatMap(m => m.lines)].map(l => l.text).join(" / ")}` : "",
+  ].join("\n");
+  $("#director-discovery").textContent = `${state.discovery} · ${CATALOGUE.filter(m => MOMENT_STAGE[m.id].support === "full").length} full, ${CATALOGUE.filter(m => MOMENT_STAGE[m.id].support === "partial").length} partial, ${CATALOGUE.filter(m => MOMENT_STAGE[m.id].support === "line-only").length} line-only on today's Stage`;
+  const seen = new Set(director.seenIds());
+  document.querySelectorAll<HTMLButtonElement>("#director-moments button").forEach(element => element.classList.toggle("seen", seen.has(element.dataset.moment!)));
+}
+for (const result of ["goal", "save", "post", "over", "wide"] as const) button("#director-kicks", `Kick: ${result}`, () => directorKick(result));
+for (const tier of ["micro", "notable", "set-piece"] as const) {
+  const heading = document.createElement("h4"); heading.textContent = `${tier} (${CATALOGUE.filter(m => m.tier === tier).length})`; $("#director-moments").append(heading);
+  for (const moment of CATALOGUE.filter(m => m.tier === tier)) {
+    const staging = MOMENT_STAGE[moment.id];
+    const element = button("#director-moments", `${moment.name}${staging.support === "full" ? "" : staging.support === "partial" ? " ◐" : " ○"}`, () => {
+      const played = director.trigger(moment.id);
+      if (!played) return;
+      const result = playMoment(stage, played);
+      if (result.jumbotron) jumboHold = performance.now() + 6000;
+      if (played.keeper) ($<HTMLSelectElement>("#keeper")).value = played.keeper;
+      log(`moment: ${played.name}${staging.missing ? ` (missing: ${staging.missing})` : ""}`);
+      lastBeat = null; refreshDirector();
+    });
+    element.dataset.moment = moment.id; element.title = `${staging.support}: ${staging.uses}${staging.missing ? ` · missing: ${staging.missing}` : ""}`;
+  }
+}
+$<HTMLButtonElement>("#director-session").onclick = directorSession;
+$<HTMLInputElement>("#director-overlay-toggle").onchange = event => $("#director-overlay").toggleAttribute("hidden", !(event.target as HTMLInputElement).checked);
+window.setInterval(() => { if (performance.now() > jumboHold && jumboHold) { stage.jumbotron = ""; jumboHold = 0; } }, 500);
+refreshDirector();
 
 select<KeeperId>("#keeper", KEEPERS.map(keeper => ({ value: keeper.id, label: keeper.name })), value => { stage.keeper = value; const k = keeperById(value); $("#keeper-info").textContent = `${k.bio} Tell: ${k.tell}`; });
 ($<HTMLSelectElement>("#keeper")).value = "squirrel";
