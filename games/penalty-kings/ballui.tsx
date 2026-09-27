@@ -8,7 +8,7 @@ import type { ChanceGameDefinition } from "@rarefriends/friendsdk/game";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import { TIERS, formatNumber, type Tier } from "./economy.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { BallSpin, ballGlow, TokenExplainer } from "./ui.js";
+import { BallSpin, ballGlow, TokenExplainer, RarityChip, Tile } from "./ui.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
@@ -33,16 +33,22 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
       <TokenExplainer />
     </div>}
     <div className="pk-tiers" role="radiogroup" aria-label="Stadium">
-      {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
-        <strong>{item.name}</strong><small>{item.priceRF.toLocaleString("en-US")} RF per ball · top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
-        <small>{item.id === tier.id ? "You are here" : "Open its own page to play there (/pro/ or /champions/)"}</small>
+      {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-stadium={item.id} data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
+        <strong>{item.name}</strong>
+        <span className="pk-tierprice"><b>{item.priceRF.toLocaleString("en-US")} RF</b> per ball</span>
+        <small>top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
+        <small className="pk-tierwhere">{item.id === tier.id ? "You are here" : "Open its own page to play there (/pro/ or /champions/)"}</small>
       </div>)}
     </div>
     <div className="pk-packs" role="radiogroup" aria-label="Pack size">
       {PACKS.map(size => <button key={size.toString()} type="button" role="radio" aria-checked={pack === size} onClick={() => setPack(size)} data-testid={`pack-${size}`} disabled={balance < definition.price * size} title={balance < definition.price * size ? "Not enough RF for this pack" : undefined}>
         {size.toString()} ball{size > 1n ? "s" : ""}</button>)}
     </div>
-    <p className="pk-cost">Total <b>{rf(cost)}</b>{tag} · each ball can pull up to <b>{rf(maxPrize)}</b>{tag} · <button type="button" className="pk-link" onClick={onOdds}>See odds</button></p>
+    <div className="pk-tiles pk-cost">
+      <Tile value={<>{rf(cost)}<small>{tag}</small></>} label={`total for ${pack.toString()} ball${pack > 1n ? "s" : ""}`} tone="volt" />
+      <Tile value={<>{rf(maxPrize)}<small>{tag}</small></>} label="each ball can pull up to" tone="gold" />
+      <button type="button" className="pk-link" onClick={onOdds}>See odds</button>
+    </div>
     <p className="pk-note">Average return 90% of the ball price in RF, over many balls. Most packs return less than they cost; a few return much more.</p>
     {full ? <p className="pk-warn" role="status">Stadium full: every seat's top prize is reserved right now. Try again after some balls settle.</p>
       : <div className="pk-buyrow">
@@ -102,7 +108,7 @@ export function Bag({ records, definition, simulated, busy, selected, onShoot, o
     <p className="pk-note">{BALL_PROMISE}</p>
     {view === "bag" && (real.length === 0 ? <p>Your Bag is empty. Buy a pack in the Shop.</p>
       : <>
-        <p className="pk-counts">{RARITY_NAMES.slice(0, 7).map((name, rarity) => { const n = real.filter(r => r.rarity === rarity).length; return n ? <span key={name}>{name.replace(" Ball", "")} ×{n}</span> : null; })}</p>
+        <p className="pk-counts">{RARITY_NAMES.slice(0, 7).map((name, rarity) => { const n = real.filter(r => r.rarity === rarity).length; return n ? <span key={name} data-rarity={rarity}><RarityChip rarity={rarity} />{name.replace(" Ball", "")} ×{n}</span> : null; })}</p>
         <div className="pk-bagrid">{sorted.map(record => <div key={record.id} className="pk-ballcard" data-rarity={record.rarity} data-selected={selected === record.id} data-testid="ball">
           <BallSpin rarity={record.rarity} size={40} season={record.season} />
           <strong>{RARITY_NAMES[record.rarity]}{record.lucky ? " ★" : ""}</strong>

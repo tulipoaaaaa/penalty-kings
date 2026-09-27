@@ -920,7 +920,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
   const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
-  return <section className="pk" aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
+  return <section className={`pk pk-stadium-${tier.id}${reducedMotion ? " pk-reduce-motion" : ""}`} aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
     <div className="pk-stage" inert={Boolean(menu) || paused || screen !== "play" || undefined}>
       <canvas ref={canvas} className="pk-canvas" width={W} height={H} tabIndex={0}
         aria-label="Swipe up from the ball to shoot: where you release decides the shot. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power."
