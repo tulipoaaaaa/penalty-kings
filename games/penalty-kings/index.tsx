@@ -37,7 +37,7 @@ import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { nextGoal } from "./game/nextgoal.js";
-import { skillZoneOf, streakAfter, checkIn, LOGIN_TRACK, SKILL_ZONE_XP, SKILL_ZONE_LABEL } from "./game/rewards.js";
+import { skillZoneOf, streakAfter, checkIn, LOGIN_TRACK, SKILL_ZONE_XP, SKILL_ZONE_LABEL, BAR_CONTACT_Y } from "./game/rewards.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
@@ -853,7 +853,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
+    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > BAR_CONTACT_Y ? "OFF THE BAR!" : LABELS[result]; // the ball can only touch the bar above BAR_CONTACT_Y
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;
