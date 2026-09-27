@@ -17,6 +17,7 @@ import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart,
 import type { RevealPlan } from "../game/reveal.js";
 import { waitCue, WAIT_EVENTS, type WaitCue } from "../game/suspense.js";
 import { drawBallWarmup, drawPenaltyWait, drawSealedPack } from "./waits.js";
+import { HUSH, type Sfx } from "../audio-core.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
@@ -27,7 +28,8 @@ export { STRIKE_AT };
 export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "replay-done" | "walkon-done" | "wait";
 /** FD-3b: a beat inside a wait for randomness (the shell plays the crowd drumroll and a Director moment). */
 export type WaitBeatEvent = Readonly<{ kind: "penalty" | "pack"; beat: "drumroll" | "moment" | "hush"; level: number }>;
-export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
+/** Every sound name (audio-core.ts SFX_NAMES); audio.ts gives each one a voice (BQ-X4). */
+export type { Sfx };
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
 /** Penalty: the run-up starts 3 m behind and 1.3 m left of the plant (gfx/kick.ts); the Friend plants just left of the ball. */
@@ -277,6 +279,7 @@ export class Stage {
     this.sfx("heartbeat"); if (live && (!this.said || this.said.t > 1.5)) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
     this.timeline
       .at(0, () => this.sfx("whistle"))
+      .at(STRIKE_AT - HUSH.seconds, () => this.sfx("hush")) // the crowd hushes over the 150 ms before the strike
       .at(0.1, () => this.stepDust(0.1)).at(0.19, () => this.stepDust(0.19)).at(0.28, () => this.stepDust(0.28))
       .at(STRIKE_AT, () => {
         const ball = this.ballHome();

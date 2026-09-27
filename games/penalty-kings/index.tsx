@@ -22,6 +22,7 @@ import { W, H } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
+import { isSfx } from "./audio-core.js";
 import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, discoveryLabel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import { levelAfter } from "./game/tour.js";
@@ -142,6 +143,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const stage = useRef<Stage | null>(null);
   const sprites = useRef<GenerationSprites | null>(null);
   const sound = useRef<FriendSoundKit | null>(null), crowd = useRef<Crowd | null>(null);
+  /** Sound (B3): locked until the first gesture, then ON unless the player chose (null = no explicit choice yet). */
+  const soundChoice = useRef<boolean | null>(null), mutedRef = useRef(muted); mutedRef.current = muted;
   const locked = useRef(false), epoch = useRef(0);
   const swipe = useRef<SwipePoint[] | null>(null);
   /** Display scale (CSS px per canvas unit) and the input kind of the current gesture. */
@@ -282,7 +285,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   useEffect(() => {
     const version = ++epoch.current;
     dir.current = null; // a Director per Friend (created on first use with this Friend's seen moments)
-    sound.current = createFriendSoundKit({ muted: true }); crowd.current = createCrowd();
+    sound.current = createFriendSoundKit({ muted: mutedRef.current }); crowd.current = createCrowd(); crowd.current.setMuted(mutedRef.current);
     cancelKick(); setSnapshot(null); setError(""); setMenu(null); setPhaseNow("idle"); setSession(null); setScreen("title"); locked.current = false;
     void client.read().then(value => { if (version === epoch.current) setSnapshot(value); }).catch(cause => {
       if (version === epoch.current) setError(cause instanceof Error ? cause.message : "Could not load the game.");
@@ -294,6 +297,21 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
     return () => { epoch.current++; packRoll.current?.abort(); packRoll.current = null; clearPackTimers(); sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
   }, [client, friendId]);
+
+  // Sound on at the first gesture (browsers need one to start audio) unless the player muted it; later gestures
+  // retry the unlock (a touch pointerdown does not count as activation on every browser; the click after it does).
+  useEffect(() => {
+    const gesture = (event: Event) => {
+      if ((event.target as Element | null)?.closest?.("[data-sound-toggle]")) return; // the toggle decides for itself
+      if (soundChoice.current === null && mutedRef.current) applySound(true); else void unlockAudio();
+    };
+    const kinds = ["pointerdown", "click", "keydown"] as const;
+    for (const kind of kinds) window.addEventListener(kind, gesture, true);
+    return () => { for (const kind of kinds) window.removeEventListener(kind, gesture, true); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Big Match: a heartbeat under the aim and the kick.
+  useEffect(() => { crowd.current?.setPulse(session?.mode === "match" && (phase === "aim" || phase === "shooting")); }, [session, phase]);
 
   // Live mode: cosmetics come from on-chain KitShop unlocks for this Friend (read-only RPC).
   useEffect(() => {
@@ -436,17 +454,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, ready, cupRF, race, lastBigPull]);
 
-  function playSfx(name: string) {
-    const c = crowd.current, s = sound.current;
-    if (name === "kick") { c?.kick(); s?.play("impact"); }
-    else if (name === "whistle") c?.whistle();
-    else if (name === "roar" || name === "chant") c?.roar();
-    else if (name === "groan") c?.groan();
-    else if (name === "ooh") c?.ooh();
-    else if (name === "clang") c?.post();
-    else if (name === "net") s?.play("reward");
-    else if (name === "glove" || name === "stomp" || name === "heartbeat") c?.thud();
-  }
+  /** Every Stage/Director sound name has a synthesised voice (audio.ts; BQ-X4), gated to one roar per event (BQ-X5). */
+  function playSfx(name: string) { if (isSfx(name)) crowd.current?.play(name); }
 
   // ── Match Director ──────────────────────────────────────────────────────
   function director(): GameDirector {
@@ -1031,7 +1040,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     catch (cause) { if (version === epoch.current) setError(cause instanceof Error ? cause.message : "The action failed."); }
     finally { if (version === epoch.current) { locked.current = false; setBusy(false); } }
   }
-  async function unlockAudio() { if (!muted) { await sound.current?.unlock(); await crowd.current?.unlock(); } }
+  async function unlockAudio() { if (!mutedRef.current) { await sound.current?.unlock(); await crowd.current?.unlock(); } }
+  /** Sound on or off (call from a gesture: unlocking the AudioContext needs one). */
+  function applySound(on: boolean) {
+    mutedRef.current = !on; setMuted(!on); sound.current?.setMuted(!on); crowd.current?.setMuted(!on);
+    if (on) { void sound.current?.unlock(); void crowd.current?.unlock(); }
+  }
+  /** The visible toggle (title, HUD, Settings): an explicit choice the first-gesture unmute respects. */
+  function toggleSound() { const on = mutedRef.current; soundChoice.current = on; applySound(on); }
 
   /** SHOP: buy a pack (SDK buy). Nothing is revealed yet: balls are unopened until "Open pack". */
   function buyPack(quantity: bigint) {
@@ -1305,6 +1321,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   const balls = snapshot.consumables + (pending ? 1n : 0n);
   const s = session, inMatch = s?.mode === "match";
+  /** The visible sound toggle (title and HUD): a 44 px pixel speaker, crossed out when muted. */
+  const soundToggle = <button type="button" className="pk-sound" data-testid="sound-toggle" data-sound-toggle data-sound={muted ? "off" : "on"} aria-pressed={!muted} aria-label="Sound" title={muted ? "Sound off (tap for sound)" : "Sound on (tap to mute)"} onClick={toggleSound}>
+    <svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true" shapeRendering="crispEdges"><path fill="currentColor" d="M1 6h3l4-3v10l-4-3H1z" />
+      {muted ? <path stroke="currentColor" strokeWidth="2" d="M10 5l5 6M15 5l-5 6" /> : <path fill="none" stroke="currentColor" strokeWidth="1.5" d="M10 6q1.5 2 0 4M12 4q3 4 0 8" />}</svg>
+  </button>;
   const skillTable = [...skill].sort((a, b) => b.score - a.score || a.id - b.id);
   const scenario = dailyScenario(today);
   // World Tour results (round 6 C16): "Next level" opens the following level's brief, or says what opens its city.
@@ -1358,7 +1379,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
         {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}
         {phase === "aim" && s && !pack && !carousel && <button type="button" onClick={() => (s.kind === "freekick" && s.setup ? shootFreeKick(keyFreeKick({ ...keyAim.current, power: 0.55, curl: keyAim.current.curl || 0.6, top: 0.5 }, s.setup)) : shootPenalty({ aimX: keyAim.current.aimX, aimY: keyAim.current.aimY, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
-        <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
+        <div className="pk-actions-row">
+          <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
+          {soundToggle}
+        </div>
       </nav>}
       {(error || message) && phase !== "shooting" && screen === "play" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}
       {discover && screen === "play" && !menu && <p key={discover.key} className="pk-discover" role="status" aria-live="polite" data-testid="discover-toast">{discover.text}</p>}
@@ -1366,6 +1390,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
     {screen === "title" && !menu && <div className={`pk-title pk-attract${intro === "cold" ? " pk-coldopen" : ""}`} role="dialog" aria-label="Penalty Kings" data-intro={intro}
       onPointerDown={event => { if (intro === "cold" && !(event.target as HTMLElement).closest("button")) setIntro("attract"); }}>
+      <div className="pk-title-sound">{soundToggle}</div>
       <div className="pk-attract-top">
         <h1>PENALTY KINGS</h1>
         <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
@@ -1487,10 +1512,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "settings" && <div className="pk-settings">
-        <button type="button" aria-pressed={!muted} onClick={() => {
-          const nextMuted = !muted; setMuted(nextMuted); sound.current?.setMuted(nextMuted); crowd.current?.setMuted(nextMuted);
-          if (!nextMuted) { void sound.current?.unlock(); void crowd.current?.unlock(); }
-        }}>{muted ? "Sound off" : "Sound on"}</button>
+        <button type="button" aria-pressed={!muted} data-sound-toggle onClick={toggleSound}>{muted ? "Sound off" : "Sound on"}</button>
         <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations)</label>
         <label><input type="checkbox" checked={haptics} onChange={event => setHaptics(event.target.checked)} /> Vibration (Android)</label>
         <p>Level {playerLevel} · {progress.xp} XP · ★ {Object.values(progress.stars).reduce((a, b) => a + b, 0)} · {progress.stamps.length}/12 keepers stamped</p>

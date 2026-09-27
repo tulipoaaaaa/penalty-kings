@@ -45,6 +45,20 @@ await testGame("./games/penalty-kings", {
     };
     const noBanner = async (ms = 1200) => { await page.waitForTimeout(ms); assert.equal(await game.locator(".pk-banner").count(), 0, "no kick happened"); };
 
+    // 0. Sound (B3): a visible ≥ 44 px toggle on the title and in the HUD; the first gesture turns sound on,
+    //    an explicit mute is respected afterwards.
+    const toggle = game.getByTestId("sound-toggle"), soundState = () => toggle.getAttribute("data-sound");
+    const bigEnough = async where => { const b = await toggle.boundingBox(); assert.ok(b && b.width >= 44 && b.height >= 44, `${where}: sound toggle is ≥ 44 px (${b && `${b.width}×${b.height}`})`); };
+    assert.equal(await toggle.count(), 1, "one sound toggle on the title");
+    await bigEnough("title");
+    if (width > 600) assert.equal(await soundState(), "off", "silent before any gesture"); // (at 360 px "Play in portrait anyway" was a gesture)
+    await game.locator(".pk-attract-top h1").click();
+    assert.equal(await soundState(), "on", "the first gesture turns sound on");
+    assert.equal(await toggle.getAttribute("aria-pressed"), "true");
+    await toggle.click();
+    assert.equal(await soundState(), "off", "the toggle mutes");
+    assert.equal(await toggle.getAttribute("aria-pressed"), "false");
+
     // 1. Shoot during the keeper walkout (tutorial opening): ignored, and the shot clock does not run.
     await game.getByTestId("play").click();
     await page.waitForTimeout(300);
@@ -53,6 +67,12 @@ await testGame("./games/penalty-kings", {
     await noBanner(600);
     assert.equal(await kicks(), 0);
     ok("swipe during the walkout is ignored");
+    assert.equal(await soundState(), "off", "later gestures (Play, the swipe) respect the explicit mute");
+    await bigEnough("HUD");
+    await toggle.click();
+    assert.equal(await soundState(), "on", "the HUD toggle turns sound back on");
+    assert.equal(await toggle.getAttribute("aria-pressed"), "true");
+    ok("sound toggle: title + HUD, ≥ 44 px, first gesture unmutes, explicit mute respected, flips state");
 
     // 2. Double release: swipe + Quick shot + Space in the same instant → exactly ONE kick.
     await waitShootable();

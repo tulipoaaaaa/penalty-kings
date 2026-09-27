@@ -18,6 +18,7 @@ import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
 import { createGameDirector, applyBeat, playMoment, type Beat } from "../../games/penalty-kings/game/director.js";
 import { keyShot, type KeyAim } from "../../games/penalty-kings/game/input.js";
 import { createCrowd } from "../../games/penalty-kings/audio.js";
+import { isSfx } from "../../games/penalty-kings/audio-core.js";
 import { strikerRows } from "./striker.js";
 
 export const PRACTICE_KICKS = 5;
@@ -251,14 +252,7 @@ soundButton.addEventListener("click", async () => {
   soundButton.textContent = soundOn ? "Sound on" : "Sound off";
 });
 function playSfx(name: string) {
-  if (!soundOn) return;
-  if (name === "kick") crowd.kick();
-  else if (name === "whistle") crowd.whistle();
-  else if (name === "roar" || name === "chant") crowd.roar();
-  else if (name === "groan") crowd.groan();
-  else if (name === "ooh") crowd.ooh();
-  else if (name === "clang") crowd.post();
-  else if (name === "glove" || name === "stomp" || name === "heartbeat") crowd.thud();
+  if (soundOn && isSfx(name)) crowd.play(name);
 }
 
 scene.onEvent = (event, data) => {
