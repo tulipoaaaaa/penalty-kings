@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEEPERS, resolveShot, kickSeed, shotTarget, streakMultiplier, goalPoints, keeperById } from "../src/index.ts";
+import { KEEPERS, resolveShot, kickSeed, shotTarget, streakMultiplier, goalPoints, keeperById, prng } from "../src/index.ts";
 
 test("resolution is deterministic for the same inputs and seed", () => {
   const shot = { aimX: 0.7, aimY: 0.9, power: 0.8, curl: -0.3 };
@@ -52,6 +52,25 @@ test("mime wall saves shots into its third; mouse cannot reach the top corners",
   let topGoals = 0;
   for (let seed = 0; seed < 200; seed++) if (resolveShot({ aimX: 0.8, aimY: 0.9, power: 0.8, curl: 0 }, mouse, seed).result === "goal") topGoals++;
   assert.equal(topGoals, 200);
+});
+
+// BQ-P1-3: the mouse's tell ("Top corners are always open") must be true at every difficulty rung:
+// his rotated body, arms and gloves never rise above maxY, so a top-bin ball is never saved.
+test("the mouse never saves a top-bin shot: 10,000 per rung, NEUTRAL and L0–L8", () => {
+  const mouse = keeperById("mouse"), random = prng(0x70b1);
+  for (const [rung, difficulty] of [NEUTRAL, ...DIFFICULTY_LADDER].entries()) {
+    let shots = 0, saves = 0, k = 0;
+    while (shots < 10_000) {
+      k++;
+      const raw = { aimX: (random() < 0.5 ? -1 : 1) * (0.62 + random() * 0.36), aimY: 0.62 + random() * 0.34, power: 0.35 + random() * 0.6, curl: random() * 2 - 1 };
+      const history = [random() * 2 - 1, random() * 2 - 1, random() * 2 - 1].slice(0, k % 4);
+      const outcome = resolveShot(assistShot(raw, difficulty.assist), mouse, kickSeed(rung, k, mouse.id), { kickIndex: k % 5, history }, difficulty);
+      if (outcome.zone !== "bin" || outcome.result === "wide" || outcome.result === "over") continue;
+      shots++;
+      if (outcome.result === "save") saves++;
+    }
+    assert.equal(saves, 0, `${rung ? `L${rung - 1}` : "NEUTRAL"}: ${saves} top-bin saves in ${shots}`);
+  }
 });
 
 test("the robot learns a favourite corner from history", () => {

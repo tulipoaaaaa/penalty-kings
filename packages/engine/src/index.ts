@@ -6,7 +6,7 @@
  *
  * Goal-plane units: posts at x = ±1, ground at y = 0, crossbar at y = 1.
  */
-import { keeperFrame, keeperTouch, BALL_RADIUS, GOAL_ASPECT, LEG_CHANCE, type KeeperPart } from "./keeper-rig.ts";
+import { keeperFrame, keeperTouch, BALL_RADIUS, GOAL_ASPECT, LEG_CHANCE, TOP_BIN_Y, type KeeperPart } from "./keeper-rig.ts";
 
 export type ShotInput = Readonly<{
   /** Aim across the goal face, goal units (posts at ±1). WHERE you point is where it goes. */
@@ -198,7 +198,7 @@ export const POST_IN_BONUS = 1.5;
 export function shotZone(target: { x: number; y: number }): Zone {
   const ax = Math.abs(target.x);
   if (ax < 0.34) return "centre";
-  if (ax >= 0.66) return target.y >= 0.66 ? "bin" : "corner";
+  if (ax >= 0.66) return target.y >= TOP_BIN_Y ? "bin" : "corner";
   return "side";
 }
 
