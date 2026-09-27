@@ -37,10 +37,12 @@
 .pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
 
 /* Pot banner: top-centre, scoreboard style; tap = odds. */
-.pk-pot { position: absolute; top: 0.6cqh; left: 50%; transform: translateX(-50%); display: flex; gap: 0.6em; align-items: center; max-width: 46cqw;
-  font-size: clamp(7px, 1.25cqw, 12px); padding: 0.25em 0.6em; background: #3d2600e6 !important; border-color: var(--pk-gold) !important; color: var(--pk-gold) !important; white-space: nowrap; overflow: hidden; }
-.pk-pot span { overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-.pk-pot .pk-pot-extra { flex-shrink: 1; min-width: 0; }
+/* Wraps onto a second line instead of truncating: every piece (pot, USD, price age, countdown, tag) stays whole. */
+.pk-pot { position: absolute; top: 0.6cqh; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; column-gap: 0.5em; row-gap: 0.1em;
+  align-items: center; width: max-content; max-width: 46cqw; box-sizing: border-box; line-height: 1.2;
+  font-size: clamp(7px, 1.15cqw, 12px); padding: 0.25em 0.6em; background: #3d2600e6 !important; border-color: var(--pk-gold) !important; color: var(--pk-gold) !important; overflow: hidden; }
+.pk-pot span { white-space: nowrap; }
+.pk-pot .pk-pot-usd { color: var(--pk-paper); }
 .pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: 0.85em; }
 .pk-pot small { opacity: 0.8; }
 
@@ -150,7 +152,7 @@
 @container (max-width: 560px) {
   .pk-hud { gap: 2px; max-width: 27cqw; font-size: 7px; }
   .pk-hud-right { top: 12cqh; }
-  .pk-pot { max-width: 44cqw; font-size: 7px; padding: 0.15em 0.4em; }
+  .pk-pot { max-width: 44cqw; font-size: 7px; padding: 0.15em 0.4em; column-gap: 0.4em; }
   .pk-pot .pk-pot-label, .pk-pot .pk-pot-extra { display: none; }
   .pk-actions { bottom: 13cqh; gap: 3px; width: 24cqw; min-width: 0; }
   .pk-actions button { padding: 0 0.4em; font-size: 9px; }

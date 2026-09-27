@@ -18,6 +18,9 @@ Robinhood mainnet (chain 4663). Reads were made through a QuickNode Robinhood en
 | Dice Entropy | `0xd8a0680e7699526b57140ed4eafdcc7219dc0a0c` | FriendSDK `contracts/README.md` (pinned by the SDK CLI) | checked by SDK deploy tooling at deploy time | SDK-pinned |
 | Dice provider | `0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6` | FriendSDK `contracts/README.md` | as above | SDK-pinned |
 | RF/WETH v4 pool id | `0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240` | rarefriends.com/docs/contracts | StateView `getSlot0` → sqrtPriceX96 59949106155254258080182211, tick −143740; `getLiquidity` 147865847752143433133351 (≈ 112 ETH + 195M RF virtual) | verified |
+| RF/WETH pool key | currency0 RF, currency1 WETH, fee `0x800000` (dynamic), tickSpacing 60, hooks `0x7A65…A0cC` | `RareFriendsMarket.poolKey()` on-chain | `keccak256(abi.encode(key))` = the pool id above (recomputed 2026-09-27, block 73,793,321); RF and WETH `decimals()` = 18 | verified |
+| USDG (Global Dollar, Paxos) | `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` | web search result summary (sources listed: Paxos USDG mainnet page, Robinhood Chain address lists); those pages are blocked from this sandbox, so the on-chain checks are the evidence | code present; `symbol()` = `USDG`, `name()` = `Global Dollar`, `decimals()` = **6**, `totalSupply()` ≈ 688.6M; Sourcify exact match `ERC1967Proxy`, EIP-1967 implementation `0x68184C449E1a8f34fA18d289737129FD27B66f8F` = Sourcify match `contracts/stablecoins/USDG.sol:USDG`. Clones named "USDG" exist on this chain; only this address is used | verified |
+| WETH/USDG v4 pool (deepest) | id `0xfcfae8fa0bd6da961bcf5d990f27690932deac4f093e99bf3e871691c6586593` · currency0 WETH, currency1 USDG, fee 500 (0.05%), tickSpacing 10, hooks `0x0` (none) | PoolManager `Initialize` logs filtered on (currency0 = WETH, currency1 = USDG): **338** pools, 22 with in-range liquidity; this one has the largest `StateView.getLiquidity` | initialized in tx `0x36515a2d044af31b35d06b06fdb1ed0ca307117083a530d5331d1f6ded62ea43` (block 8,793,983); id recomputed from the key; `getLiquidity` 54,700,254,881,350,032 (next: fee 200/ts 4 no-hook pool 32,569,036,587,964,904; then a hooked fee-3500 pool 7.67e15); `getSlot0` sqrtPriceX96 4129642798072125940494846, tick −197248 → ≈ $2,717 per WETH (block 73,793,321) | verified |
 | Uniswap v4 PoolManager | `0x8366a39cc670b4001a1121b8f6a443a643e40951` | Uniswap docs `content/protocols/v4/deployments.mdx` ("Robinhood Chain: 4663"), Uniswap/docs commit `1c7597d` | returned by `poolManager()` on StateView, PositionManager and Quoter | verified |
 | Uniswap v4 PositionManager | `0x58daec3116aae6d93017baaea7749052e8a04fa7` | same | `poolManager()` = PoolManager | verified |
 | Uniswap v4 StateView | `0xf3334192d15450cdd385c8b70e03f9a6bd9e673b` | same | `poolManager()` = PoolManager; pool reads succeed | verified |
@@ -25,6 +28,25 @@ Robinhood mainnet (chain 4663). Reads were made through a QuickNode Robinhood en
 | Universal Router | `0x8876789976decbfcbbbe364623c63652db8c0904` | same; also Uniswap swapping-API supported chains | not read | recorded |
 | Permit2 | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | same | `DOMAIN_SEPARATOR()` answers | verified |
 | PONS v2 factory | `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` | owner brief | `approvedPairTokens(RF)` = **false** (2026-09-27) → launch via Uniswap v4 directly | checked |
+
+## Live RF/USD price (game/price.ts)
+
+The game shows no fixed or illustrative price. `games/penalty-kings/game/price.ts` sends two
+read-only `eth_call`s to `https://rpc.mainnet.chain.robinhood.com` (the host the SDK CSP allows):
+`StateView.getSlot0(RF/WETH pool id)` and `StateView.getSlot0(WETH/USDG pool id)`, then
+
+- WETH per RF = (sqrtPriceX96 / 2^96)² (RF is currency0; both tokens have 18 decimals);
+- USD per WETH = (sqrtPriceX96 / 2^96)² × 10^(18 − 6) (WETH is currency0; USDG has 6 decimals; USDG is taken as $1);
+- usdPerRf = WETH per RF × USD per WETH.
+
+The result is cached for 60 s and labelled "live · Xs ago"; a failed read shows "—". Sample read
+at block 73,793,321 (2026-09-27): RF/WETH sqrtPriceX96 59977880447322165122003233 (tick −143730) →
+5.731e-7 WETH per RF; WETH/USDG → $2,716.9 per WETH; **1 RF ≈ $0.001557**.
+
+Context only (not used): the native-ETH/USDG pools (currency0 = `0x0`) are separate from the WETH
+pools; the deepest one seen (id `0x54f7…ba32`, fee 460, tickSpacing 9, no hooks) had about 2.7× the
+in-range liquidity of the WETH/USDG pool above. The owner asked for WETH/USDG, so that is what the
+game reads; both quoted ≈ $2,717–2,718 per ETH at the same block.
 
 ## Vendored packages
 
