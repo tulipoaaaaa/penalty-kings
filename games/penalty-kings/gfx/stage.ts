@@ -5,7 +5,7 @@
  */
 import { keeperById, keeperAt, flightAt, WALL_DISTANCE, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, penaltyY, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, penaltyY, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
@@ -17,6 +17,8 @@ import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
+/** Penalty view: how far the backdrop layer drops so the ad boards (bottom at y 102) end 30 px above the goal line. */
+export const BACKDROP_DROP = Math.round(PENALTY_GOAL.y - 30 - 102);
 /** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. */
 export const STRIKE_AT = 0.4;
 export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal";
@@ -151,7 +153,7 @@ export class Stage {
   /** Where the ball rests before the kick (penalty spot, or the free-kick spot through the FK camera). */
   ballHome() { return this.kind === "freekick" && this.freeKick ? fkBall(this.freeKick.setup) : { x: SPOT.x, y: SPOT.y, scale: 1 }; }
   /** The goal group's placement: identity for penalties, true perspective for free kicks. */
-  goalXf() { return this.kind === "freekick" && this.freeKick ? goalTransform(this.freeKick.setup) : { g: 1, x: GOAL.cx, y: GOAL.line }; }
+  goalXf() { return this.kind === "freekick" && this.freeKick ? goalTransform(this.freeKick.setup) : PENALTY_GOAL; }
   /** A point in goal-art coordinates → screen. */
   goalPoint(p: { x: number; y: number }) { return applyGoal(this.goalXf(), p); }
 
@@ -241,7 +243,7 @@ export class Stage {
     if (this.mode === "celebrate" && this.modeTime > 2.6) { this.mode = "idle"; this.shot = null; } // "done" was already sent
     if (this.mode === "react" && this.modeTime > 1.6) { this.mode = "idle"; this.onEvent("done"); }
     if (this.mode === "walkout" && this.modeTime > 3) { this.mode = "idle"; this.onEvent("walkout-done"); }
-    if (this.keeper === "sloth" && Math.random() < dt * 0.6) this.particles.emit("zzz", GOAL.cx + 14, GOAL.line - 60, 1, { color: "#ffffff", speed: 8, angle: -1.2, spread: 0.3, life: 1.5, gravity: -6 });
+    if (this.keeper === "sloth" && Math.random() < dt * 0.6) { const z = this.goalPoint({ x: GOAL.cx + 14, y: GOAL.line - 60 }); this.particles.emit("zzz", z.x, z.y, 1, { color: "#ffffff", speed: 8, angle: -1.2, spread: 0.3, life: 1.5, gravity: -6 }); }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -253,12 +255,18 @@ export class Stage {
     const pan = (this.camera.x - W / 2) * 2;
     const wind = this.kind === "freekick" && this.freeKick ? this.freeKick.setup.wind : 0;
     this.crowd.wind = wind;
+    const fk = this.kind === "freekick" && this.freeKick ? this.freeKick : null;
+    // Penalty camera (round 6 B1): the stands sit just behind the goal, so the whole backdrop layer
+    // (sky, stands, crowd, boards, grass stripes) drops until the boards end ~30 px above the goal line.
+    const drop = fk ? 0 : BACKDROP_DROP;
+    if (drop) { c.fillStyle = THEMES[this.stadium].sky[0]; c.fillRect(-40, -40, W + 80, drop + 40); }
+    c.save(); c.translate(0, drop);
     drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind });
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
     drawBoards(c, this.stadium, this.time, pan);
-    const fk = this.kind === "freekick" && this.freeKick ? this.freeKick : null;
     drawPitch(c, this.stadium, this.weather);
+    c.restore();
     if (fk) drawPitchMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
     else drawPitchMarkings(c, PENALTY_SETUP, THEMES[this.stadium].lines, null, this.time, PENALTY_CAMERA);
     drawHeatShimmer(c, this.streak >= 2 && !this.reduced ? Math.min(1, this.streak - 1) : 0, this.time);
@@ -272,8 +280,8 @@ export class Stage {
     if (ballBehind) this.drawBallLayer(c);
     if (this.kind !== "target") this.drawKeeperLayer(c);
     drawGoalFrame(c, this.reduced ? 0 : this.postWobble, this.time);
-    c.restore();
     if (this.kind === "target") { drawCrossbarGlow(c, this.time); drawTargets(c, this.targets, this.time, this.reduced); }
+    c.restore();
     if (this.kind === "freekick" && this.freeKick) {
       const { setup, wall } = this.freeKick, since = this.shot && this.mode === "shot" ? this.modeTime - this.shot.strikeAt : null;
       const beyond = this.fk && since !== null && since >= 0 && pathAt(this.fk.path, since).z > Math.cos(setup.angle) * WALL_DISTANCE;
@@ -409,10 +417,11 @@ export class Stage {
       }
     }
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt) {
+      // Penalties: the flight is computed in goal-art units from the spot, then placed with the goal transform.
+      const xf = this.goalXf(), homeArt = { x: GOAL.cx + (home.x - xf.x) / xf.g, y: GOAL.line + (home.y - xf.y) / xf.g };
       const p = clamp01((this.modeTime - shot.strikeAt) / shot.flight), target = shot.outcome.target, end = toScreen(target.x, target.y);
       const f = flightAt(target, shot.curl, p), bow = (f.x - target.x * p) * GOAL.unit;
-      x = home.x + (end.x - home.x) * p + bow; y = home.y + (end.y - home.y) * p - Math.sin(Math.PI * p) * 12; r = 4.5 - 2 * p; spin = this.time * 14 * (shot.curl || 0.4);
-      if (p < 1 && !this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
+      x = homeArt.x + (end.x - homeArt.x) * p + bow; y = homeArt.y + (end.y - homeArt.y) * p - Math.sin(Math.PI * p) * 12 / xf.g; r = (4.5 - 2 * p) / xf.g; spin = this.time * 14 * (shot.curl || 0.4);
       if (p >= 1) {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
         if (result === "goal") { x = end.x + (240 - end.x) * 0.1 * q; y = end.y + ease.outBounce(q) * (GOAL.line - 4 - end.y); r = 2.3; }
@@ -421,8 +430,9 @@ export class Stage {
         else if (result === "over") { x = end.x + (end.x - 240) * 0.5 * q; y = end.y - 70 * q; r = 2.5 - 1.2 * q; }
         else { x = end.x + (end.x - 240) * 1.2 * q; y = end.y + 20 * q; r = 2.5; }
         if (q >= 1 && result !== "goal") return;
-        if (this.fk) { const at = this.goalPoint({ x, y }), g = this.goalXf().g; x = at.x; y = at.y; r = Math.max(1.2, r * g); }
       }
+      { const at = this.goalPoint({ x, y }); x = at.x; y = at.y; r = Math.max(1.2, r * xf.g); }
+      if (p < 1 && !this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
     }
     c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, home.y + 5 - (home.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
     drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
@@ -431,10 +441,10 @@ export class Stage {
   private drawReticle(c: CanvasRenderingContext2D) {
     const reticle = this.reticle;
     if (!reticle || this.mode !== "idle" || this.kind === "freekick") return;
-    const { x, y } = toScreen(reticle.x, reticle.y), color = reticle.y > 1 || Math.abs(reticle.x) > 1 ? "#ff5a6e" : "#ccff00";
+    const g = this.goalXf().g, { x, y } = this.goalPoint(toScreen(reticle.x, reticle.y)), color = reticle.y > 1 || Math.abs(reticle.x) > 1 ? "#ff5a6e" : "#ccff00";
     c.save(); c.globalAlpha = reticle.alpha ?? 1;
     c.strokeStyle = "#ffffff66"; c.setLineDash([2, 3]); c.beginPath();
-    for (let i = 0; i <= 16; i++) { const p = i / 16, f = flightAt({ x: reticle.x, y: reticle.y }, reticle.curl, p), bow = (f.x - reticle.x * p) * GOAL.unit; const px = SPOT.x + (x - SPOT.x) * p + bow, py = SPOT.y + (y - SPOT.y) * p - Math.sin(Math.PI * p) * 12; i ? c.lineTo(px, py) : c.moveTo(px, py); }
+    for (let i = 0; i <= 16; i++) { const p = i / 16, f = flightAt({ x: reticle.x, y: reticle.y }, reticle.curl, p), bow = (f.x - reticle.x * p) * GOAL.unit * g; const px = SPOT.x + (x - SPOT.x) * p + bow, py = SPOT.y + (y - SPOT.y) * p - Math.sin(Math.PI * p) * 12; i ? c.lineTo(px, py) : c.moveTo(px, py); }
     c.stroke(); c.setLineDash([]);
     const pulse = 1 + Math.sin(this.time * 8) * (this.reduced ? 0 : 1);
     c.strokeStyle = color; c.strokeRect(Math.round(x) - 5.5 - pulse, Math.round(y) - 5.5 - pulse, 11 + pulse * 2, 11 + pulse * 2);

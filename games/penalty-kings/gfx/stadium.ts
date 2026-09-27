@@ -20,12 +20,21 @@ export const GOAL = { left: 150, right: 330, bar: 96, line: 176, unit: 90, cx: 2
  */
 export type PitchCamera = Readonly<{ back: number; height: number; horizon: number }>;
 export const CAM_FX = 539, CAM_FY = CAM_FX * (4 / 3);
-const PEN_C = (CAM_FX * 3.66) / 90;                                   // camera → goal line (m): goal art at scale 1
-const PEN_K = (310 - 176) / (1 / (PEN_C - 16.5) - 1 / PEN_C);          // FY·height, so the box edge lands on y 310
-export const PENALTY_CAMERA: PitchCamera = { back: PEN_C - 11, height: PEN_K / CAM_FY, horizon: 176 - PEN_K / PEN_C };
-/** Screen y of a pitch point `d` metres from the goal line, on the penalty camera's centre line. */
+/**
+ * The penalty view is a real broadcast camera behind the taker (round 6 B1): the goal is drawn at
+ * PENALTY_UNIT px per half-goal (not the art's 90), the spot sits at y 250 and the 18-yard line at
+ * y 296 (above the SDK badges), so the six-yard box, the spot, the box edge and where the D meets it are in view with
+ * real proportions. The goal-art group is placed with PENALTY_GOAL (scale + goal-line position).
+ */
+export const PENALTY_UNIT = 68;
+const PEN_C = (CAM_FX * 3.66) / PENALTY_UNIT;                          // camera → goal line (m)
+const PEN_SPOT_Y = 250, PEN_BOX_Y = 296;
+const PEN_K = (PEN_BOX_Y - PEN_SPOT_Y) / (1 / (PEN_C - 16.5) - 1 / (PEN_C - 11)); // FY·height
+export const PENALTY_CAMERA: PitchCamera = { back: PEN_C - 11, height: PEN_K / CAM_FY, horizon: PEN_SPOT_Y - PEN_K / (PEN_C - 11) };
+/** Screen y of a point on the centre line `d` metres from the goal line (penalty camera). */
 export const penaltyY = (d: number) => PENALTY_CAMERA.horizon + (CAM_FY * PENALTY_CAMERA.height) / (PEN_C - d);
-/** The penalty spot, 11 m from the goal line (derived, not hand-placed). */
+/** Goal-art group placement for penalties: scale and the goal line on screen. */
+export const PENALTY_GOAL = { g: PENALTY_UNIT / GOAL.unit, x: GOAL.cx, y: penaltyY(0) } as const;
 export const SPOT = { x: 240, y: Math.round(penaltyY(11)) } as const;
 export const toScreen = (gx: number, gy: number) => ({ x: GOAL.cx + gx * GOAL.unit, y: GOAL.line - gy * GOAL.unit * 0.89 });
 

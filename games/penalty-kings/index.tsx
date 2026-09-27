@@ -30,7 +30,7 @@ import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
 import { MatchDirector, type KickFacts } from "./game/director.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
-import { SPOT, GOAL } from "./gfx/stadium.js";
+import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
@@ -772,7 +772,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const xf = goalTransform(current.setup), ball = fkBall(current.setup);
       return { ...base, goal: { cx: xf.x, line: xf.y, unitX: GOAL.unit * xf.g, unitY: GOAL.unit * 0.89 * xf.g }, ball: { x: ball.x, y: ball.y } };
     }
-    return { ...base, goal: { cx: GOAL.cx, line: GOAL.line, unitX: GOAL.unit, unitY: GOAL.unit * 0.89 }, ball: { x: SPOT.x, y: SPOT.y } };
+    const xf = PENALTY_GOAL; // the penalty camera's goal placement (round 6 B1)
+    return { ...base, goal: { cx: xf.x, line: xf.y, unitX: GOAL.unit * xf.g, unitY: GOAL.unit * 0.89 * xf.g }, ball: { x: SPOT.x, y: SPOT.y } };
   }
 
   const toLogical = (event: ReactPointerEvent<HTMLCanvasElement>): SwipePoint => {

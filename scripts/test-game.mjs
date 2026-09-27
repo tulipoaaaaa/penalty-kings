@@ -15,8 +15,9 @@ const screenshot = shotIndex >= 0 ? args[shotIndex + 1] : undefined;
 const errors = [];
 
 // Logical scene geometry (games/penalty-kings/gfx): goal mouth and the striker's standing box.
-const GOAL = { left: 150, right: 330, top: 96, bottom: 176 };
-const STRIKER = { left: 186, right: 226, top: 240, bottom: 310 };
+// Penalty camera (round 6 B1): goal unit 68 px, goal line y 210, bar y 150; striker's feet at y 295.
+const GOAL = { left: 172, right: 308, top: 150, bottom: 211 };
+const STRIKER = { left: 186, right: 226, top: 226, bottom: 296 };
 const SCOREBOARD = { left: 386, right: 480, top: 0, bottom: 22 };
 
 await testGame("./games/penalty-kings", {
