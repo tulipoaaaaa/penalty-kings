@@ -45,7 +45,7 @@ The goal is to close the gap between "good" and "great" where a judge's first 30
 | BQ-X7 | The net-cam replay plays under the tutorial coach panel | open |
 | BQ-X8 | The canvas `GLYPHS` font has no digits (a number drawn with it is blank) | **fixed** by B4 in `47b773d` (bitmap digits) |
 | BQ-X9 | `flipCard` / `revealAll` have side effects inside a `setPack` updater (double-fire under StrictMode) | **fixed** by B5 in `f40bf76` |
-| BQ-X10 | Dev only: `dev/server.mjs` crashes on a missing Showroom file (sends a 200 header before reading) | open (P2) |
+| BQ-X10 | Dev only: `dev/server.mjs` crashes on a missing Showroom file (sends a 200 header before reading) | **fixed** in `c7ea46d` (`npm run test:dev-server`) |
 
 ## The greatness list (ranked by impact ÷ effort)
 
