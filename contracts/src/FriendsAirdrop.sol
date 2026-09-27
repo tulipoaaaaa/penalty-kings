@@ -11,7 +11,7 @@ interface IBootroomLace {
 /// @title FriendsAirdrop (v1.1): 10% of $GBOOT to hardwired Friends, delivered PRE-LACED.
 /// @notice The deployer sets one Merkle root, once (leaf = keccak256(abi.encode(friendId, amount))).
 /// A claim is permissionless because it never pays a wallet: the tokens are laced in the Bootroom
-/// for that friendId for LOCK_WEEKS, so the Friend starts with a boost, and its owner (or
+/// for that friendId for LOCK_WEEKS, so the Friend starts with a perk tier, and its owner (or
 /// token-bound account) can unlace after expiry, or early with the Bootroom's 50% burn. After the
 /// claim window anyone can sweep what is left to the Cups & events vault. Eligibility rules are
 /// published with the root (docs/ECONOMY.md) and apply identically to every Friend.

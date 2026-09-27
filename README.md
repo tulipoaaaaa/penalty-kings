@@ -7,7 +7,7 @@ Rare Friends Vibeathon.
 
 > **RF first.** You play with RF. Every ball is backed by RF in its stadium's prize bank and can
 > be redeemed for RF. On-chain randomness sets how much each ball pays, and the average return is
-> 90%. **$GBOOT is optional**: it is a bonus layer for skill and loyalty (drops, lacing boosts,
+> 90%. **$GBOOT is optional**: it is a bonus layer for skill and loyalty (drops, lacing perks,
 > Skill Cup, Wildcards, cosmetics). You never need it to play, and it never changes a ball's RF
 > odds. See [docs/ECONOMY.md](docs/ECONOMY.md#rf-first). Nothing here is investment advice.
 
@@ -58,7 +58,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `games/penalty-kings/` | The game: React adapter (`index.tsx`), canvas scene, original pixel art, audio, UI, `game.json` (Park) and `tiers/*.json` (all three stadiums). [Game README](games/penalty-kings/README.md) |
 | `packages/engine/` | Deterministic shot physics and keeper AI, shared by the game and the Skill Cup referee |
 | `verifier/` | Skill Cup referee (Cloudflare Worker). Inputs are committed before the dive exists, dives come from a weekly HMAC secret, and results are signed |
-| `contracts/` | Foundry: `GBoot`, `KitShop`, `LiquidityLock`, `PoolSwapper`, `GBootFeeHook` (not deployed), `script/Launch.s.sol`, and unit and mainnet-fork tests |
+| `contracts/` | Foundry: `GBoot`, `KitShop`, `LiquidityLock`, `PoolSwapper`, `GBootFeeHook` (fee burn + TWAP), `GBootPriceFeed`, `RewardsDistributor` (all v2, not deployed), `script/Launch.s.sol`, and unit and mainnet-fork tests |
 | `scripts/` | `verify-odds`, `economy-sim`, the pool plan and TickMath port, stadium deployer, weekly Cup/drop computation, budget guard, wallet loader, secret scan, test runners |
 | `docs/` | [ECONOMY](docs/ECONOMY.md) · [ADDRESSES](docs/ADDRESSES.md) · [DEPLOYMENT](docs/DEPLOYMENT.md) · [TX-LOG](docs/TX-LOG.md) · [DROPS](docs/DROPS.md) · [WEEKLY](docs/WEEKLY.md) · [HUMAN-CHECKS](docs/HUMAN-CHECKS.md) |
 | `submission/` | Vibeathon submission README and PR text |

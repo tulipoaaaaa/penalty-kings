@@ -13,7 +13,8 @@ export const ALLOCATION = { pool: 55_000_000, drops: 20_000_000, airdrop: 10_000
 export const VAULTS = {
   drops: { total: ALLOCATION.drops, weeklyCap: 2_500_000, halvingWeeks: 4 },
   cups: { total: ALLOCATION.cups, weeklyCap: 100_000, halvingWeeks: 0 },
-  bounty: { total: ALLOCATION.bounty, weeklyCap: 50_000, halvingWeeks: 0 },
+  // The rewards vault: the RewardsDistributor's own EmissionVault (50k/week, halving every 52 weeks).
+  bounty: { total: ALLOCATION.bounty, weeklyCap: 50_000, halvingWeeks: 52 },
 };
 
 /** EmissionVault.capOf(week) in wei: weeklyCap >> (week / halvingWeeks), 0 after 255 halvings. */
@@ -41,8 +42,8 @@ export function splitEdgeWei(totalWei) {
   return { burn, buyback, cup: totalWei - burn - buyback };
 }
 
-/** Bootroom constants and an exact BigInt port of boostBps / dropBps / log2Wad. */
-export const BOOTROOM = { MAX_WEEKS: 52, MAX_LACE: 10_000, X_MAX: 520_000, BPS: 10_000 };
+/** Bootroom constants and an exact BigInt port of progressBps / perkTier / log2Wad. */
+export const BOOTROOM = { MAX_WEEKS: 52, MAX_LACE: 10_000, X_MAX: 520_000, BPS: 10_000, TIER2_BPS: 5_000, TIER3_BPS: 8_500 };
 export function log2Wad(x) {
   let n = 0n, y = x / E18;
   while (y >= 2n) { y >>= 1n; n++; }
@@ -54,27 +55,38 @@ export function log2Wad(x) {
   }
   return result;
 }
-/** boostBps for a live lace of `amount` whole $GBOOT for `lockWeeks` weeks (expired or empty → 10,000). */
-export function boostBps(amount, lockWeeks) {
+/** Bootroom.progressBps for a live lace of `amount` whole $GBOOT for `lockWeeks` weeks (expired or empty → 0). */
+export function progressBps(amount, lockWeeks) {
   const BPS = BigInt(BOOTROOM.BPS);
-  if (!(amount > 0) || !(lockWeeks > 0)) return BOOTROOM.BPS;
+  if (!(amount > 0) || !(lockWeeks > 0)) return 0;
   const counted = BigInt(Math.floor(Math.min(amount, BOOTROOM.MAX_LACE)));
   const x = counted * BigInt(lockWeeks);
-  if (x >= BigInt(BOOTROOM.X_MAX)) return 2 * BOOTROOM.BPS;
-  return Number(BPS + (BPS * log2Wad(E18 + x * E18)) / log2Wad(E18 + BigInt(BOOTROOM.X_MAX) * E18));
+  if (x >= BigInt(BOOTROOM.X_MAX)) return BOOTROOM.BPS;
+  return Number((BPS * log2Wad(E18 + x * E18)) / log2Wad(E18 + BigInt(BOOTROOM.X_MAX) * E18));
 }
-/** Bootroom.dropBps: 1 + (boost − 1) / 2. */
-export const dropBpsOf = boost => BOOTROOM.BPS + Math.floor((boost - BOOTROOM.BPS) / 2);
+/** Bootroom.perkTier: 0 (no live lace), 1, 2 (≥ 50%), 3 (≥ 85%). Progression only: cosmetics, XP, Cup seeding. */
+export const perkTierOf = progress => (progress === 0 ? 0 : progress >= BOOTROOM.TIER3_BPS ? 3 : progress >= BOOTROOM.TIER2_BPS ? 2 : 1);
+export const perkTier = (amount, lockWeeks) => perkTierOf(progressBps(amount, lockWeeks));
+/** What a perk tier gives (off-chain progression; never a payout). */
+export const PERKS = [
+  { tier: 0, xpBonusPct: 0, cosmetic: "—", seeding: "unseeded" },
+  { tier: 1, xpBonusPct: 5, cosmetic: "laced boots (glow 1)", seeding: "seed band 3" },
+  { tier: 2, xpBonusPct: 10, cosmetic: "glow 2 + boot trail", seeding: "seed band 2" },
+  { tier: 3, xpBonusPct: 15, cosmetic: "glow 3 + golden laces", seeding: "seed band 1" },
+];
 
 /** FriendsAirdrop, SkillCup, Wildcards, LiquidityLock / pool. */
 export const AIRDROP = { LOCK_WEEKS: 12, CLAIM_WINDOW_DAYS: 180 };
-export const SKILL_CUP = { ENTRY: 100, BURN_SHARE: 0.5, WEEKLY_LIMIT: 20 };
-export const WILDCARD = { PRICE: 100, BURN_SHARE: 0.5 };
+/** RF-priced sinks: the $GBOOT charged is ⌈price_RF ÷ TWAP⌉ (GBootPriceFeed, 30-minute TWAP). */
+export const SKILL_CUP = { ENTRY_RF: 10, BURN_SHARE: 0.5, WEEKLY_LIMIT: 20, COOLDOWN_H: 1 };
+export const WILDCARD = { PRICE_RF: 10, BURN_SHARE: 0.5 };
+export const TWAP = { PERIOD_S: 1800, MAX_DEVIATION_TICKS: 1000, CHECKPOINT_S: 60, CARDINALITY: 64 };
+/** RewardsDistributor: RF-valued rewards tied to a paid Skill Cup entry, per-Friend daily cap, season budget. */
+export const REWARDS = { MAX_GENERATION: 4, SEASON_WEEKS: 4, DAILY_CAP_RF: 3, ENTRY_CAP_BPS: 2_000, MAX_VALIDITY_DAYS: 7 };
 export const POOL = { FEE: 0.01, UNLOCK_DAYS: 180 };
 /** Nominal launch price used by the drop schedule (games/penalty-kings/economy.ts); the tick-snapped pool start is 0.10027. */
 export const NOMINAL_PRICE = 0.1;
 export const DROP_SHARE = 0.02;           // base drop value = 2% of the ball price at ×1 (economy.ts)
-export const MAX_DROP_BPS = dropBpsOf(2 * BOOTROOM.BPS); // ×1.5 at the maximum boost → drops ≤ 3%
 
 /** Throws if any constant above no longer matches contracts/src or Launch.s.sol. */
 export function checkContracts(root = new URL("../../", import.meta.url)) {
@@ -89,13 +101,17 @@ export function checkContracts(root = new URL("../../", import.meta.url)) {
   expect(launch, /BOUNTYGBOOT = 5000000e18/, "bounty 5M");
   expect(launch, /drops = new EmissionVault\([^;]*2500000e18, 4\)/, "drop vault 2.5M/week, halving every 4 weeks");
   expect(launch, /cups = new EmissionVault\([^;]*100000e18, 0\)/, "cups vault 100k/week flat");
-  expect(launch, /bounty = new EmissionVault\([^;]*50000e18, 0\)/, "bounty vault 50k/week flat");
-  expect(launch, /PoolKey\(address\(gboot\), RF, 10000, 200/, "pool fee 1%");
+  expect(launch, /rewards = new RewardsDistributor\([^;]*50000e18, 52, sinkList/, "rewards vault 50k/week, halving every 52 weeks");
+  expect(launch, /PoolKey\(address\(gboot\), RF, 0, 200, address\(hook\)\)/, "pool: LP fee 0 + GBootFeeHook");
+  expect("contracts/src/GBootFeeHook.sol", /FEEBPS = 100;/, "hook fee 1% burned");
+  expect("contracts/src/GBootPriceFeed.sol", /PERIOD = 30 minutes;[\s\S]*MAXDEVIATIONTICKS = 1000;/, "TWAP 30 min, 1,000-tick guard");
   expect("contracts/src/EdgeSplitter.sol", /BURNBPS = 4000;[\s\S]*BUYBACKBPS = 3000;/, "edge split 40/30/30");
-  expect("contracts/src/Bootroom.sol", /MAXWEEKS = 52;[\s\S]*MAXLACE = 10000e18;[\s\S]*XMAX = 520000;/, "Bootroom constants");
+  expect("contracts/src/Bootroom.sol", /MAXWEEKS = 52;[\s\S]*MAXLACE = 10000e18;[\s\S]*XMAX = 520000;[\s\S]*TIER2BPS = 5000;[\s\S]*TIER3BPS = 8500;/, "Bootroom constants");
+  if (/function (boostBps|dropBps)\(/.test(read("contracts/src/Bootroom.sol"))) throw new Error("tokenomics drift: the Bootroom must not expose a payout multiplier");
   expect("contracts/src/FriendsAirdrop.sol", /LOCKWEEKS = 12;[\s\S]*CLAIMWINDOW = 180 days;/, "airdrop lock 12 weeks, 180-day window");
-  expect("contracts/src/SkillCup.sol", /ENTRY = 100e18;[\s\S]*WEEKLYLIMIT = 20;/, "Skill Cup entry 100");
-  expect("contracts/src/Wildcards.sol", /PRICE = 100e18;/, "Wildcards 100");
+  expect("contracts/src/SkillCup.sol", /ENTRYRF = 10e18;[\s\S]*WEEKLYLIMIT = 20;/, "Skill Cup entry 10 RF");
+  expect("contracts/src/Wildcards.sol", /PRICERF = 10e18;/, "Wildcards 10 RF");
+  expect("contracts/src/RewardsDistributor.sol", /MAXGENERATION = 4;[\s\S]*SEASONWEEKS = 4;[\s\S]*DAILYCAPRF = 3e18;[\s\S]*ENTRYCAPBPS = 2000;[\s\S]*MAXVALIDITY = 7 days;/, "rewards caps");
   expect("contracts/src/LiquidityLock.sol", /if \(burned0 > 0\) IBurnableCurrency\(currency0\)\.burn[\s\S]*if \(burned1 > 0\) IBurnableCurrency\(currency1\)\.burn/, "LP fees burned on both sides");
   return true;
 }

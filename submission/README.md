@@ -83,7 +83,7 @@ A difficulty director keeps goal rates in a 55–65% band.
 | Ball-drop vault | 20M | weekly cap with halving |
 | Friends airdrop | 10M | pre-laced |
 | Cups vault | 10M | |
-| Bounty vault | 5M | |
+| Rewards vault (RewardsDistributor) | 5M | capped Skill Zone rewards |
 | Team | 0% | |
 
 **Edge split:** the 10% edge is split 40% RF burned, 30% $GBOOT buy-back and burn, 30% Golden
@@ -94,7 +94,7 @@ Boot Cup.
 - cosmetics;
 - the Bootroom's early-unlace burn.
 
-**Drops** are worth at most ~3% of the ball price, so RF plus drops stays ≤ 93%. Buying balls is never a profitable farm: this is fuzz-tested in Foundry.
+**Drops** are worth at most ~2% of the ball price (lacing no longer boosts them), so RF plus drops stays ≤ 92% (≤ 93% asserted). Buying balls is never a profitable farm: this is fuzz-tested in Foundry.
 
 **Ball market v2 (design only):** BallVault turns redeemed, friend-bound balls into transferable
 Vault Balls backed 1:1 by RF. It includes an escrow market with a floor price, and discontinued
@@ -146,7 +146,7 @@ npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champ
   - a 13-scenario action-flow audit: double release, key plus mouse, walkout, pack reveal, resize mid-swipe, and speed (release → result ≤ 1.2 s);
   - 90-second first-session QA;
 - odds verification (EV 90.00%); the economy simulator; the Skill Cup referee (replay match, signed results);
-- Foundry: 121 unit and fuzz tests, including the tokenomics v2 vaults, the Bootroom farm bound
+- Foundry: 167 unit, fuzz and invariant tests, including the tokenomics v2 vaults, the Bootroom farm bound, the rewards budget invariant, the TWAP oracle
   and BallVault solvency invariants, plus mainnet-fork tests;
 - a real mainnet ownership-gate test; the secret scan.
 

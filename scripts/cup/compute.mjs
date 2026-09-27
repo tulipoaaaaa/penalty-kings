@@ -1,8 +1,9 @@
 // Pure weekly computation (no network): $GBOOT drops and the Golden Boot race from on-chain events.
 // Inputs are decoded events; scripts/cup/weekly.mjs fetches them, tests feed synthetic ones.
-// Tokenomics v2: Bootroom boosts (race points × boostBps, drops × dropBps), the drop vault's halving
-// weekly cap (EmissionVault.capOf) and the EdgeSplitter 40/30/30 split (scripts/lib/tokenomics.mjs).
-import { VAULTS, capOfWei, splitEdgeWei, dropBpsOf, BOOTROOM, DROP_SHARE } from "../lib/tokenomics.mjs";
+// Tokenomics v2 (round 6): lacing is progression only. Bootroom perk tiers (0–3) annotate each Friend
+// (XP bonus, cosmetics, Cup seeding order) and NEVER change drops, race points or Cup ranks. Also the
+// drop vault's halving weekly cap (EmissionVault.capOf) and the EdgeSplitter 40/30/30 split.
+import { VAULTS, capOfWei, splitEdgeWei, DROP_SHARE, PERKS } from "../lib/tokenomics.mjs";
 
 export const DROP_MULT = [1, 1.5, 2, 3, 5, 8, 15];
 export const RACE_POINTS = [0, 0, 0, 0, 0, 1, 2];
@@ -13,7 +14,6 @@ export const PRICE = { park: 10, pro: 1000, champions: 10000 };
 /** Wildcard draws count at the Park weight: a Wildcard costs about one Park ball (docs/ECONOMY.md). */
 export const WILDCARD_WEIGHT = 1;
 export const CURVE = [25, 18, 13, 10, 8, 7, 6, 5, 4, 4];
-const BPS = BOOTROOM.BPS;
 
 /** Drop base per stadium for a week: min(schedule, 2% × ball price ÷ TWAP ÷ 2.15). No TWAP → schedule. */
 export function baseFor(twap) {
@@ -33,11 +33,12 @@ export const edgeSplit = rfWei => splitEdgeWei(BigInt(rfWei));
 
 /**
  * @param {{ settled: { tier: string, friendId: string, outcomeId: number }[], wildcards?: { friendId: string, points: number }[],
- *           base: Record<string, number>, potRf?: number, boosts?: Record<string, number>, budget?: number }} input
- * boosts: Bootroom.boostBps per friendId (missing → ×1). budget: most $GBOOT the drop vault may pay this week;
- * when the boosted drops exceed it, every Friend's drops are scaled down by the same factor.
+ *           base: Record<string, number>, potRf?: number, perks?: Record<string, number>, budget?: number }} input
+ * perks: Bootroom.perkTier per friendId (missing → 0); reported (XP bonus, seeding) but never used by a payout.
+ * budget: most $GBOOT the drop vault may pay this week; when the drops exceed it, every Friend's drops are
+ * scaled down by the same factor.
  */
-export function computeWeek({ settled, wildcards = [], base, potRf = 0, boosts = {}, budget = Infinity }) {
+export function computeWeek({ settled, wildcards = [], base, potRf = 0, perks = {}, budget = Infinity }) {
   const friends = new Map();
   const row = id => { if (!friends.has(id)) friends.set(id, { friendId: id, balls: 0, rawDrops: 0, rawRace: 0, wildcardPoints: 0 }); return friends.get(id); };
   for (const event of settled) {
@@ -52,15 +53,17 @@ export function computeWeek({ settled, wildcards = [], base, potRf = 0, boosts =
     r.wildcardPoints += draw.points * WILDCARD_WEIGHT; r.rawRace += draw.points * WILDCARD_WEIGHT;
   }
   let rows = [...friends.values()].map(r => {
-    const boostBps = boosts[r.friendId] ?? BPS;
-    if (!(boostBps >= BPS && boostBps <= 2 * BPS)) throw new Error(`boost out of range for #${r.friendId}: ${boostBps}`);
-    const dropBps = dropBpsOf(boostBps);
-    return { ...r, boostBps, dropBps, drops: (r.rawDrops * dropBps) / BPS, race: (r.rawRace * boostBps) / BPS };
+    const perkTier = perks[r.friendId] ?? 0;
+    if (!(Number.isInteger(perkTier) && perkTier >= 0 && perkTier <= 3)) throw new Error(`perk tier out of range for #${r.friendId}: ${perkTier}`);
+    // Payouts use the raw figures only: a perk tier is progression (XP bonus, cosmetics, seeding).
+    return { ...r, perkTier, xpBonusPct: PERKS[perkTier].xpBonusPct, drops: r.rawDrops, race: r.rawRace };
   });
   const wanted = rows.reduce((s, r) => s + r.drops, 0);
   const scale = wanted > budget ? budget / wanted : 1;
   rows = rows.map(r => ({ ...r, drops: Math.floor(r.drops * scale) }));
   const race = rows.filter(r => r.race > 0).sort((a, b) => b.race - a.race || Number(BigInt(a.friendId) - BigInt(b.friendId))).slice(0, 10);
-  const cup = race.map((r, index) => ({ rank: index + 1, friendId: r.friendId, points: r.race, boostBps: r.boostBps, shareBps: CURVE[index] * 100, rf: Math.floor((potRf * CURVE[index]) / 100) }));
-  return { rows: rows.sort((a, b) => b.drops - a.drops), cup, scale, wanted };
+  const cup = race.map((r, index) => ({ rank: index + 1, friendId: r.friendId, points: r.race, perkTier: r.perkTier, shareBps: CURVE[index] * 100, rf: Math.floor((potRf * CURVE[index]) / 100) }));
+  // Cup seeding: display / draw order for next week's Cup (higher perk tier first, then friendId). Not a rank.
+  const seeding = [...rows].sort((a, b) => b.perkTier - a.perkTier || Number(BigInt(a.friendId) - BigInt(b.friendId))).map(r => ({ friendId: r.friendId, perkTier: r.perkTier }));
+  return { rows: rows.sort((a, b) => b.drops - a.drops), cup, scale, wanted, seeding };
 }

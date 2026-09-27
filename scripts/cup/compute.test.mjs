@@ -32,14 +32,16 @@ test("ties go to the lower friendId; top 10 paid on the curve", () => {
   assert.equal(cup[0].rf, 250);
 });
 
-test("Bootroom boost: race points × boostBps, drops × (1 + (boost − 1) / 2)", () => {
-  const settled = [{ tier: "pro", friendId: "1", outcomeId: 7 }, { tier: "pro", friendId: "2", outcomeId: 7 }];
-  const { rows, cup } = computeWeek({ base, settled, boosts: { 1: 20_000, 2: 15_000 } });
-  assert.equal(cup.find(r => r.friendId === "1").points, 400);
-  assert.equal(cup.find(r => r.friendId === "2").points, 300);
-  assert.equal(rows.find(r => r.friendId === "1").drops, 1500 * 1.5);
-  assert.equal(rows.find(r => r.friendId === "2").drops, 1500 * 1.25);
-  assert.throws(() => computeWeek({ base, settled, boosts: { 1: 25_000 } }), /boost out of range/);
+test("Bootroom perk tiers never change drops, race points or Cup ranks", () => {
+  const settled = [{ tier: "pro", friendId: "1", outcomeId: 7 }, { tier: "pro", friendId: "2", outcomeId: 7 }, { tier: "park", friendId: "3", outcomeId: 6 }];
+  const plain = computeWeek({ base, settled, potRf: 1000 });
+  const laced = computeWeek({ base, settled, potRf: 1000, perks: { 2: 3, 3: 2 } });
+  assert.deepEqual(laced.rows.map(r => [r.friendId, r.drops, r.race]), plain.rows.map(r => [r.friendId, r.drops, r.race]));
+  assert.deepEqual(laced.cup.map(r => [r.friendId, r.points, r.rf]), plain.cup.map(r => [r.friendId, r.points, r.rf]));
+  assert.equal(laced.cup[0].friendId, "1", "ties still go to the lower friendId, not the higher tier");
+  assert.equal(laced.rows.find(r => r.friendId === "2").xpBonusPct, 15, "tier 3: +15% XP (progression)");
+  assert.deepEqual(laced.seeding.map(r => r.friendId), ["2", "3", "1"], "seeding: tier first, then friendId");
+  assert.throws(() => computeWeek({ base, settled, perks: { 1: 4 } }), /perk tier out of range/);
 });
 
 test("drop budget scales every Friend down equally", () => {

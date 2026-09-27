@@ -11,9 +11,10 @@ export type Tier = Readonly<{ id: TierId; name: string; priceRF: number; path: s
 
 /**
  * Base $GBOOT drop per ball at the v2 launch price (0.1 RF per $GBOOT, 100M supply):
- * 2% × ball price ÷ 0.1 ÷ 2.15, where 2.15 is the average rarity multiplier. At the maximum
- * Bootroom boost drops are ×1.5, so the drop value is ≤ 3% of the ball price and total value per
- * ball ≤ 93% (90% RF return + 3%). Park: 0.93 × 2.15 = 2 $GBOOT ≈ 0.2 RF = 2% of a 10 RF ball.
+ * 2% × ball price ÷ 0.1 ÷ 2.15, where 2.15 is the average rarity multiplier. Lacing does not
+ * multiply drops (the Bootroom gives perk tiers: cosmetics, XP, seeding), so the drop value is ≤ 2%
+ * of the ball price and total value per ball ≤ 92% (90% RF return + 2%). Park: 0.93 × 2.15 = 2
+ * $GBOOT ≈ 0.2 RF = 2% of a 10 RF ball.
  * Live rate each week: min(this schedule, 3% × volume ÷ TWAP, the drop vault's season cap) — docs/DROPS.md.
  */
 export const TIERS: readonly Tier[] = [
