@@ -9,7 +9,7 @@ import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, draw
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
-import { drawBall, emitTrail, RARITY_FX } from "./ball.js";
+import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
 import { drawFriend, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawWind, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawFkMarkings } from "./setpieces.js";
@@ -56,6 +56,9 @@ export class Stage {
   clock: { left: number; total: number } | null = null;
   /** Jumbotron text (Pro / Champions), from game/prizes.ts jumbotronSlides. */
   jumbotron = "";
+  /** The chosen Big Match ball: lucky trail and its seasonal edition print (skill layer only). */
+  lucky = false;
+  season: "S0" | "S1" = "S1";
   /** The Match Director's line for the next resolve (else the plain result line). */
   cue: CommentaryContext | null = null;
   /** What the viewer actually saw (the 90-second QA reads this). */
@@ -370,7 +373,7 @@ export class Stage {
 
   private drawBallLayer(c: CanvasRenderingContext2D) {
     if (!this.ballVisible) return;
-    const fx = RARITY_FX[this.rarity], onFire = this.streak >= 3;
+    const fx = seasonFx(this.season, this.rarity), onFire = this.streak >= 3;
     const home = this.ballHome();
     let { x, y, r } = { x: home.x, y: home.y, r: "pxPerM" in home ? Math.max(2, 0.11 * home.pxPerM) : 4.5 }, spin = 0;
     const shot = this.shot;
@@ -382,7 +385,7 @@ export class Stage {
         if (this.fk.knuckle && !this.reduced) spin = Math.sin(this.time * 9) * 0.4;
         const ground = fkProject(this.freeKick.setup, { ...pathAt(this.fk.path, since), y: 0 });
         c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(ground.x, ground.y, r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
-        if (!this.reduced) emitTrail(this.particles, fx, x, y, onFire);
+        if (!this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
         drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
         return;
       }
@@ -398,7 +401,7 @@ export class Stage {
       const p = clamp01((this.modeTime - shot.strikeAt) / shot.flight), target = shot.outcome.target, end = toScreen(target.x, target.y);
       const f = flightAt(target, shot.curl, p), bow = (f.x - target.x * p) * GOAL.unit;
       x = home.x + (end.x - home.x) * p + bow; y = home.y + (end.y - home.y) * p - Math.sin(Math.PI * p) * 12; r = 4.5 - 2 * p; spin = this.time * 14 * (shot.curl || 0.4);
-      if (p < 1 && !this.reduced) emitTrail(this.particles, fx, x, y, onFire);
+      if (p < 1 && !this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
       if (p >= 1) {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
         if (result === "goal") { x = end.x + (240 - end.x) * 0.1 * q; y = end.y + ease.outBounce(q) * (GOAL.line - 4 - end.y); r = 2.3; }

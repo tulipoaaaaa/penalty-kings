@@ -4,7 +4,7 @@ import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, type KeeperId } from "@penalty-kings/engine";
 import { RARITIES, TIERS, formatNumber, type Tier } from "./economy.js";
-import { RARITY_FX, drawBall } from "./gfx/ball.js";
+import { drawBall, seasonFx } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
 import { MODES, isUnlocked, levelFromXp, totalStars, STADIUM_STARS, LADDER, type Progress, type ModeId } from "./game/progress.js";
@@ -13,7 +13,7 @@ import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 
 /** A rotating ball (8-frame spin cycle) on a small canvas. */
-export function BallSpin({ rarity, size, spinning = true }: { rarity: number; size: number; spinning?: boolean }) {
+export function BallSpin({ rarity, size, spinning = true, season = "S1" }: { rarity: number; size: number; spinning?: boolean; season?: "S0" | "S1" }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const context = ref.current?.getContext("2d");
@@ -21,13 +21,13 @@ export function BallSpin({ rarity, size, spinning = true }: { rarity: number; si
     context.imageSmoothingEnabled = false;
     let frame = 0, raf = 0, last = 0;
     const draw = (now: number) => {
-      if (now - last > 90) { last = now; frame = (frame + 1) % 8; context.clearRect(0, 0, 32, 32); drawBall(context, 16, 15, 12, RARITY_FX[rarity], spinning ? (frame / 8) * Math.PI * 2 : 0); }
+      if (now - last > 90) { last = now; frame = (frame + 1) % 8; context.clearRect(0, 0, 32, 32); drawBall(context, 16, 15, 12, seasonFx(season, rarity), spinning ? (frame / 8) * Math.PI * 2 : 0); }
       raf = spinning ? requestAnimationFrame(draw) : 0;
     };
     draw(performance.now() + 100);
     if (spinning) raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [rarity, spinning]);
+  }, [rarity, spinning, season]);
   return <canvas ref={ref} width={32} height={32} className="pk-ballspin" style={{ width: size, height: size }} aria-hidden="true" />;
 }
 

@@ -16,6 +16,19 @@ export const RARITY_FX: readonly RarityFx[] = [
   { base: "#f4f4f4", accent: "#9aa3ad", trail: ["#ffffff"], kind: "clean", tier: 0 },
 ];
 
+/** Seasonal editions: Season 0 (discontinued) is a vintage leather print of the same rarity. */
+export function seasonFx(season: "S0" | "S1", rarity: number): RarityFx {
+  const fx = RARITY_FX[rarity];
+  if (season !== "S0") return fx;
+  const vintage = ["#8a6a45", "#c9b08a", "#e8dcc2", "#6d8fb3", "#b7b7a4", "#d9a441", "#e07b39", "#c9b08a"];
+  return { ...fx, base: vintage[rarity] ?? fx.base, accent: "#3b2a1a" };
+}
+
+/** Lucky-ball trail: green-and-gold four-leaf sparkles, on top of the rarity's own trail. */
+export function emitLucky(particles: Particles, x: number, y: number) {
+  particles.emit("sparkle", x, y, 2, { color: ["#3ddc84", "#ffd23f", "#b9f6ca"], speed: 16, life: 0.6, gravity: 0 });
+}
+
 const PANEL = [
   "..#####..",
   ".#..o..#.",

@@ -161,3 +161,55 @@
   .pk-title .pk-rule, .pk-title .pk-note { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }
+
+/* ── Ball flow: shop, pack opening, bag, collection, carousel, market ─────────────────── */
+.pk-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.pk-tiercard { display: grid; gap: 2px; padding: 6px 8px; border: 2px solid #8885; }
+.pk-tiercard[data-current="true"] { border-color: currentColor; font-weight: 700; }
+.pk-tiercard small { font-weight: 400; opacity: 0.85; }
+.pk-packs { display: flex; gap: 6px; margin: 6px 0; }
+.pk-packs button { min-height: 44px; min-width: 72px; }
+.pk-packs button[aria-checked="true"] { outline: 3px solid currentColor; font-weight: 700; }
+.pk-cost b { white-space: nowrap; }
+.pk-pack { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); width: min(88cqw, 720px); max-height: 40cqh; overflow: auto; box-sizing: border-box;
+  background: #0b0d1af0; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.6cqw; display: grid; gap: 0.8cqh; justify-items: center; font-size: clamp(8px, 1.4cqw, 13px); z-index: 3; }
+.pk-honest { margin: 0; font-size: 0.9em; color: var(--pk-sky); text-align: center; }
+.pk-cards { display: flex; flex-wrap: wrap; gap: 0.8cqw; justify-content: center; }
+.pk-card { width: clamp(44px, 8.4cqw, 76px); min-height: 44px; aspect-ratio: 3 / 4; display: grid; place-items: center; align-content: center; gap: 2px; padding: 2px;
+  background: linear-gradient(135deg, #2a3160, #151a33); border: 2px solid var(--pk-paper); color: var(--pk-paper); box-shadow: 2px 2px 0 #000; font-size: 0.8em; }
+.pk-card[data-revealed="true"] { background: #151a33; animation: pk-flip 0.35s ease-out; }
+.pk-card[data-rarity="5"], .pk-card[data-rarity="6"] { border-color: var(--pk-gold); box-shadow: 0 0 0 2px #ff8c00, 2px 2px 0 #000; }
+.pk-card small { opacity: 0.85; }
+.pk-cardback { font-size: 2em; color: var(--pk-gold); }
+@keyframes pk-flip { from { transform: rotateY(90deg); } to { transform: rotateY(0); } }
+.pk-summary { text-align: center; }
+.pk-summary h3 { margin: 0; color: var(--pk-gold); }
+.pk-summary p { margin: 0.3em 0; }
+.pk-loss { color: var(--pk-red); }
+.pk-gain { color: var(--pk-volt); }
+.pk-counts { display: flex; flex-wrap: wrap; gap: 8px; font-weight: 700; }
+.pk-bagrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.pk-ballcard { display: grid; justify-items: start; gap: 2px; padding: 6px 8px; border: 1px solid #8885; }
+.pk-ballcard[data-selected="true"] { outline: 2px solid currentColor; }
+.pk-ballcard[data-rarity="6"] { border-color: #ff8c00; }
+.pk-stamp { font-weight: 700; letter-spacing: 0.04em; }
+.pk-ballactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.pk-ballactions button { min-height: 36px; }
+.pk-collection { border-collapse: collapse; font-size: 0.85em; width: 100%; }
+.pk-collection th, .pk-collection td { border-bottom: 1px solid #8884; padding: 3px 4px; text-align: center; }
+.pk-collection td:first-child { text-align: left; }
+.pk-collection td[data-owned="false"] { opacity: 0.4; }
+.pk-carousel { position: absolute; left: 50%; bottom: 13cqh; transform: translateX(-50%); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1cqw;
+  width: min(60cqw, 460px); background: #0b0d1af0; border: 2px solid var(--pk-volt); box-shadow: 3px 3px 0 #000; padding: 1cqh 1.4cqw; font-size: clamp(8px, 1.4cqw, 13px); z-index: 3; }
+.pk-carousel > button { min-width: 44px; min-height: 44px; font-size: 1.6em; background: #222a55; color: var(--pk-paper); border: 2px solid var(--pk-paper); }
+.pk-carouselball { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.pk-carouselactions { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: center; }
+.pk-carouselactions button { min-height: 44px; padding: 0 1em; border: 2px solid var(--pk-paper); background: #0b0d1a; color: var(--pk-paper); }
+.pk-carousel .pk-note { grid-column: 1 / -1; margin: 0; text-align: center; }
+@container (max-width: 560px) {
+  /* Clear of the SDK runtime toolbar, which covers the bottom ~18% of a phone-sized frame. */
+  .pk-pack { width: 94cqw; max-height: 60cqh; font-size: 7px; bottom: auto; top: 12cqh; }
+  .pk-carousel { width: 86cqw; font-size: 7px; bottom: auto; top: 22cqh; }
+  .pk-carousel .pk-note, .pk-honest { display: none; }
+  .pk-tiers { grid-template-columns: 1fr; }
+}

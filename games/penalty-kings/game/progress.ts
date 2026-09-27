@@ -65,7 +65,7 @@ export const MODES: ReadonlyArray<{ id: ModeId; name: string; blurb: string; lev
   { id: "tour", name: "World Tour", blurb: "30 levels, 3 stars each.", level: 2 },
   { id: "daily", name: "Daily Challenge", blurb: "Same scenario for everyone. 3 attempts.", level: 2 },
   { id: "target", name: "Target Practice", blurb: "60 seconds. Bins, bar, combos.", level: 2 },
-  { id: "match", name: "Big Match", blurb: "RF balls: rarity by chance, $GBOOT drops. Optional.", level: 1, paid: true },
+  { id: "match", name: "Big Match", blurb: "Open packs, build your Bag, kick with your best balls. Optional.", level: 1, paid: true },
 ];
 export const isUnlocked = (mode: ModeId, progress: Progress) => (MODES.find(item => item.id === mode)?.level ?? 1) <= levelFromXp(progress.xp).level;
 

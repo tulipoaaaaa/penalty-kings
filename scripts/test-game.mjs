@@ -72,32 +72,50 @@ await testGame("./games/penalty-kings", {
     assert.match(await game.getByTestId("results").textContent(), /Tutorial complete/);
     await button("Modes").click();
 
-    // Big Match: buy one ball in the kit bag (the runtime asks for an in-frame confirmation).
-    await button("Kit bag").click();
-    await game.locator(".pk-pedestal").first().waitFor();
-    assert.equal(await game.locator(".pk-pedestal").count(), 7, "display case shows all 7 balls");
-    await button("Buy 1 · 10 RF").click();
+    // Big Match, founder flow: BUY a pack → OPEN (SDK play + settle) → REVEAL ALL → true summary → BAG →
+    // choose a ball → KICK (the ball is not consumed) → REDEEM one ball for RF.
+    // (The SDK preview wallet holds 20 simulated RF, so the largest affordable Park pack is 2 balls.)
+    await game.getByTestId("ball-shop").click();
+    await game.getByTestId("pack-2").click();
+    await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
-    await game.getByText("1 ball added to your kit bag.").waitFor();
-    await game.getByTestId("big-match").click();
-    assert.equal(await game.getByTestId("balls").textContent(), "1");
-    assert.match(await game.getByTestId("mode-chip").textContent(), /SIMULATED/);
+    await game.getByText("2 balls bought.").waitFor();
+    await game.getByTestId("open-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByTestId("pack").waitFor({ timeout: 10_000 });
+    assert.match(await game.getByTestId("pack").textContent(), /Rarity decided by/);
+    await game.getByTestId("reveal-all").click();
+    const summary = await game.getByTestId("pack-summary").textContent();
+    assert.match(summary, /Spent 20 RF/, "the summary shows the true amount spent");
+    console.log(`pack summary: ${summary.replace(/\s+/g, " ").slice(0, 140)}`);
+    await game.getByTestId("to-bag").click();
+    const cards = game.getByTestId("ball");
+    assert.equal(await cards.count(), 2, "both revealed balls are in the Bag");
+    const rfBefore = Number(await game.getByTestId("rf").textContent().catch(() => "0"));
+    void rfBefore;
+    await cards.first().getByTestId("shoot-ball").click();
+    await page.waitForTimeout(400);
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (Big Match)");
-
-    // Place the ball: play + settle → the TRUE rarity is revealed.
-    await game.getByTestId("place").click();
-    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
-    const reveal = game.locator(".pk-reveal");
-    await reveal.waitFor({ timeout: 10_000 });
-    const revealed = await reveal.getAttribute("aria-label");
-    assert.match(revealed, /(Scuffed|Training|Match|Pro|Silver|Gold|Golden Boot) Ball revealed/);
-    await button("Take the kick ⏎").click();
-    await page.waitForTimeout(300);
     await swipe(0.3);
     await game.locator(".pk-banner").waitFor({ timeout: 8000 });
     const banner = await game.locator(".pk-banner strong").textContent();
     await game.getByTestId("round").and(game.locator('[data-kicks="1"]')).waitFor({ timeout: 8000 });
-    console.log(`big match kick: ${banner}; ball: ${revealed}`);
+    await game.getByTestId("carousel").waitFor({ timeout: 12_000 });
+    assert.match(await game.getByTestId("carousel").textContent(), /1 kicks|0 goals in 1 kicks|1 goals in 1 kicks/, "the ball's career counts the kick");
+    console.log(`big match kick: ${banner}`);
+    // The ball stays in the Bag after kicking; redeem one with RF value (if both were Scuffed, there is nothing to redeem).
+    await game.getByRole("button", { name: "Close", exact: true }).click();
+    await game.getByTestId("menu").click();
+    await button("My Bag").click();
+    assert.equal(await game.getByTestId("ball").count(), 2, "kicking did not consume a ball");
+    const redeemable = game.getByTestId("redeem-ball").and(game.locator(":not([disabled])"));
+    if (await redeemable.count()) {
+      await redeemable.first().click();
+      await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+      await game.getByText(/^Redeemed a /).waitFor({ timeout: 10_000 });
+      assert.equal(await game.getByTestId("ball").count(), 1, "the redeemed ball left the Bag");
+      console.log("redeemed one ball for RF");
+    } else console.log("both balls were Scuffed (no RF value): nothing to redeem this run");
 
     // Frame times (Stage render only) from a short idle window.
     const frames = await game.locator("canvas.pk-canvas").evaluate(async node => {

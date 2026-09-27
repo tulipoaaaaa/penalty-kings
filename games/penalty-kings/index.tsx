@@ -29,12 +29,14 @@ import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input
 import { MatchDirector, type KickFacts } from "./game/director.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
+import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
+import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
 import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
 import "./style.css";
 
 const LEVELS = levelsData as unknown as Level[];
-type Menu = "hub" | "kitbag" | "odds" | "locker" | "cups" | "shop" | "book" | "tour" | "daily" | "settings" | "rules" | "results" | null;
+type Menu = "hub" | "balls" | "bag" | "market" | "odds" | "cups" | "shop" | "book" | "tour" | "daily" | "settings" | "rules" | "results" | null;
 type Screen = "title" | "modes" | "play";
 type Phase = "idle" | "reveal" | "aim" | "shooting";
 type PlayMode = ModeId | "tutorial";
@@ -42,7 +44,7 @@ type Session = {
   mode: PlayMode; kind: "penalty" | "freekick" | "target"; keeper: KeeperId; seed: number; total: number;
   kicks: KickRecord[]; points: number; streak: number; rung: number;
   level?: Level; daily?: DailyScenario; setup?: FreeKickSetup;
-  suddenDeath?: boolean; ball?: { playId: bigint; outcomeId: number };
+  suddenDeath?: boolean; ball?: { recordId: string; rarity: number };
   target?: { startedAt: number; round: number; targets: Target[]; combo: number; hits: number };
   earned: { rf: bigint; gboot: number; race: number };
 };
@@ -84,6 +86,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [artStatus, setArtStatus] = useState("Loading your Friend…");
   const [now, setNow] = useState(() => Date.now());
   const [portrait, setPortrait] = useState(false);
+  // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
+  const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
+  const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number } | null>(null);
+  const [selectedBall, setSelectedBall] = useState<string | null>(null);
+  const [carousel, setCarousel] = useState(false);
+  const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
 
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<Stage | null>(null);
@@ -98,6 +106,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const director = useRef(new MatchDirector(Number(friendId % 997n)));
   const pendingWave = useRef(false);
   const progressRef = useRef(progress); progressRef.current = progress;
+  const bagRef = useRef(bag); bagRef.current = bag;
   /** Every progress change goes through here so later reads in the same tick see it. */
   const updateProgress = (change: (p: Progress) => Progress) => { const next = change(progressRef.current); progressRef.current = next; setProgress(next); };
   const live = useRef({ paused, menu, phase, session, screen });
@@ -124,6 +133,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const raceRank = raceTable.findIndex(row => row.mine) + 1;
 
   useEffect(() => { saveProgress(progress); }, [progress]);
+  useEffect(() => { saveBag(bag); }, [bag]);
+  // The on-chain inventory is the truth: records always match it exactly.
+  useEffect(() => { if (snapshot) setBag(current => syncBag(current, snapshot.inventory, tier.id, Date.now())); }, [snapshot, tier.id]);
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, []);
   useEffect(() => {
     const query = window.matchMedia("(orientation: portrait) and (max-width: 700px)");
@@ -337,7 +349,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.hints = next.mode === "tutorial" ? 1 : next.mode === "penalties" && assist > 0.5 ? 0.45 : 0;
       scene.freeKick = next.kind === "freekick" && next.setup ? { setup: next.setup, wall: resolveFreeKick(next.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(next.keeper)).wall } : null;
       scene.targets = []; scene.preview = null;
-      scene.rarity = next.mode === "match" ? scene.rarity : 7;
+      if (next.mode !== "match") { scene.rarity = 7; scene.lucky = false; scene.season = "S1"; }
       scene.streak = 0; scene.cue = null;
       if (next.mode === "tutorial") scene.walkout();
       else scene.say(next.kind === "freekick" ? "freekick" : next.kind === "target" ? "target" : director.current.roundIntro(next.keeper, scene.weather, next.mode));
@@ -352,6 +364,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "daily") { setMenu("daily"); return; }
     if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Where you release decides the shot. The coloured zones show the multipliers."); return; }
     if (mode === "skill") { enterSkillCup(); return; }
+    if (mode === "match") { if (bag.some(ball => !ball.sample)) { setScreen("play"); beginSession(newSession("match")); setSelectedBall(selectedBall ?? bag.find(ball => !ball.sample)!.id); setCarousel(true); } else setMenu("balls"); return; }
     beginSession(newSession(mode));
   }
 
@@ -405,9 +418,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       return;
     }
     const profile = keeperById(current.keeper);
-    const seed = current.mode === "match" && current.ball ? kickSeed(Number(current.ball.playId), index, profile.id) : kickSeed(current.seed, index, profile.id);
+    const seed = current.mode === "match" && current.ball ? kickSeed(hashId(current.ball.recordId), index, profile.id) : kickSeed(current.seed, index, profile.id);
     const outcome = resolveShot(shot, profile, seed, { kickIndex: index, history: current.kicks.map(kick => kick.x) }, difficulty);
-    const ballMult = current.mode === "match" && current.ball ? RARITIES[current.ball.outcomeId - 1].dropMult : 1;
+    // The chosen ball sets ONLY the skill-layer score multiplier (kickStyle); RF values never change.
+    const ballMult = current.mode === "match" && current.ball ? kickStyle(bagRef.current.find(record => record.id === current.ball!.recordId) ?? null, RARITIES.map(r => r.dropMult)).scoreMult : 1;
     const points = outcome.result === "goal" ? goalPoints(profile, ballMult, current.streak + 1, Boolean(current.suddenDeath), outcome.zone, outcome.postIn) : 0;
     pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y }, result: outcome.result };
     direct(current, pendingKick.current.record);
@@ -454,6 +468,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const current = live.current.session, kick = pendingKick.current;
     if (!current || !kick) return;
     const record = kick.record, goal = record.result === "goal";
+    if (current.mode === "match" && current.ball) { const id = current.ball.recordId; setBag(list => list.map(ball => (ball.id === id ? recordKick(ball, { goal, zone: record.zone }) : ball))); }
     if (pendingWave.current) { pendingWave.current = false; stage.current?.wave(); }
     if (goal && haptics) vibrate([40, 30, 40]);
     const streak = goal ? current.streak + 1 : 0;
@@ -491,7 +506,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "match") {
       const done = current.suddenDeath ? current.kicks[current.kicks.length - 1]?.result !== "goal" : current.kicks.length >= 5 && !current.suddenDeath;
       if (done) { endSession(current); return; }
-      setSession({ ...current, ball: undefined }); setPhase("idle"); return;
+      setPhase("idle"); setCarousel(true); return;
     }
     if (current.kicks.length >= current.total) { endSession(current); return; }
     // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
@@ -550,7 +565,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "match") {
         const top10 = raceTable[Math.min(9, raceTable.length - 1)].points, gap = Math.max(0, top10 - race + 1);
-        result.match = { rf: `${rf(current.earned.rf)} in balls won${tag}`, gboot: `+${formatNumber(current.earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(current.earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
+        result.match = { rf: `${rf(earned.rf)} pulled in balls this session${tag}`, gboot: `+${formatNumber(earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -579,34 +594,82 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }
   async function unlockAudio() { if (!muted) { await sound.current?.unlock(); await crowd.current?.unlock(); } }
 
-  /** Place a ball: consume one (SDK play), settle it (SDK outcome), reveal its TRUE rarity. */
-  function placeBall() {
-    const current = live.current.session;
-    if (!snapshot || phase !== "idle" || !current || current.mode !== "match") return;
+  /** SHOP: buy a pack (SDK buy). Nothing is revealed yet: balls are unopened until "Open pack". */
+  function buyPack(quantity: bigint) {
+    void act(async () => { if (!(await client.canBuy(quantity))) throw new Error("Stadium full. Try again later."); await client.buy(quantity); },
+      () => { sound.current?.play("purchase"); setMessage(`${quantity} ball${quantity > 1n ? "s" : ""} bought. Open the pack to reveal them.`); });
+  }
+
+  /** PACK OPENING: SDK play + settle for every unopened ball (and any pending one), then reveal one by one. */
+  function openPack() {
+    if (!snapshot) return;
     void act(async () => {
       const version = epoch.current;
-      const play = pending ?? (await client.play(1n))[0];
+      const plays = [...snapshot.plays.filter(play => play.outcomeId === null), ...(snapshot.consumables > 0n ? await client.play(snapshot.consumables) : [])];
       sound.current?.play("anticipation");
-      const settled = await client.settle(play.id);
-      if (version !== epoch.current) return;
-      if (settled.outcomeId === null) { setMessage("Randomness is still on its way. Choose Place ball again to resume this same ball."); return; }
-      const outcomeId = settled.outcomeId, meta = RARITIES[outcomeId - 1];
-      const drop = Math.round(tier.baseDrop * meta.dropMult * 100) / 100;
-      setGboot(value => value + drop);
-      setCupRF(value => value + tier.priceRF * CUP_SHARE_OF_PRICE);
-      setRace(value => value + meta.racePoints * tier.raceWeight);
-      if (outcomeId >= 6) setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[outcomeId - 1].toUpperCase()}`);
-      updateProgress(p => (p.pulled.includes(outcomeId - 1) ? p : { ...p, pulled: [...p.pulled, outcomeId - 1] }));
-      setSession(s => (s ? { ...s, ball: { playId: settled.id, outcomeId }, earned: { rf: s.earned.rf + definition.outcomes[outcomeId - 1].reward, gboot: s.earned.gboot + drop, race: s.earned.race + meta.racePoints * tier.raceWeight } } : s));
-      if (stage.current) stage.current.showReveal(revealPlan(outcomeId));
-      setPhase("reveal");
+      const rarities: number[] = [];
+      for (const play of plays) {
+        const settled = await client.settle(play.id);
+        if (version !== epoch.current) return;
+        if (settled.outcomeId !== null) rarities.push(settled.outcomeId - 1);
+      }
+      if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
+      if (!rarities.length) return;
+      let drops = 0, race = 0, value = 0n;
+      for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight; value += definition.outcomes[rarity].reward; }
+      setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
+      setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race }));
+      const best = Math.max(...rarities);
+      if (best >= 5) setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`);
+      updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
+      setBag(list => addPulls(list, rarities, tier.id, Date.now()));
+      setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
+      setMenu(null); setScreen("play"); stage.current?.say("pack");
     });
+  }
+  /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). */
+  function flipCard(index: number) {
+    setPack(current => { if (!current || current.revealed[index]) return current; stage.current?.showReveal(revealPlan(current.rarities[index] + 1)); return { ...current, revealed: current.revealed.map((value, i) => value || i === index) }; });
+  }
+  /** Reveal all: flip every card; the best ball gets its reveal sequence (a Golden Boot keeps its full-screen moment). */
+  function revealAll() {
+    setPack(current => { if (!current) return current; const best = Math.max(...current.rarities); stage.current?.showReveal(revealPlan(best + 1)); return { ...current, revealed: current.revealed.map(() => true) }; });
+  }
+
+  /** BAG → Redeem one ball for its RF (SDK redeem); its record leaves the Bag. */
+  function redeemBall(record: BallRecord) {
+    if (record.sample) return;
+    void act(() => client.redeem(record.rarity + 1, 1n), () => { sound.current?.play("reward"); setBag(list => removeBall(list, record.id)); setMessage(`Redeemed a ${RARITY_NAMES[record.rarity]} for ${rf(definition.outcomes[record.rarity].reward)}.`); });
+  }
+
+  /** BAG / CAROUSEL → kick with this ball (Big Match). Choice changes only skill-layer fields. */
+  function chooseBall(id: string) {
+    setSelectedBall(id);
+    const record = bagRef.current.find(ball => ball.id === id), scene = stage.current;
+    if (record && scene) {
+      const style = kickStyle(record, RARITIES.map(r => r.dropMult));
+      scene.rarity = style.fx; scene.lucky = style.luckyTrail; scene.season = record.season; scene.crowd.react(style.crowd);
+    }
+  }
+  function kickWith(id: string | null) {
+    const record = bagRef.current.find(ball => ball.id === id && !ball.sample);
+    if (!record) { setMenu("balls"); return; }
+    chooseBall(record.id);
+    const current = live.current.session;
+    const session = current && current.mode === "match" ? { ...current, ball: { recordId: record.id, rarity: record.rarity } } : { ...newSession("match"), ball: { recordId: record.id, rarity: record.rarity } };
+    if (!current || current.mode !== "match") beginSession(session); else setSession(session);
+    const intro = kickStyle(record, RARITIES.map(r => r.dropMult)).intro;
+    if (intro) stage.current?.say(intro);
+    setCarousel(false); setMenu(null);
+    startAim(session);
   }
 
   function enterSkillCup() {
     if (gboot < SKILL_CUP_ENTRY || busy || paused) return;
     setGboot(value => value - SKILL_CUP_ENTRY); setBurned(value => value + SKILL_CUP_ENTRY / 2); setCupGboot(value => value + SKILL_CUP_ENTRY / 2);
     beginSession(newSession("skill"));
+    // Paid skill contest: everyone kicks the same standard ball (no pay-to-win).
+    if (stage.current) { stage.current.rarity = 7; stage.current.lucky = false; stage.current.season = "S1"; }
   }
 
   // ── Input ───────────────────────────────────────────────────────────────
@@ -615,7 +678,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current;
       if (current.paused || current.menu || current.screen !== "play") return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) event.preventDefault();
-      if (current.phase !== "aim") { if (event.key === "Enter" && current.phase === "reveal") latest.current.startAim(); return; }
+      if (current.phase !== "aim") return;
       keys.current.add(event.key);
       const am = keyAim.current;
       if (event.key === "a" || event.key === "A") am.curl = clamp(Math.round((am.curl - 0.25) * 4) / 4, -1, 1);
@@ -702,18 +765,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {banner && <div className={`pk-banner pk-${banner.tone}`} role="status"><strong>{banner.text}</strong><span>{banner.sub}</span></div>}
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
-      {phase === "reveal" && s?.ball && <div className="pk-reveal" role="dialog" aria-label={`${RARITY_NAMES[s.ball.outcomeId - 1]} revealed`}>
-        <small>{RARITIES[s.ball.outcomeId - 1].label}</small>
-        <h2>{RARITY_NAMES[s.ball.outcomeId - 1]}</h2>
-        <p>Worth <b>{rf(definition.outcomes[s.ball.outcomeId - 1].reward)}</b>{tag}, kept in your Locker · $GBOOT drop <b>+{formatNumber(Math.round(tier.baseDrop * RARITIES[s.ball.outcomeId - 1].dropMult * 100) / 100)}</b>{simulated ? " (simulated)" : " (paid weekly)"} · score ×{RARITIES[s.ball.outcomeId - 1].dropMult}</p>
-        <button type="button" className="pk-primary" onClick={() => startAim()} autoFocus>Take the kick ⏎</button>
-        <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button>
-      </div>}
+      {pack && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={flipCard} onRevealAll={revealAll} onDone={() => { setPack(null); setMenu("bag"); }} />}
+      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={() => setCarousel(false)} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
-        {inMatch && phase === "idle" && (balls > 0n
-          ? <button type="button" className="pk-primary" disabled={busy || paused} onClick={placeBall} data-testid="place">{busy ? "Placing…" : pending ? "Resume ball" : "Place ball"}</button>
-          : <button type="button" className="pk-primary" disabled={busy || paused} onClick={() => setMenu("kitbag")}>Buy balls</button>)}
+        {inMatch && phase === "idle" && !carousel && <button type="button" className="pk-primary" disabled={busy || paused} onClick={() => setCarousel(true)} data-testid="choose-ball">Choose ball</button>}
         {phase === "aim" && s && <button type="button" onClick={() => (s.kind === "freekick" ? shootFreeKick({ aimX: keyAim.current.aimX / 1.6, lift: 0.75, power: 0.55, spin: keyAim.current.curl || 0.6, top: 0.5 }) : shootPenalty({ aimX: keyAim.current.aimX, loft: 0, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
         <button type="button" onClick={() => setMenu("hub")} disabled={phase === "shooting"} data-testid="menu">Menu</button>
       </nav>}
@@ -737,7 +793,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       <ModeSelect progress={progress} onPick={startMode} />
       <div className="pk-buyrow">
         <button type="button" onClick={() => setMenu("book")}>Scouting Book</button>
-        <button type="button" onClick={() => setMenu("kitbag")}>Kit bag</button>
+        <button type="button" onClick={() => setMenu("balls")} data-testid="ball-shop">Ball shop</button>
+        <button type="button" onClick={() => setMenu("bag")} data-testid="my-bag">My Bag</button>
         <button type="button" onClick={() => setMenu("cups")}>Cups</button>
         <button type="button" onClick={() => setMenu("settings")}>Settings</button>
       </div>
@@ -748,41 +805,27 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
       {menu === "hub" && <div className="pk-hub">
-        {(["kitbag", "locker", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
+        {(["balls", "bag", "cups", "book", "shop", "market", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
         <button type="button" onClick={() => { setMenu(null); setSession(null); setPhase("idle"); setScreen("modes"); }}>Change mode</button>
         {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.</p>}
       </div>}
 
-      {menu === "kitbag" && <>
-        <p>Big Match balls cost <b>{rf(definition.price)}</b>{tag} each. Placing a ball reveals its rarity by {simulated ? "a simulated draw" : "on-chain Dice randomness"}. The rarity fixes its RF value, $GBOOT drop and score multiplier.</p>
+      {menu === "balls" && <>
+        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} />
+        {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
         <BallCase definition={definition} tag={tag} />
         <StadiumPrices source={prizeSource} now={now} />
-        <p>Top prize at this stadium: <b>{prizeLine(prizeSource, "topPrizeRF", now).value}</b> <small>{prizeLine(prizeSource, "topPrizeRF", now).usd}</small> · <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
-        {stadiumFull ? <p className="pk-warn" role="status">Stadium full: every seat's top prize is reserved right now. Try another stadium or come back after some balls settle.</p>
-          : <div className="pk-buyrow">
-            {[1n, 5n].map(quantity => <button key={quantity.toString()} type="button" className="pk-primary" disabled={busy || paused || snapshot.rfBalance < definition.price * quantity}
-              onClick={() => void act(async () => { if (!(await client.canBuy(quantity))) throw new Error("Stadium full. Try another stadium."); await client.buy(quantity); }, () => { sound.current?.play("purchase"); setMessage(`${quantity} ball${quantity > 1n ? "s" : ""} added to your kit bag.`); })}>
-              Buy {quantity.toString()} · {rf(definition.price * quantity)}</button>)}
-            <button type="button" onClick={() => { beginSession(newSession("match")); }} data-testid="big-match">Play Big Match</button>
-          </div>}
-        {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
-        {!canBuy && !stadiumFull && <p>{simulated ? `The preview wallet holds ${rf(snapshot.rfBalance)} of simulated RF. Redeem balls in your Locker to get RF back, or play the free modes.` : "Not enough RF in your Friend's wallet: use Transfer RF to Friend in the wallet menu."}</p>}
         <p className="pk-rule">{RULE}</p>
       </>}
-
+      {menu === "bag" && <>
+        <Bag records={bag} definition={definition} simulated={simulated} busy={busy || paused} selected={selectedBall} onShoot={record => kickWith(record.id)} onRedeem={redeemBall} onLucky={record => setBag(list => setLucky(list, record.id))} onMarket={() => setMenu("market")} />
+        {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
+      </>}
+      {menu === "market" && <MarketPreview />}
       {menu === "odds" && <>
         <p>Exact odds at {tier.name} (ball price {rf(definition.price)}{tag}):</p>
         <OddsTable definition={definition} tier={tier} tag={tag} />
         <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD values are illustrative." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
-      </>}
-
-      {menu === "locker" && <>
-        <p>Balls you have drawn keep their fixed RF value forever. Redeem any time; RF goes to your Friend's wallet{tag}.</p>
-        {definition.outcomes.map((item, index) => <div className="pk-item" key={item.name}>
-          <span><strong>{RARITY_NAMES[index]}</strong> <small>{snapshot.inventory[index].toString()} kept · {rf(item.reward)}</small></span>
-          <button type="button" disabled={busy || paused || snapshot.inventory[index] === 0n || item.reward === 0n}
-            onClick={() => void act(() => client.redeem(index + 1, snapshot.inventory[index]), () => sound.current?.play("reward"))}>Redeem all</button>
-        </div>)}
       </>}
 
       {menu === "book" && <ScoutingBook progress={progress} />}
@@ -830,7 +873,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
           <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. Streaks multiply up to ×3.</li>
           <li>A 5-second shot clock keeps the pressure on (off in the tutorial). Aim wobble grows with your streak.</li>
           <li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
-          <li>Big Match: buy balls with RF; each ball's rarity is revealed by the chance game (true outcome, 90% average return). Then take your kick for points.</li>
+          <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome, 90% average return), and keep them in your Bag. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
           <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>
         </ol>
         {simulated && <p className="pk-note">Preview: every balance, ball, reward, $GBOOT amount, Cup pot, race table and rival shown here is SIMULATED and resets on reload.</p>}
@@ -861,7 +904,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 }
 
 function menuTitle(menu: Exclude<Menu, null>) {
-  return { hub: "Menu", kitbag: "Kit bag", odds: "Odds", locker: "Locker", cups: "Cups", shop: "Kit shop", book: "Scouting Book", tour: "World Tour", daily: "Daily Challenge", settings: "Settings", rules: "Rules", results: "Results" }[menu];
+  return { hub: "Menu", balls: "Ball shop", bag: "My Bag", market: "Market (coming soon)", odds: "Odds", cups: "Cups", shop: "Kit shop", book: "Scouting Book", tour: "World Tour", daily: "Daily Challenge", settings: "Settings", rules: "Rules", results: "Results" }[menu];
 }
+
+/** Bag records persist on this device when the browser allows (the sandboxed preview may not). */
+const BAG_KEY = "penalty-kings/bag/v1";
+function loadBag(): BallRecord[] { try { const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(BAG_KEY); return raw ? (JSON.parse(raw) as BallRecord[]) : []; } catch { return []; } }
+function saveBag(records: readonly BallRecord[]) { try { localStorage.setItem(BAG_KEY, JSON.stringify(records.filter(record => !record.sample))); } catch { /* not persisted */ } }
+/** Stable 32-bit hash of a ball id (kick seeds for the skill layer). */
+function hashId(id: string) { let h = 2166136261; for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
 
 void KEEPERS; void TIERS;
