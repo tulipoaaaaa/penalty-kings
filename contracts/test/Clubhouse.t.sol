@@ -42,8 +42,8 @@ contract SkillCupTest is Test {
         vm.prank(player);
         uint256 id = cup.enter(7730);
         assertEq(id, 1);
-        assertEq(token.balanceOf(pot), 500e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 500e18);
+        assertEq(token.balanceOf(pot), 50e18);
+        assertEq(token.totalSupply(), 100_000_000e18 - 50e18);
         assertEq(token.balanceOf(address(cup)), 0);
     }
 
@@ -100,8 +100,8 @@ contract WildcardsTest is Test {
         uint256 fee = dice.FEE();
         vm.prank(player);
         uint256 id = wild.draw{ value: fee }(7730);
-        assertEq(token.balanceOf(pot), 500e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 500e18);
+        assertEq(token.balanceOf(pot), 50e18);
+        assertEq(token.totalSupply(), 100_000_000e18 - 50e18);
         dice.fulfil(wild, 1, provider, bytes32(uint256(99))); // roll 99 → Golden Boot
         (uint256 friendId, uint8 points, bool fulfilled) = wild.drawOf(id);
         assertEq(friendId, 7730); assertEq(points, 2); assertTrue(fulfilled);

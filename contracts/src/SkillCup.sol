@@ -19,7 +19,7 @@ interface ISkillToken {
 /// one entry per Friend per hour, WEEKLY_LIMIT per week. Cheap Gen 5/6 Friends cannot be used to
 /// multiply entries. The referee accepts kicks only for entries recorded here. No owner.
 contract SkillCup {
-    uint256 public constant ENTRY = 1_000e18;
+    uint256 public constant ENTRY = 100e18;
     uint8 public constant MAX_GENERATION = 4;
     uint256 public constant COOLDOWN = 1 hours;
     uint256 public constant WEEKLY_LIMIT = 20;

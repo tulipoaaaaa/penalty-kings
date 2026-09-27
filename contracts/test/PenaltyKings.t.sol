@@ -26,15 +26,15 @@ contract GBootTest is Test {
     function setUp() public { token = new GBoot(); }
 
     function testFixedSupplyToDeployer() public view {
-        assertEq(token.totalSupply(), 1_000_000_000e18);
-        assertEq(token.balanceOf(address(this)), 1_000_000_000e18);
+        assertEq(token.totalSupply(), 100_000_000e18);
+        assertEq(token.balanceOf(address(this)), 100_000_000e18);
         assertEq(token.symbol(), "GBOOT");
         assertEq(token.decimals(), 18);
     }
 
     function testBurnReducesSupply() public {
         token.burn(1e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 1e18);
+        assertEq(token.totalSupply(), 100_000_000e18 - 1e18);
     }
 }
 
@@ -58,7 +58,7 @@ contract KitShopTest is Test {
         vm.stopPrank();
         assertTrue(shop.unlocked(7730, 1));
         assertEq(token.balanceOf(player), 940e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 60e18);
+        assertEq(token.totalSupply(), 100_000_000e18 - 60e18);
         assertEq(token.balanceOf(address(shop)), 0);
     }
 
@@ -104,8 +104,6 @@ contract LiquidityLockTest is Test {
         vm.warp(unlockAt);
         vm.expectRevert(LiquidityLock.NotBeneficiary.selector);
         lock.withdraw(42);
-        vm.expectRevert(LiquidityLock.NotBeneficiary.selector);
-        lock.collect(42, address(1), address(2));
     }
 
     function testWithdrawAfterUnlock() public {
@@ -115,15 +113,23 @@ contract LiquidityLockTest is Test {
         assertEq(pm.ownerOf(42), beneficiary);
     }
 
-    function testCollectEncodesDecreaseZeroAndTakePair() public {
-        vm.prank(beneficiary);
-        lock.collect(42, address(1), address(2));
+    function testCollectBurnsBothSidesAndIsPermissionless() public {
+        GBoot c0 = new GBoot();
+        GBoot c1 = new GBoot();
+        // Simulated fees taken to the lock (the mock PositionManager does not move tokens).
+        c0.transfer(address(lock), 7e18); c1.transfer(address(lock), 3e18);
+        uint256 supply0 = c0.totalSupply();
+        uint256 supply1 = c1.totalSupply();
+        vm.prank(address(0xBEEF)); // anyone
+        lock.collectAndBurn(42, address(c0), address(c1));
         (bytes memory actions, bytes[] memory params) = abi.decode(pm.lastUnlockData(), (bytes, bytes[]));
         assertEq(actions, hex"0111");
         (uint256 tokenId, uint256 liquidity,,,) = abi.decode(params[0], (uint256, uint256, uint128, uint128, bytes));
         assertEq(tokenId, 42); assertEq(liquidity, 0);
-        (address c0, address c1, address to) = abi.decode(params[1], (address, address, address));
-        assertEq(c0, address(1)); assertEq(c1, address(2)); assertEq(to, beneficiary);
+        (address a0, address a1, address to) = abi.decode(params[1], (address, address, address));
+        assertEq(a0, address(c0)); assertEq(a1, address(c1)); assertEq(to, address(lock), "fees come to the lock, never to the caller");
+        assertEq(c0.totalSupply(), supply0 - 7e18, "currency0 fees burned");
+        assertEq(c1.totalSupply(), supply1 - 3e18, "currency1 fees burned");
         assertEq(pm.ownerOf(42), address(lock), "position stays locked");
     }
 

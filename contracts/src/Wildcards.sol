@@ -23,11 +23,11 @@ interface IWildcardEntropy {
 /// The draw uses Dice randomness with the ball table's top odds: Gold 2.5% (1 race point),
 /// Golden Boot 1% (2 race points), otherwise nothing. Results are events read by the weekly script,
 /// which counts them at the Park weight (×1).
-/// PRICE = 1,000 $GBOOT ≈ 10 RF at the 0.01 RF launch price: the same gross price as a Park ball but
+/// PRICE = 100 $GBOOT ≈ 10 RF at the 0.1 RF launch price (tokenomics v2): the same gross price as a Park ball but
 /// with no RF payout, so Wildcards are a dearer route to race points than balls unless $GBOOT falls
 /// below ~0.1× its launch price (see docs/ECONOMY.md, "Wildcard farm check").
 contract Wildcards {
-    uint256 public constant PRICE = 1_000e18;
+    uint256 public constant PRICE = 100e18;
     uint32 public constant CALLBACK_GAS_LIMIT = 200_000;
 
     IWildcardGenerations public immutable generations;

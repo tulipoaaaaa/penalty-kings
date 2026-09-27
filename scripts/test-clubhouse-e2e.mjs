@@ -41,7 +41,10 @@ for (const [key, value] of Object.entries(live)) assert.ok(value, `deployed ${ke
 console.log("deployed on fork:", live);
 const gbootAbi = parseAbi(["function transfer(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)", "function totalSupply() view returns (uint256)"]);
 const deployerWallet = createWalletClient({ account: { address: DEPLOYER, type: "json-rpc" }, transport: http(ANVIL) });
-await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: live.gboot, abi: gbootAbi, functionName: "transfer", args: [owner, parseEther("5000")], chain: null }) });
+// v2: every non-pool $GBOOT sits in a capped vault; the operator releases Cup/event prizes from the Cups vault.
+const cupsVault = grab("CupsVault");
+assert.ok(cupsVault, "deployed CupsVault");
+await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: cupsVault, abi: parseAbi(["function release(address,uint256)"]), functionName: "release", args: [owner, parseEther("500")], chain: null }) });
 
 // 2) Referee (real Worker code) and the Clubhouse build.
 const referee = spawn("node", ["--experimental-strip-types", "--no-warnings", "verifier/dev-server.ts", "--port", "8788", "--rpc", ANVIL, "--skill-cup", live.skillCup], { stdio: ["ignore", "inherit", "inherit"] });
@@ -84,7 +87,7 @@ try {
   await page.getByRole("button", { name: new RegExp(`^Friend #${FRIEND} `) }).click({ timeout: 120_000 });
   await button("Skill Cup").waitFor({ timeout: 60_000 });
 
-  // Kit shop: unlock Volt boots (item 1, 60 $GBOOT burned).
+  // Kit shop: unlock Volt boots (item 1, 6 $GBOOT burned).
   const supplyBefore = await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" });
   await button("Kit shop").click();
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByRole("button").click();
@@ -92,16 +95,17 @@ try {
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByText("unlocked").waitFor({ timeout: 60_000 });
   const unlocked = await client.readContract({ address: live.kitShop, abi: parseAbi(["function unlocked(uint256,uint256) view returns (bool)"]), functionName: "unlocked", args: [FRIEND, 1n] });
   assert.equal(unlocked, true, "KitShop unlock recorded on-chain");
-  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), parseEther("60"), "60 $GBOOT burned");
-  console.log("PASS kit unlock: on-chain, 60 $GBOOT burned");
+  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), parseEther("6"), "6 $GBOOT burned");
+  console.log("PASS kit unlock: on-chain, 6 $GBOOT burned");
 
   // Skill Cup: on-chain entry, then 5 flicks judged by the referee.
   await button("Skill Cup").click();
-  await button("Enter · 1,000 $GBOOT").click();
+  await button("Enter · 100 $GBOOT").click();
   await confirmTx(); await confirmTx();
   const canvas = page.locator(".pitch canvas");
   await canvas.waitFor({ timeout: 60_000 });
   for (let kick = 0; kick < 5; kick++) {
+    if (kick > 0) await page.waitForTimeout(7000); // the pitch ignores swipes while the previous kick is still playing
     await canvas.scrollIntoViewIfNeeded();
     const box = await canvas.boundingBox();
     const sx = box.x + box.width * 0.5, sy = box.y + box.height * (246 / 320);

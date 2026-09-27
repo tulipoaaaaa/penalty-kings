@@ -591,7 +591,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (version !== epoch.current) return;
       if (settled.outcomeId === null) { setMessage("Randomness is still on its way. Choose Place ball again to resume this same ball."); return; }
       const outcomeId = settled.outcomeId, meta = RARITIES[outcomeId - 1];
-      const drop = Math.round(tier.baseDrop * meta.dropMult);
+      const drop = Math.round(tier.baseDrop * meta.dropMult * 100) / 100;
       setGboot(value => value + drop);
       setCupRF(value => value + tier.priceRF * CUP_SHARE_OF_PRICE);
       setRace(value => value + meta.racePoints * tier.raceWeight);
@@ -705,7 +705,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {phase === "reveal" && s?.ball && <div className="pk-reveal" role="dialog" aria-label={`${RARITY_NAMES[s.ball.outcomeId - 1]} revealed`}>
         <small>{RARITIES[s.ball.outcomeId - 1].label}</small>
         <h2>{RARITY_NAMES[s.ball.outcomeId - 1]}</h2>
-        <p>Worth <b>{rf(definition.outcomes[s.ball.outcomeId - 1].reward)}</b>{tag}, kept in your Locker · $GBOOT drop <b>+{formatNumber(Math.round(tier.baseDrop * RARITIES[s.ball.outcomeId - 1].dropMult))}</b>{simulated ? " (simulated)" : " (paid weekly)"} · score ×{RARITIES[s.ball.outcomeId - 1].dropMult}</p>
+        <p>Worth <b>{rf(definition.outcomes[s.ball.outcomeId - 1].reward)}</b>{tag}, kept in your Locker · $GBOOT drop <b>+{formatNumber(Math.round(tier.baseDrop * RARITIES[s.ball.outcomeId - 1].dropMult * 100) / 100)}</b>{simulated ? " (simulated)" : " (paid weekly)"} · score ×{RARITIES[s.ball.outcomeId - 1].dropMult}</p>
         <button type="button" className="pk-primary" onClick={() => startAim()} autoFocus>Take the kick ⏎</button>
         <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button>
       </div>}

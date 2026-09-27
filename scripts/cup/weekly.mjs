@@ -1,7 +1,7 @@
 // Weekly $GBOOT drops and Golden Boot Cup table, computed ONLY from on-chain ChanceGame
 // `Settled(playId, friendId, outcomeId)` events. Anyone can re-run it and get the same result.
 //
-//   node scripts/cup/weekly.mjs --from <block> --to <block> [--base park=13,pro=1395,champions=13953] [--pot-rf 500000] [--rpc URL]
+//   node scripts/cup/weekly.mjs --from <block> --to <block> [--base park=0.93,pro=93,champions=930] [--pot-rf 500000] [--rpc URL]
 //
 // Output: markdown for docs/WEEKLY.md and a JSON payout file (drops per Friend canonical wallet,
 // Cup winners). It only reads; payments are separate, logged transactions.
@@ -12,7 +12,7 @@ import { computeWeek } from "./compute.mjs";
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, index, list) => (value.startsWith("--") ? [...pairs, [value.slice(2), list[index + 1]]] : pairs), []));
 const from = BigInt(args.from ?? 0), to = BigInt(args.to ?? 0);
 if (!from || !to || to < from) throw new Error("usage: --from <block> --to <block>");
-const base = Object.fromEntries((args.base ?? "park=13,pro=1395,champions=13953").split(",").map(pair => pair.split("=")).map(([k, v]) => [k, Number(v)]));
+const base = Object.fromEntries((args.base ?? "park=0.93,pro=93,champions=930").split(",").map(pair => pair.split("=")).map(([k, v]) => [k, Number(v)]));
 const GENERATIONS = "0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D";
 const client = createPublicClient({ transport: http(args.rpc ?? process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com") });
 const settled = parseAbiItem("event Settled(uint256 indexed playId, uint256 indexed friendId, uint256 indexed outcomeId)");

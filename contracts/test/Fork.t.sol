@@ -12,7 +12,8 @@ import { PoolKey, IPoolManager, IPositionManagerFull, IPermit2 } from "../src/in
 /// Mainnet-fork rehearsal of the $GBOOT/RF launch. Run with:
 ///   forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL -vv
 /// Pool numbers come from scripts/onchain/pool-plan.mjs (GBOOT as token1 case is recomputed here
-/// from the same ticks: start 46000, A [-23000, 46000]).
+/// from the same ticks. v2 (0.1 RF per $GBOOT): GBOOT token1 → start 23000, A [-46000, 23000];
+/// GBOOT token0 → start -23000, A [-23000, 46000]).
 contract ForkLaunchTest is Test {
     address constant RF = 0x0779369854d3EcdEA927206718FFD7730C67B71f;
     address constant POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
@@ -55,9 +56,9 @@ contract ForkLaunchTest is Test {
 
     function _plan() internal view returns (uint160 sqrtStart, int24 lower, int24 upper, bool gbootIs0) {
         gbootIs0 = key.currency0 == address(gboot);
-        // Values from scripts/onchain/pool-plan.mjs (getSqrtPriceAtTick(±46000)).
-        sqrtStart = gbootIs0 ? uint160(7_944_237_437_844_371_073_164_709_801) : uint160(790_145_282_602_472_263_393_995_913_049);
-        (lower, upper) = gbootIs0 ? (int24(-46_000), int24(23_000)) : (int24(-23_000), int24(46_000));
+        // Values from scripts/onchain/pool-plan.mjs (getSqrtPriceAtTick(±23000)).
+        sqrtStart = gbootIs0 ? uint160(25_087_991_844_255_625_192_629_315_791) : uint160(250_203_434_948_259_642_083_317_319_084);
+        (lower, upper) = gbootIs0 ? (int24(-23_000), int24(46_000)) : (int24(-46_000), int24(23_000));
     }
 
     function testLaunchSwapCollectLock() public {
@@ -88,10 +89,12 @@ contract ForkLaunchTest is Test {
         uint256 sold = swapper.swapExactIn(key, gbootIs0, uint128(bought / 10), 1);
         assertGt(sold, 0);
 
-        // Fees: only collect before unlock; withdraw reverts.
-        uint256 rfBefore = IERC20(RF).balanceOf(burner);
-        lock.collect(tokenId, key.currency0, key.currency1);
-        assertGt(IERC20(RF).balanceOf(burner), rfBefore, "RF-side LP fees collected");
+        // Fees: anyone can collect before unlock and BOTH sides are burned; withdraw reverts.
+        uint256 rfSupply = IERC20(RF).totalSupply();
+        uint256 gbootSupply = gboot.totalSupply();
+        lock.collectAndBurn(tokenId, key.currency0, key.currency1);
+        assertLt(IERC20(RF).totalSupply(), rfSupply, "RF-side LP fees burned");
+        assertLt(gboot.totalSupply(), gbootSupply, "GBOOT-side LP fees burned");
         vm.expectRevert(LiquidityLock.Locked.selector);
         lock.withdraw(tokenId);
         vm.stopPrank();

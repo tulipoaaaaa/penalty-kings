@@ -48,7 +48,7 @@ export function OddsTable({ definition, tier, tag }: { definition: GameDefinitio
     <table className="pk-odds"><thead><tr><th>Ball</th><th>Chance</th><th>RF value</th><th>$GBOOT drop</th></tr></thead>
       <tbody>{definition.outcomes.map((item, index) => <tr key={item.name}>
         <td>{RARITY_NAMES[index]}</td><td>{item.chanceBps / 100}%</td><td>{formatGameAmount(item.reward, 18)}{tag}</td>
-        <td>+{formatNumber(Math.round(tier.baseDrop * RARITIES[index].dropMult))}{tag}</td></tr>)}</tbody></table>
+        <td>+{formatNumber(Math.round(tier.baseDrop * RARITIES[index].dropMult * 100) / 100)}{tag}</td></tr>)}</tbody></table>
     <p><b>Average return: 90%</b> of the ball price in RF, over many balls. Individual results vary: most balls return less than they cost, a few return much more. The kick never changes which ball you get.</p>
   </>;
 }

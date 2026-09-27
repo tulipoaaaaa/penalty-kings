@@ -16,25 +16,22 @@ interface IBurnable {
 
 /// @title GBootFeeHook
 /// @notice Uniswap v4 hook for a 0%-LP-fee $GBOOT/RF pool. On every swap it takes FEE_BPS of the
-/// swap's unspecified currency: RF is burned, $GBOOT is sent to the Golden Boot Cup. Permissions:
-/// afterSwap + afterSwapReturnDelta only (address flags 0x44). No owner, no parameters to change.
+/// swap's unspecified currency and BURNS it, whichever side it is (tokenomics v2: LP fees are burned
+/// on both sides). Permissions: afterSwap + afterSwapReturnDelta only (address flags 0x44). No owner,
+/// no parameters to change.
 contract GBootFeeHook {
     uint256 public constant FEE_BPS = 100;
     uint160 public constant FLAGS = (1 << 6) | (1 << 2);
 
     address public immutable poolManager;
-    address public immutable rf;
-    address public immutable cup;
 
     error NotPoolManager();
     error HookNotImplemented();
 
     event FeeTaken(address indexed currency, uint256 amount, bool burned);
 
-    constructor(address poolManager_, address rf_, address cup_) {
+    constructor(address poolManager_) {
         poolManager = poolManager_;
-        rf = rf_;
-        cup = cup_;
     }
 
     function afterSwap(address, PoolKey calldata key, SwapParams calldata params, int256 delta, bytes calldata)
@@ -47,14 +44,9 @@ contract GBootFeeHook {
         address currency = specifiedIs0 ? key.currency1 : key.currency0;
         uint256 amount = uint256(uint128(unspecified < 0 ? -unspecified : unspecified)) * FEE_BPS / 10_000;
         if (amount == 0) return (this.afterSwap.selector, 0);
-        if (currency == rf) {
-            IPoolManagerTake(poolManager).take(currency, address(this), amount);
-            IBurnable(rf).burn(amount);
-            emit FeeTaken(currency, amount, true);
-        } else {
-            IPoolManagerTake(poolManager).take(currency, cup, amount);
-            emit FeeTaken(currency, amount, false);
-        }
+        IPoolManagerTake(poolManager).take(currency, address(this), amount);
+        IBurnable(currency).burn(amount);
+        emit FeeTaken(currency, amount, true);
         return (this.afterSwap.selector, int128(int256(amount)));
     }
 }

@@ -10,15 +10,16 @@ export type TierId = "park" | "pro" | "champions";
 export type Tier = Readonly<{ id: TierId; name: string; priceRF: number; path: string; raceWeight: number; baseDrop: number }>;
 
 /**
- * Base $GBOOT drop per ball at the launch price (0.01 RF per $GBOOT):
- * floor(3% × ball price ÷ 0.01 ÷ 2.15), where 2.15 is the average rarity multiplier.
- * Park: 13 × 2.15 = 27.95 $GBOOT ≈ 0.28 RF = 2.8% of the 10 RF ball price (target ≤ 3%).
- * Live rate each week: min(this schedule, 3% × price ÷ TWAP ÷ 2.15, treasury budget) — docs/DROPS.md.
+ * Base $GBOOT drop per ball at the v2 launch price (0.1 RF per $GBOOT, 100M supply):
+ * 2% × ball price ÷ 0.1 ÷ 2.15, where 2.15 is the average rarity multiplier. At the maximum
+ * Bootroom boost drops are ×1.5, so the drop value is ≤ 3% of the ball price and total value per
+ * ball ≤ 93% (90% RF return + 3%). Park: 0.93 × 2.15 = 2 $GBOOT ≈ 0.2 RF = 2% of a 10 RF ball.
+ * Live rate each week: min(this schedule, 3% × volume ÷ TWAP, the drop vault's season cap) — docs/DROPS.md.
  */
 export const TIERS: readonly Tier[] = [
-  { id: "park", name: "Park", priceRF: 10, path: "./", raceWeight: 1, baseDrop: 13 },
-  { id: "pro", name: "Pro", priceRF: 1000, path: "./pro/", raceWeight: 100, baseDrop: 1395 },
-  { id: "champions", name: "Champions", priceRF: 10000, path: "./champions/", raceWeight: 1000, baseDrop: 13953 },
+  { id: "park", name: "Park", priceRF: 10, path: "./", raceWeight: 1, baseDrop: 0.93 },
+  { id: "pro", name: "Pro", priceRF: 1000, path: "./pro/", raceWeight: 100, baseDrop: 93 },
+  { id: "champions", name: "Champions", priceRF: 10000, path: "./champions/", raceWeight: 1000, baseDrop: 930 },
 ];
 
 export const tierForPrice = (priceRF: number) => TIERS.find(tier => tier.priceRF === priceRF) ?? TIERS[0];
@@ -50,20 +51,20 @@ export type Cosmetic = Readonly<{ id: string; kind: "boots" | "kit" | "net" | "c
 /** KitShop: bought with $GBOOT, burned. Cosmetic only. */
 export const COSMETICS: readonly Cosmetic[] = [
   { id: "boots-classic", kind: "boots", name: "Classic black boots", price: 0, color: "#111111" },
-  { id: "boots-volt", kind: "boots", name: "Volt boots", price: 60, color: "#ccff00" },
-  { id: "boots-blaze", kind: "boots", name: "Blaze boots", price: 90, color: "#ff4d2e" },
+  { id: "boots-volt", kind: "boots", name: "Volt boots", price: 6, color: "#ccff00" },
+  { id: "boots-blaze", kind: "boots", name: "Blaze boots", price: 9, color: "#ff4d2e" },
   { id: "kit-white", kind: "kit", name: "White halo kit", price: 0, color: "#ffffff" },
-  { id: "kit-sky", kind: "kit", name: "Sky halo kit", price: 80, color: "#7fd3ff" },
-  { id: "kit-gold", kind: "kit", name: "Gold halo kit", price: 150, color: "#ffd23f" },
+  { id: "kit-sky", kind: "kit", name: "Sky halo kit", price: 8, color: "#7fd3ff" },
+  { id: "kit-gold", kind: "kit", name: "Gold halo kit", price: 15, color: "#ffd23f" },
   { id: "net-white", kind: "net", name: "White net", price: 0, color: "#e8e8e8" },
-  { id: "net-volt", kind: "net", name: "Volt net", price: 40, color: "#ccff00" },
-  { id: "net-crimson", kind: "net", name: "Crimson net", price: 40, color: "#ff5a6e" },
+  { id: "net-volt", kind: "net", name: "Volt net", price: 4, color: "#ccff00" },
+  { id: "net-crimson", kind: "net", name: "Crimson net", price: 4, color: "#ff5a6e" },
   { id: "cele-knee-slide", kind: "celebration", name: "Knee slide", price: 0 },
-  { id: "cele-spin-point", kind: "celebration", name: "Spin and point", price: 50 },
-  { id: "cele-badge-kiss", kind: "celebration", name: "Badge kiss", price: 70 },
-  { id: "cele-backflip", kind: "celebration", name: "Backflip", price: 120 },
-  { id: "cele-disco", kind: "celebration", name: "Disco dance", price: 90 },
-  { id: "cele-superhero", kind: "celebration", name: "Superhero pose", price: 100 },
+  { id: "cele-spin-point", kind: "celebration", name: "Spin and point", price: 5 },
+  { id: "cele-badge-kiss", kind: "celebration", name: "Badge kiss", price: 7 },
+  { id: "cele-backflip", kind: "celebration", name: "Backflip", price: 12 },
+  { id: "cele-disco", kind: "celebration", name: "Disco dance", price: 9 },
+  { id: "cele-superhero", kind: "celebration", name: "Superhero pose", price: 10 },
 ];
 
 /** Earned with World Tour stars (free skill layer) — never sold, not in the on-chain KitShop. */
@@ -79,12 +80,12 @@ export const ALL_COSMETICS: readonly Cosmetic[] = [...COSMETICS, ...STAR_REWARDS
 export const celebrationOf = (id: string) => id.replace(/^cele-/, "");
 
 /** Simulated preview only: starting $GBOOT so judges can try the shop, Wildcards and the Skill Cup. Labelled in the UI. */
-export const SIM_STARTING_GBOOT = 2500;
+export const SIM_STARTING_GBOOT = 250;
 
 /** Wildcard: an extra Cup race draw. 50% burned, 50% to the pot. */
-export const WILDCARD_PRICE = 1000;
+export const WILDCARD_PRICE = 100;
 
 /** Skill Cup entry: one 5-kick shootout vs Ghost. 50% burned, 50% to the Skill Cup pot. */
-export const SKILL_CUP_ENTRY = 1000;
+export const SKILL_CUP_ENTRY = 100;
 
 export const formatNumber = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });

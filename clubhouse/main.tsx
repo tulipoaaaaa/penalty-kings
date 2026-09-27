@@ -195,13 +195,13 @@ function WildcardPanel({ friend, client, send, approve, guard }: PanelProps) {
   }, [draw, client]);
   return <section className="card">
     <h2>Wildcards: an extra Golden Boot Cup draw</h2>
-    <p>1,000 $GBOOT (50% burned, 50% to the Cup pot) + the Dice randomness fee (≤ 0.000025 ETH; any overpayment is refunded). Odds: Gold 2.5% (1 race point), Golden Boot 1% (2 points), otherwise no points. Points count toward this week's Cup race.</p>
+    <p>100 $GBOOT (50% burned, 50% to the Cup pot) + the Dice randomness fee (≤ 0.000025 ETH; any overpayment is refunded). Odds: Gold 2.5% (1 race point), Golden Boot 1% (2 points), otherwise no points. Points count toward this week's Cup race.</p>
     <button className="primary" onClick={() => void guard(async () => {
       const [entropy, provider] = await Promise.all([client.readContract({ address: LIVE.wildcards!, abi: WILDCARDS, functionName: "entropy" }), client.readContract({ address: LIVE.wildcards!, abi: WILDCARDS, functionName: "provider" })]);
       const fee = await client.readContract({ address: entropy, abi: ENTROPY, functionName: "getFeeV2", args: [provider, 200_000] });
       if (fee > MAX_DICE_FEE) throw new Error("Dice fee is above the 0.000025 ETH cap; try later.");
       await approve(LIVE.wildcards!, WILDCARD_PRICE);
-      const receipt = await send("Draw a wildcard", [`Pay 1,000 $GBOOT and ${formatUnits(fee, 18)} ETH (Dice fee) for one draw for Friend #${friend.id}.`], { address: LIVE.wildcards!, abi: WILDCARDS, functionName: "draw", args: [friend.id], value: fee });
+      const receipt = await send("Draw a wildcard", [`Pay 100 $GBOOT and ${formatUnits(fee, 18)} ETH (Dice fee) for one draw for Friend #${friend.id}.`], { address: LIVE.wildcards!, abi: WILDCARDS, functionName: "draw", args: [friend.id], value: fee });
       const [requested] = parseEventLogs({ abi: WILDCARDS, eventName: "WildcardRequested", logs: receipt.logs.filter(log => log.address.toLowerCase() === LIVE.wildcards!.toLowerCase()) });
       if (!requested) throw new Error("Draw receipt has no WildcardRequested event.");
       setDraw({ id: requested.args.drawId, points: null });
@@ -233,13 +233,13 @@ function SkillCupPanel({ friend, client, send, approve, guard }: PanelProps) {
   };
   return <section className="card">
     <h2>Skill Cup: 5 kicks vs THE FINAL WALL</h2>
-    <p>Entry 1,000 $GBOOT (50% burned, 50% to the pot), paid on-chain. Friends hardwired at Gen 4 or better only. The referee replays every kick: your inputs are committed before the keeper's dive is derived from this week's secret{week ? <> (hash <code>{week.secretHash.slice(0, 18)}…</code>, revealed after week {week.week})</> : null}. Best score wins; ties go to the earlier entry. One entry per Friend per hour, 20 per week.</p>
+    <p>Entry 100 $GBOOT (50% burned, 50% to the pot), paid on-chain. Friends hardwired at Gen 4 or better only. The referee replays every kick: your inputs are committed before the keeper's dive is derived from this week's secret{week ? <> (hash <code>{week.secretHash.slice(0, 18)}…</code>, revealed after week {week.week})</> : null}. Best score wins; ties go to the earlier entry. One entry per Friend per hour, 20 per week.</p>
     {entry === null ? <button className="primary" onClick={() => void guard(async () => {
       await approve(LIVE.skillCup!, SKILL_ENTRY);
-      const receipt = await send("Enter the Skill Cup", [`Pay 1,000 $GBOOT (500 burned, 500 to the pot) for one shootout with Friend #${friend.id}.`], { address: LIVE.skillCup!, abi: SKILLCUP, functionName: "enter", args: [friend.id] });
+      const receipt = await send("Enter the Skill Cup", [`Pay 100 $GBOOT (50 burned, 50 to the pot) for one shootout with Friend #${friend.id}.`], { address: LIVE.skillCup!, abi: SKILLCUP, functionName: "enter", args: [friend.id] });
       const registered = await post("/entry", { txHash: receipt.transactionHash });
       setEntry(registered.entryId); setKicks([]); setScore(0); setSigned(null);
-    })}>Enter · 1,000 $GBOOT</button>
+    })}>Enter · 100 $GBOOT</button>
       : <SkillPitch friendId={friend.id} kicks={kicks} disabled={kicks.length >= 5} onShoot={async input => {
         const response = await post("/kick", { entryId: entry, kickIndex: kicks.length, input });
         setKicks(list => [...list, { result: response.result, points: response.points, dive: response.dive }]);
