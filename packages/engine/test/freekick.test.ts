@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { freeKickSetup, resolveFreeKick, isKnuckle, keeperById, KEEPERS, DIFFICULTY_LADDER, WALL_HEIGHTS, prng, solveLift, freeKickSpeed, freeKickWall, freeKickKeeperFrame, toWorld, FK_KEEPER_SPEED_CAP, FK_KEEPER_STYLE, FK_AIR_MIN, FK_AIR_MAX, SCREAMER_DISTANCE, SCREAMER_BONUS, type FreeKickShot } from "../src/index.ts";
+import { freeKickSetup, resolveFreeKick, isKnuckle, keeperById, KEEPERS, DIFFICULTY_LADDER, WALL_HEIGHTS, prng, solveLift, freeKickSpeed, freeKickWall, freeKickKeeperFrame, toWorld, FK_KEEPER_SPEED_CAP, FK_KEEPER_STYLE, FK_AIR_MIN, FK_AIR_MAX, SCREAMER_DISTANCE, SCREAMER_BONUS, isPerfectStrike, type FreeKickShot } from "../src/index.ts";
 
 const keeper = keeperById("squirrel");
 const setup = freeKickSetup(3, { distance: 24, angle: 0.2, wallSize: 4 });
@@ -100,7 +100,9 @@ test("C1a: flight time strike → goal line: 0.7–1.2 s from 18–24 m (0.75–
     rows.push(`${d} m: ${times.map(t => t.toFixed(2)).join(" ")}`);
     const [lo, hi] = d <= 24 ? [0.7, 1.2] : [1.0, 1.4];
     for (const t of times) assert.ok(t >= lo && t <= hi, `${d} m: ${t.toFixed(2)} s outside ${lo}–${hi}`);
-    if (d <= 24) for (const t of times.slice(2, 5)) assert.ok(t >= 0.75 && t <= 1.1, `${d} m natural pace: ${t.toFixed(2)} s`);
+    // Natural pace (0.4 / 0.6 / 0.75). A PERFECT strike (C2, power in PERFECT_BAND: 0.75 here) is meant to be a touch
+    // quicker than a natural one, so it only has to stay inside the overall band above.
+    if (d <= 24) [0.4, 0.6, 0.75].forEach((power, i) => { const t = times[2 + i]; if (!isPerfectStrike(power)) assert.ok(t >= 0.75 && t <= 1.1, `${d} m natural pace: ${t.toFixed(2)} s`); });
   }
   console.log("flight times (power 0 / .25 / .4 / .6 / .75 / 1):\n  " + rows.join("\n  "));
 });

@@ -264,14 +264,14 @@ const MILESTONES = [0, 4, 8, 12, 16, 26, 52, 78, 104];
 
 // ═════ 5. Sudden Death solvency ═════
 {
-  const out = [header, "", "Big Match rule: after 5 kicks with 3+ goals, every further goal scores ×2 until the first miss. Expected extra kicks for goal rate *p* (geometric run) and the most one kick can score (`packages/engine` goalPoints: 100 × keeper ≤ 2.5 × ball × streak ≤ 3 × Sudden Death 2 × top bin 5 × post-in 1.5):", "",
+  const out = [header, "", "Big Match rule: after 5 kicks with 3+ goals, every further goal scores ×2 until the first miss. Expected extra kicks for goal rate *p* (geometric run) and the most one kick can score (`packages/engine` goalPoints: 100 × keeper ≤ 2.5 × ball × streak ≤ 2 (×1.2 at 3, ×1.5 at 5, ×2 at 10 in a row) × Sudden Death 2 × top bin 5 × post-in 1.5):", "",
     "| Goal rate p | P(reach Sudden Death) = P(≥3 of 5) | Expected Sudden Death kicks, p ÷ (1 − p) | P(run ≥ 10 goals) = p¹⁰ |", "|---:|---:|---:|---:|"];
   const binom = (n, k) => { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; };
   for (const p of [0.55, 0.6, 0.65]) {
     const reach = [3, 4, 5].reduce((s, k) => s + binom(5, k) * p ** k * (1 - p) ** (5 - k), 0);
     out.push(`| ${(p * 100).toFixed(0)}% | ${(reach * 100).toFixed(1)}% | ${(p / (1 - p)).toFixed(2)} | ${(p ** 10 * 100).toFixed(2)}% |`);
   }
-  const maxKick = 100 * 2.5 * 3 * 2 * 5 * 1.5;
+  const maxKick = 100 * 2.5 * 2 * 2 * 5 * 1.5; // streak cap ×2 (engine STREAK_CAP)
   out.push("", `Largest single-kick score ≤ ${fmt(maxKick)} points × the ball multiplier. **Points carry zero RF or $GBOOT liability**: every RF payout was fixed by Dice when the ball was placed (the prize bank reserved 10 × price for it), and the Skill Cup referee scores with Sudden Death off (\`verifier/src/core.ts\`: \`goalPoints(…, false, …)\`) over exactly 5 kicks.`);
   blocks.suddendeath = out;
 }

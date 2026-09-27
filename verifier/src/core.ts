@@ -16,14 +16,19 @@
  *  5. Week end: the secret is revealed; anyone can recompute every dive and score from the
  *     published inputs (see replayEntry).
  */
-import { KEEPERS, keeperById, resolveShot, shotTarget, goalPoints, clamp, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
+import { KEEPERS, keeperById, resolveShot, shotTarget, goalPoints, clamp, isPerfectStrike, shotClockSeconds, NEUTRAL, type ShotInput, type ShotResult } from "../../packages/engine/src/index.ts";
 import { KIND_SKILL, KIND_STREAK, STREAK_BONUS_RF, STREAK_DAYS, CLAIM_VALIDITY_S, rewardNonce, skillRewardRf, dayStreak, dayOf, toJson, type RewardClaim, type RewardSigner, type SignedReward } from "./rewards.ts";
 
 export const KICKS_PER_ENTRY = 5;
 export const SKILL_KEEPER = keeperById("finalwall");
+/**
+ * The Skill Cup's shot clock (seconds): the engine's NEUTRAL penalty clock, which the game shows as its bar.
+ * The referee records each kick's releaseMs for review; it never re-decides a kick from it.
+ */
+export const SKILL_SHOT_CLOCK_S = shotClockSeconds(NEUTRAL, "penalty");
 
 export type KickInput = ShotInput & { /** ms from aim start to release; recorded for review, not used by physics. */ releaseMs: number };
-export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number }[]; score: number; signature?: string; rewards?: SignedReward[] };
+export type Entry = { id: number; week: number; friendId: string; owner: string; createdAt: number; kicks: { input: KickInput; result: ShotResult; points: number; perfect?: boolean }[]; score: number; signature?: string; rewards?: SignedReward[] };
 
 export interface Store {
   getEntry(id: number): Promise<Entry | null>;
@@ -56,11 +61,15 @@ export function sanitize(input: KickInput): KickInput {
   return { aimX: num(input.aimX, -1.6, 1.6), aimY: num(input.aimY, 0, 1.6), power: num(input.power, 0, 1), curl: num(input.curl, -1, 1), releaseMs: num(input.releaseMs, 0, 600_000) };
 }
 
-/** Pure scoring shared by the live referee and public replays. */
+/**
+ * Pure scoring shared by the live referee and public replays. The shared engine applies the PERFECT strike
+ * (power in PERFECT_BAND: a quicker ball) inside resolveShot, and the streak table (x1.2 / x1.5 / x2) inside
+ * goalPoints, so the game and the referee cannot disagree. `perfect` is reported for display and review.
+ */
 export function scoreKick(input: ShotInput, seed: number, goalsBefore: number, kickIndex: number, previous: readonly ShotInput[]) {
   const outcome = resolveShot(input, SKILL_KEEPER, seed, { kickIndex, history: previous.map(shot => shotTarget(shot).x) });
   const streak = outcome.result === "goal" ? goalsBefore + 1 : 0;
-  return { result: outcome.result, points: outcome.result === "goal" ? goalPoints(SKILL_KEEPER, 1, streak, false, outcome.zone, outcome.postIn) : 0, plan: outcome.plan };
+  return { result: outcome.result, points: outcome.result === "goal" ? goalPoints(SKILL_KEEPER, 1, streak, false, outcome.zone, outcome.postIn) : 0, plan: outcome.plan, perfect: isPerfectStrike(input.power) };
 }
 
 export class RefereeError extends Error {
@@ -128,7 +137,7 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
       const seed = await diveSeed(secret, entry.id, body.kickIndex);
       const goals = entry.kicks.reduce((streak, kick) => (kick.result === "goal" ? streak + 1 : 0), 0);
       const scored = scoreKick(input, seed, goals, body.kickIndex, entry.kicks.map(kick => kick.input));
-      entry.kicks.push({ input, result: scored.result, points: scored.points });
+      entry.kicks.push({ input, result: scored.result, points: scored.points, perfect: scored.perfect });
       entry.score += scored.points;
       let signed: { payload: string; signature: string } | undefined;
       let rewards: SignedReward[] | undefined;
@@ -137,19 +146,19 @@ export function createReferee(options: { secret: Uint8Array<ArrayBuffer>; week: 
         rewards = await rewardsFor(entry); entry.rewards = rewards;
       }
       await store.putEntry(entry);
-      return { kickIndex: body.kickIndex, result: scored.result, points: scored.points, dive: { x: scored.plan.x, y: scored.plan.y }, score: entry.score, signed, rewards };
+      return { kickIndex: body.kickIndex, result: scored.result, points: scored.points, perfect: scored.perfect, dive: { x: scored.plan.x, y: scored.plan.y }, score: entry.score, signed, rewards };
     },
   };
 }
 
 /** Public replay: recompute an entry from its published inputs and the revealed secret. */
 export async function replayEntry(secret: Uint8Array<ArrayBuffer>, entryId: number, inputs: ShotInput[]) {
-  let score = 0, goals = 0; const results: ShotResult[] = [];
+  let score = 0, goals = 0; const results: ShotResult[] = [], perfect: boolean[] = [];
   for (let index = 0; index < inputs.length; index++) {
     const scored = scoreKick(inputs[index], await diveSeed(secret, entryId, index), goals, index, inputs.slice(0, index));
-    goals = scored.result === "goal" ? goals + 1 : 0; score += scored.points; results.push(scored.result);
+    goals = scored.result === "goal" ? goals + 1 : 0; score += scored.points; results.push(scored.result); perfect.push(scored.perfect);
   }
-  return { score, results };
+  return { score, results, perfect };
 }
 
 export function memoryStore(): Store {

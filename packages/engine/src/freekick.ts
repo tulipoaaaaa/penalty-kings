@@ -9,7 +9,7 @@
  * long-range dip (Magnus ∝ spin × speed), so a well-struck ball clears the wall and still comes
  * down under the bar from every distance.
  */
-import { prng, clamp, type KeeperProfile, type KeeperPlan, type Difficulty, NEUTRAL, shotZone, type Zone } from "./index.ts";
+import { prng, clamp, isPerfectStrike, PERFECT_FK_PACE, type KeeperProfile, type KeeperPlan, type Difficulty, NEUTRAL, shotZone, type Zone } from "./index.ts";
 import { keeperTouch, BALL_RADIUS, GOAL_ASPECT, type KeeperPart } from "./keeper-rig.ts";
 import { planFreeKickKeeper, freeKickKeeperFrame, type FreeKickKeeper } from "./freekick-keeper.ts";
 
@@ -119,7 +119,8 @@ type Flight = { path: FlightSample[]; t: number; x: number; y: number; z: number
 function fly(setup: FreeKickSetup, shot: FreeKickShot, random: () => number, wobble = true): Flight {
   const x0 = Math.sin(setup.angle) * setup.distance, depth = Math.cos(setup.angle) * setup.distance;
   const wall = freeKickWall(setup);
-  const speed = freeKickSpeed(shot.power, setup.distance);
+  // A PERFECT strike (power in PERFECT_BAND) is struck a little harder: the same rule as penalties.
+  const speed = freeKickSpeed(shot.power, setup.distance) * (isPerfectStrike(shot.power) ? PERFECT_FK_PACE : 1);
   const aimX = clamp(shot.aimX, -1.6, 1.6) * GOAL_HALF_WIDTH;
   const heading = Math.atan2(aimX - x0, depth);
   const elevation = freeKickElevation(shot.lift);

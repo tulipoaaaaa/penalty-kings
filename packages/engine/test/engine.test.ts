@@ -22,8 +22,8 @@ test("shot target moves with curl and power", () => {
   assert.ok(shotTarget({ aimX: 0, aimY: 0.975, power: 0.9, curl: 0 }).time < shotTarget({ aimX: 0, aimY: 0.475, power: 0.5, curl: 0 }).time);
 });
 
-test("streak caps at x3 and tougher keepers score more", () => {
-  assert.equal(streakMultiplier(1), 1); assert.equal(streakMultiplier(3), 2); assert.equal(streakMultiplier(50), 3);
+test("streak caps at x2 (C2 table: x1.2 at 3, x1.5 at 5, x2 at 10) and tougher keepers score more", () => {
+  assert.equal(streakMultiplier(1), 1); assert.equal(streakMultiplier(3), 1.2); assert.equal(streakMultiplier(50), 2);
   assert.ok(goalPoints(keeperById("ghost"), 1, 1, false) > goalPoints(keeperById("squirrel"), 1, 1, false));
 });
 

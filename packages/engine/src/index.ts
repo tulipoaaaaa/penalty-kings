@@ -94,14 +94,33 @@ export const OVERHIT = 0.9;
 /** Maximum landing drift from full curl, goal units: an on-target aim with max curl stays within the post ± 0.05. */
 export const CURL_DRIFT = 0.08;
 
-/** Where the ball crosses the goal line, and how long it takes to get there (seconds). */
+// ── PERFECT strike ────────────────────────────────────────────────────────
+/**
+ * "Flick at just the right speed (firm, not wild) for a PERFECT strike: a faster ball and a steadier aim."
+ * The sweet spot is a band of swipe SPEED, measured as the power the swipe maps to (swipeToShot: power is
+ * swipe speed, calibrated per input), so it is decided by the shot inputs alone and the Skill Cup referee
+ * (which receives `power`) agrees. Touch: about 2,000-3,100 CSS px/s; mouse about 2,250-3,450; trackpad
+ * about 2,000-3,100. Space-bar charge: a release between about 0.81 and 0.92 s. Quick shot (power 0.7) is never perfect.
+ */
+export const PERFECT_BAND = [0.74, 0.84] as const;
+/** A perfect penalty flies this much of its normal time (8 % quicker to the line). */
+export const PERFECT_PACE = 0.92;
+/** A perfect free kick is struck this much harder (launch speed x). */
+export const PERFECT_FK_PACE = 1.04;
+/** The aim wobble on a perfect strike is scaled by this (half the sway). */
+export const PERFECT_WOBBLE = 0.5;
+export const isPerfectStrike = (power: number) => Number.isFinite(power) && power >= PERFECT_BAND[0] && power <= PERFECT_BAND[1];
+/** The aim wobble that actually applies to a strike of this power (tighter on a perfect strike). */
+export const strikeWobble = (wobble: number, power: number) => (isPerfectStrike(power) ? wobble * PERFECT_WOBBLE : wobble);
+
+/** Where the ball crosses the goal line, and how long it takes to get there (seconds). A perfect strike gets there quicker. */
 export function shotTarget(shot: ShotInput) {
   const power = clamp(shot.power, 0, 1);
   const rise = power > OVERHIT ? (power - OVERHIT) * 4 : 0;
   return {
     x: clamp(shot.aimX, -1.6, 1.6) + clamp(shot.curl, -1, 1) * CURL_DRIFT,
     y: Math.max(0.02, clamp(shot.aimY, 0, 1.6) + rise),
-    time: 0.95 - 0.55 * power,
+    time: (0.95 - 0.55 * power) * (isPerfectStrike(power) ? PERFECT_PACE : 1),
   };
 }
 
@@ -182,13 +201,21 @@ export function keeperAt(plan: KeeperPlan, t: number) {
  *  reaction: seconds added to the keeper's reaction (negative = sharper)
  *  reach:    multiplier on the save radius
  *  read:     added to the keeper's own read probability
- *  clock:    shot clock in seconds (0 = off)
+ *  clock:    penalty shot clock in seconds (0 = off); free kicks add FREE_KICK_EXTRA_S (shotClockSeconds)
  *  wobble:   aim-wobble amplitude in goal units (grows with the streak)
  *  assist:   invisible aim assist strength 0 … 1 (assistShot), only on the easiest rungs
  */
 export type Difficulty = Readonly<{ reaction: number; reach: number; read: number; clock: number; wobble: number; assist: number }>;
-/** Identity: the keeper exactly as designed (the Skill Cup referee uses this). */
-export const NEUTRAL: Difficulty = { reaction: 0, reach: 1, read: 0, clock: 5, wobble: 0, assist: 0 };
+/** Identity: the keeper exactly as designed (the Skill Cup referee uses this). Its clock is the Skill Cup's: 6 s. */
+export const NEUTRAL: Difficulty = { reaction: 0, reach: 1, read: 0, clock: 6, wobble: 0, assist: 0 };
+/**
+ * Shot clock seconds for a kick. `Difficulty.clock` is the PENALTY clock (6 s; tightening only on the hardest
+ * rungs, never below 5 s); a free kick gets FREE_KICK_EXTRA_S more (8 s; never below 7 s). 0 = off.
+ */
+export const FREE_KICK_EXTRA_S = 2;
+export const SHOT_CLOCK_MIN = { penalty: 5, freekick: 7 } as const;
+export const shotClockSeconds = (difficulty: Difficulty, kind: "penalty" | "freekick" | "target") =>
+  difficulty.clock <= 0 ? 0 : kind === "freekick" ? Math.max(SHOT_CLOCK_MIN.freekick, difficulty.clock + FREE_KICK_EXTRA_S) : Math.max(SHOT_CLOCK_MIN.penalty, difficulty.clock);
 
 // ── Placement zones ───────────────────────────────────────────────────────
 export type Zone = "centre" | "side" | "corner" | "bin";
@@ -262,8 +289,14 @@ export function flightAt(target: { x: number; y: number }, curl: number, p: numb
   return { x: target.x * p + bow, y: target.y * p * (0.6 + 0.4 * p) + Math.sin(Math.PI * p) * 0.08, depth: p };
 }
 
-export const STREAK_CAP = 3;
-export const streakMultiplier = (streak: number) => Math.min(STREAK_CAP, 1 + 0.5 * Math.max(0, streak - 1));
+/**
+ * Streak multiplier on POINTS only (never RF, balls or $GBOOT): "score 3 in a row for x1.2, 5 for x1.5, 10 for x2".
+ * `streak` counts this goal (the 3rd goal in a row is paid at x1.2). goalPoints is the ONLY place it is applied,
+ * and the Skill Cup referee scores with goalPoints too, so the game and the referee always agree.
+ */
+export const STREAK_TIERS: readonly (readonly [number, number])[] = [[10, 2], [5, 1.5], [3, 1.2]];
+export const STREAK_CAP = 2;
+export const streakMultiplier = (streak: number) => STREAK_TIERS.find(([from]) => streak >= from)?.[1] ?? 1;
 
 export function goalPoints(keeper: KeeperProfile, ballMult: number, streak: number, suddenDeath: boolean, zone: Zone = "centre", postIn = false) {
   return Math.round(100 * keeper.mult * ballMult * streakMultiplier(streak) * (suddenDeath ? 2 : 1) * ZONE_MULT[zone] * (postIn ? POST_IN_BONUS : 1));
@@ -401,7 +434,7 @@ export function aimWobble(t: number, amplitude: number) {
  * where it goes.
  */
 export function aimedShot(raw: ShotInput, wobble: number, assist: number): ShotInput {
-  return assistShot({ ...raw, aimX: raw.aimX + wobble }, assist);
+  return assistShot({ ...raw, aimX: raw.aimX + strikeWobble(wobble, raw.power) }, assist);
 }
 /** Where the reticle is drawn: the landing point of aimedShot (curl drift and any overhit rise included). */
 export const reticleTarget = (raw: ShotInput, wobble: number, assist: number) => shotTarget(aimedShot(raw, wobble, assist));
@@ -411,15 +444,15 @@ export const wobbleFor = (difficulty: Difficulty, streak: number) => difficulty.
 // ── Invisible dynamic difficulty ──────────────────────────────────────────
 /** Easiest → hardest. Chosen so every bot skill profile settles at ~55–65 % goals (docs/DIFFICULTY.md). */
 export const DIFFICULTY_LADDER: readonly Difficulty[] = [
-  { reaction: 0.3, reach: 0.55, read: -0.3, clock: 5, wobble: 0, assist: 0.9 },
-  { reaction: 0.22, reach: 0.65, read: -0.2, clock: 5, wobble: 0.02, assist: 0.6 },
-  { reaction: 0.15, reach: 0.75, read: -0.1, clock: 5, wobble: 0.04, assist: 0.3 },
-  { reaction: 0.08, reach: 0.85, read: 0, clock: 5, wobble: 0.06, assist: 0 },
-  { reaction: 0.03, reach: 0.95, read: 0.05, clock: 5, wobble: 0.08, assist: 0 },
-  { reaction: 0, reach: 1, read: 0.1, clock: 5, wobble: 0.1, assist: 0 },
-  { reaction: -0.03, reach: 1.1, read: 0.2, clock: 4.5, wobble: 0.12, assist: 0 },
-  { reaction: -0.06, reach: 1.2, read: 0.3, clock: 4, wobble: 0.14, assist: 0 },
-  { reaction: -0.1, reach: 1.3, read: 0.4, clock: 4, wobble: 0.16, assist: 0 },
+  { reaction: 0.3, reach: 0.55, read: -0.3, clock: 6, wobble: 0, assist: 0.9 },
+  { reaction: 0.22, reach: 0.65, read: -0.2, clock: 6, wobble: 0.02, assist: 0.6 },
+  { reaction: 0.15, reach: 0.75, read: -0.1, clock: 6, wobble: 0.04, assist: 0.3 },
+  { reaction: 0.08, reach: 0.85, read: 0, clock: 6, wobble: 0.06, assist: 0 },
+  { reaction: 0.03, reach: 0.95, read: 0.05, clock: 6, wobble: 0.08, assist: 0 },
+  { reaction: 0, reach: 1, read: 0.1, clock: 6, wobble: 0.1, assist: 0 },
+  { reaction: -0.03, reach: 1.1, read: 0.2, clock: 5.5, wobble: 0.12, assist: 0 },
+  { reaction: -0.06, reach: 1.2, read: 0.3, clock: 5, wobble: 0.14, assist: 0 },
+  { reaction: -0.1, reach: 1.3, read: 0.4, clock: 5, wobble: 0.16, assist: 0 },
 ];
 export const TARGET_BAND = [0.55, 0.65] as const;
 export type ShotRecord = Readonly<{ goal: boolean; zone: Zone }>;

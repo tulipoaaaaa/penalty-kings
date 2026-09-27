@@ -4,15 +4,18 @@
 // Usage: node --experimental-strip-types scripts/difficulty-sim.ts [--smoke]
 import {
   KEEPERS, keeperById, resolveShot, kickSeed, prng, aimWobble, wobbleFor, nextDifficultyLevel,
-  DIFFICULTY_LADDER, TARGET_BAND, assistShot, type KeeperId, type ShotRecord,
+  DIFFICULTY_LADDER, TARGET_BAND, assistShot, strikeWobble, type KeeperId, type ShotRecord,
 } from "../packages/engine/src/index.ts";
 
-type Bot = { name: string; aim: number; power: number; timing: number; ambition: number };
+/** `pace`: the swipe pace the bot aims for (default 0.62). The sweet-spot bot flicks for a PERFECT strike (C2). */
+type Bot = { name: string; aim: number; power: number; timing: number; ambition: number; pace?: number };
 export const BOTS: Bot[] = [
   { name: "novice", aim: 0.34, power: 0.2, timing: 0.1, ambition: 0.2 },
   { name: "casual", aim: 0.24, power: 0.14, timing: 0.4, ambition: 0.4 },
   { name: "good", aim: 0.15, power: 0.09, timing: 0.7, ambition: 0.6 },
   { name: "expert", aim: 0.07, power: 0.045, timing: 0.9, ambition: 0.85 },
+  // C2: a good player who has learned the PERFECT band (power 0.74-0.84) and hits it most of the time.
+  { name: "sweetspot", aim: 0.15, power: 0.03, timing: 0.7, ambition: 0.6, pace: 0.79 },
 ];
 const PARK: KeeperId[] = ["mouse", "squirrel", "sloth", "peacock", "octopus"];
 const gauss = (random: () => number) => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
@@ -29,8 +32,10 @@ export function simulate(bot: Bot, rounds: number, seed: number) {
       // Pick a target: ambitious players go for corners/bins, others for sides.
       const side = random() < 0.5 ? -1 : 1, high = random() < bot.ambition * 0.6;
       const tx = side * (random() < bot.ambition ? 0.8 : 0.5), ty = high ? 0.78 : 0.3;
-      const wobble = aimWobble(random() * 10, wobbleFor(difficulty, streak)) * (1 - bot.timing);
-      const shot = { aimX: tx + gauss(random) * bot.aim + wobble, aimY: ty + gauss(random) * bot.power * 1.25, power: Math.min(1, Math.max(0, 0.62 + gauss(random) * bot.power)), curl: 0 };
+      const sway = aimWobble(random() * 10, wobbleFor(difficulty, streak)) * (1 - bot.timing);
+      const aimX = tx + gauss(random) * bot.aim, aimY = ty + gauss(random) * bot.power * 1.25, power = Math.min(1, Math.max(0, (bot.pace ?? 0.62) + gauss(random) * bot.power));
+      // The wobble that applies at this pace (a PERFECT strike halves it), exactly as aimedShot does in the game.
+      const shot = { aimX: aimX + strikeWobble(sway, power), aimY, power, curl: 0 };
       const outcome = resolveShot(assistShot(shot, difficulty.assist), keeper, kickSeed(seed, kick, keeper.id), { kickIndex: i, history: [] }, difficulty);
       const goal = outcome.result === "goal";
       history.push({ goal, zone: outcome.zone });
@@ -50,7 +55,9 @@ export function fixedRate(bot: Bot, level: number, shots: number, seed: number) 
     const keeper = keeperById(PARK[k % PARK.length]);
     const side = random() < 0.5 ? -1 : 1, high = random() < bot.ambition * 0.6;
     const tx = side * (random() < bot.ambition ? 0.8 : 0.5), ty = high ? 0.78 : 0.3;
-    const shot = { aimX: tx + gauss(random) * bot.aim + aimWobble(random() * 10, DIFFICULTY_LADDER[level].wobble) * (1 - bot.timing), aimY: ty + gauss(random) * bot.power * 1.25, power: Math.min(1, Math.max(0, 0.62 + gauss(random) * bot.power)), curl: 0 };
+    const sway = aimWobble(random() * 10, DIFFICULTY_LADDER[level].wobble) * (1 - bot.timing);
+    const aimX = tx + gauss(random) * bot.aim, aimY = ty + gauss(random) * bot.power * 1.25, power = Math.min(1, Math.max(0, (bot.pace ?? 0.62) + gauss(random) * bot.power));
+    const shot = { aimX: aimX + strikeWobble(sway, power), aimY, power, curl: 0 };
     if (resolveShot(assistShot(shot, DIFFICULTY_LADDER[level].assist), keeper, kickSeed(seed, k, keeper.id), { kickIndex: k % 5, history: [] }, DIFFICULTY_LADDER[level]).result === "goal") goals++;
   }
   return goals / shots;
