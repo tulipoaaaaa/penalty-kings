@@ -23,7 +23,11 @@ is enabling network access and adding a `BURNER_MNEMONIC` environment secret, wh
 5. Record funding with `setFunding` in `scripts/lib/budget.mjs` once the owner has sent ETH and
    named the launch size (see STOP 1 in the chat; budgets are in `scripts/onchain/budget-plan.mjs`).
 
-## Phase 2 (buy RF, hardwire): still to do
+## Phase 2 (buy RF, hardwire): scripted and rehearsed
+
+`node scripts/onchain/friend.mjs 6 --send`. Rehearsed on a fork as the owner's address: 2 RF bought, Gen 6 Friend hardwired, SDK eligibility true. The burner key env var is accepted as `BURNER_PRIVATE_KEY` or `BURNER_privatekey`. Burner: `0xDB454B035777692EB6bd599297781a7ACC3A25e4`.
+
+## Phase 2 details
 
 - Read the **verified source** on Blockscout for the Market `0x99930E551b6f849bAabC4B491053eF28a700C4F2`
   and ActivationManager `0xD4A35e11318E3679168d409184B788bcF9F283Ac`. Learn the buy path and the

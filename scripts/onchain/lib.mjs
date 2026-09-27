@@ -12,13 +12,16 @@ export const EXPLORER = "https://robinhoodchain.blockscout.com";
 export const chainFor = url => defineChain({ id: 4663, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [url] } } });
 
 export function clients(url) {
-  const chain = chainFor(url), account = loadBurner();
+  const chain = chainFor(url);
+  // Fork-only rehearsal as an address whose key is not loaded (anvil impersonation).
+  const impersonate = process.env.REHEARSE_AS && url.startsWith("http://127.0.0.1");
+  const account = impersonate ? { address: process.env.REHEARSE_AS, type: "json-rpc" } : loadBurner();
   return { account, chain, client: createPublicClient({ chain, transport: http(url) }), wallet: createWalletClient({ account, chain, transport: http(url) }) };
 }
 
 /** Start an anvil fork of mainnet at the latest block. Returns { url, stop }. */
 export async function startFork(port = 8546) {
-  const child = spawn("anvil", ["--fork-url", RPC_URL, "--chain-id", "4663", "--port", String(port), "--silent"], { stdio: "ignore" });
+  const child = spawn("anvil", ["--fork-url", RPC_URL, "--chain-id", "4663", "--port", String(port), "--silent", ...(process.env.REHEARSE_AS ? ["--auto-impersonate"] : [])], { stdio: "ignore" });
   const url = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 60; i++) {
     try {
@@ -35,7 +38,14 @@ export async function startFork(port = 8546) {
  * FORK (anvil cheat RPCs). Never touches mainnet. RF is OpenZeppelin ERC20: balances at slot 0.
  */
 async function fundFork(url) {
-  const rf = process.env.FORK_FUND_RF;
+  const rf = process.env.FORK_FUND_RF, eth = process.env.FORK_FUND_ETH;
+  if (eth && !rf) {
+    const { toHex, parseEther } = await import("viem");
+    const { account } = clients(url);
+    await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "anvil_setBalance", params: [account.address, toHex(parseEther(eth))] }) });
+    console.log(`[fork] funded ${account.address} with ${eth} ETH (fork only)`);
+    return;
+  }
   if (!rf) return;
   const { keccak256, encodeAbiParameters, pad, toHex, parseAbi } = await import("viem");
   const { account, client } = clients(url);
