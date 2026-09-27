@@ -84,6 +84,33 @@ test("render vs physics: 2,000 seeded kicks, the drawn keeper touches the drawn 
   assert.ok((poses.set ?? 0) > 0 && (poses.launch ?? 0) > 0 && (poses.stretch ?? 0) > 0, "every body pose is on screen at some crossing");
 });
 
+// BQ-P1-2: the same render-vs-physics contract for EVERY result, not just goal/save. A shot that clips the
+// post or bar, or crosses just wide or over, used to be resolved by the frame check before the keeper was
+// tested, so the drawn ball could pass through a drawn glove, body or mime wall and still read "post".
+// Fuzzed across every keeper and every difficulty rung (NEUTRAL + DIFFICULTY_LADDER L0–L8), with aims
+// concentrated around the frame: rendered overlap ⇔ "save".
+test("render vs physics, every result type: every keeper × every rung, the drawn keeper touches the drawn ball exactly when resolveShot saves", () => {
+  const random = prng(0xb9a2), rungs = [NEUTRAL, ...DIFFICULTY_LADDER];
+  const results: Record<string, number> = {}, failures: string[] = [];
+  let kicks = 0, mismatches = 0, k = 0;
+  for (const keeper of KEEPERS) for (const [rung, difficulty] of rungs.entries()) for (let i = 0; i < 400; i++, k++) {
+    const nearFrame = i % 2 === 0;
+    const shot = nearFrame
+      ? { aimX: (random() < 0.5 ? -1 : 1) * (0.8 + random() * 0.45), aimY: random() * 1.25, power: 0.35 + random() * 0.6, curl: random() * 2 - 1 }
+      : { aimX: random() * 2.6 - 1.3, aimY: 0.7 + random() * 0.55, power: 0.35 + random() * 0.65, curl: random() * 2 - 1 };
+    const history = [random() * 2 - 1, random() * 2 - 1, random() * 2 - 1].slice(0, k % 4);
+    const outcome: ShotOutcome = resolveShot(shot, keeper, kickSeed(k, k % 5, keeper.id), { kickIndex: k % 5, history }, difficulty);
+    kicks++; results[outcome.result] = (results[outcome.result] ?? 0) + 1;
+    const flight = penaltyFlight(outcome.target.time);
+    const art = keeperArt(penaltyKeeperFrame(keeper.id, outcome, flight, flight)), ball = penaltyBallArt(outcome.target, shot.curl, 1);
+    const contact = renderedContact(keeper.id, art, ball), saved = outcome.result === "save";
+    if (Boolean(contact) !== saved) { mismatches++; if (failures.length < 8) failures.push(`${keeper.id} rung ${rung ? `L${rung - 1}` : "neutral"} kick ${k}: ${outcome.result} (${outcome.target.x.toFixed(3)}, ${outcome.target.y.toFixed(3)}) but drawn contact = ${contact}`); }
+  }
+  console.log(`keeper-sync all results: ${kicks} kicks ${JSON.stringify(results)}, mismatches ${mismatches}`);
+  assert.equal(mismatches, 0, `${mismatches} mismatches\n${failures.join("\n")}`);
+  for (const result of ["goal", "save", "post", "wide", "over"]) assert.ok((results[result] ?? 0) > 100, `the fuzz covers ${result} (${results[result] ?? 0})`);
+});
+
 test("keeper animation phase is a valid sprite frame (0–3) for any time, negative included", () => {
   for (const mood of ["idle", "set", "dive", "celebrate", "taunt", "sad"] as const)
     for (const time of [-5, -1.3, -0.01, 0, 0.37, 12.9]) {

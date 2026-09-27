@@ -229,7 +229,7 @@ function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: numbe
 }
 
 /**
- * Resolve a shot: frame first, then the keeper, then goal. Pure and deterministic.
+ * Resolve a shot: the keeper first, then the frame, then goal. Pure and deterministic.
  * The keeper saves ONLY if the ball touches his body, arms, gloves, trailing leg or (mime) wall at the
  * moment it crosses the line: keeperFrame(plan, target.time), the very frame the Stage draws.
  */
@@ -242,18 +242,18 @@ export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: numbe
   const hitsPost = Math.abs(ax - 1) < BALL_RADIUS + FRAME && target.y < 1 + BALL_RADIUS;
   const hitsBar = Math.abs(target.y - 1) < BALL_RADIUS + FRAME && ax < 1 + BALL_RADIUS;
   const postRoll = roll();
-  const touch = () => keeperTouch(keeperFrame(profile.id, plan, target.time), { x: target.x, y: target.y * GOAL_ASPECT });
+  // The keeper first, for EVERY shot (BQ-P1-2): a ball the drawn keeper touches is a save, even one that
+  // would have clipped the frame or crossed just wide/over. (Far from the goal the rig cannot reach: no touch.)
+  const hit = keeperTouch(keeperFrame(profile.id, plan, target.time), { x: target.x, y: target.y * GOAL_ASPECT });
+  if (hit) return { result: "save", target, plan, zone, postIn: false, touch: hit };
   if (hitsPost || hitsBar) {
-    // Clipping the inside of the frame deflects in half the time: "in off the post" (unless the keeper is right there).
+    // Clipping the inside of the frame deflects in half the time: "in off the post".
     const postIn = ax < 1 - FRAME && target.y < 1 - FRAME && postRoll < 0.5;
-    const hit = postIn ? touch() : null;
-    if (hit) return { result: "save", target, plan, zone, postIn: false, touch: hit };
     return { result: postIn ? "goal" : "post", target, plan, zone, postIn };
   }
   if (ax > 1) return { result: "wide", target, plan, zone, postIn: false };
   if (target.y > 1) return { result: "over", target, plan, zone, postIn: false };
-  const hit = touch();
-  return hit ? { result: "save", target, plan, zone, postIn: false, touch: hit } : { result: "goal", target, plan, zone, postIn: false };
+  return { result: "goal", target, plan, zone, postIn: false };
 }
 
 /** Flight position at progress p (0 … 1), before projection. */
