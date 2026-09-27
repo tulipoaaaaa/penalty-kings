@@ -49,6 +49,29 @@ export function penaltyBallArt(target: { x: number; y: number }, curl: number, p
   return { x: home.x + (end.x - home.x) * p + bow, y: home.y + (end.y - home.y) * p - (p >= 1 ? 0 : Math.sin(Math.PI * p) * 12 / xf.g), r: lerp(4.5 / xf.g, BALL_RADIUS * GOAL.unit, p) };
 }
 
+// ── Free-kick flight ↔ physics (round 6 B4b): same keeper rig, same contact test ─────────
+/** Seconds the free-kick flight takes on screen: the engine's own clock (so the keeper clock is the engine time). */
+export const freeKickFlight = (outcome: FreeKickOutcome) => Math.max(0.3, outcome.path[outcome.path.length - 1].t);
+/** A free kick as the Stage plays it (a wall block plays as a save). */
+export const freeKickShot = (outcome: FreeKickOutcome): ShotOutcome =>
+  ({ result: outcome.result === "wall" ? "save" : outcome.result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false, touch: outcome.touch });
+const FK_MIN_BALL_PX = 1.4;
+/**
+ * The free-kick ball on SCREEN `since` s after the strike: the engine path (pathAt) through the FK
+ * camera, eased onto the engine's crossing point and BALL_RADIUS in the drawn goal (goalTransform), so
+ * at the crossing it is exactly the disc resolveFreeKick tested against keeperFrame(plan, target.time).
+ */
+export function freeKickBall(setup: FreeKickSetup, outcome: FreeKickOutcome, since: number) {
+  const last = outcome.path[outcome.path.length - 1], at = fkProject(setup, pathAt(outcome.path, since));
+  let x = at.x, y = at.y, r = Math.max(FK_MIN_BALL_PX, 0.11 * at.pxPerM);
+  if (outcome.result !== "wall" && last.z >= Math.cos(setup.angle) * setup.distance) {
+    const xf = goalTransform(setup), end = applyGoal(xf, artPoint({ x: outcome.target.x, y: outcome.target.y * GOAL_ASPECT })), from = fkProject(setup, last);
+    const w = clamp01(since / (last.t || 1)) ** 3;
+    x += (end.x - from.x) * w; y += (end.y - from.y) * w; r += (BALL_RADIUS * GOAL.unit * xf.g - Math.max(FK_MIN_BALL_PX, 0.11 * from.pxPerM)) * w;
+  }
+  return { x, y, r };
+}
+
 export class Stage {
   camera = new Camera();
   particles = new Particles(520);
@@ -172,8 +195,7 @@ export class Stage {
 
   /** Free kick: the engine's flight path is the animation; "wall" plays as a block. */
   playFreeKick(outcome: FreeKickOutcome) {
-    const result: ShotResult = outcome.result === "wall" ? "save" : outcome.result;
-    this.play({ result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false }, 0, Math.max(0.3, outcome.path[outcome.path.length - 1].t));
+    this.play(freeKickShot(outcome), 0, freeKickFlight(outcome));
     this.fk = outcome;
   }
 
@@ -365,8 +387,8 @@ export class Stage {
       const flightT = this.modeTime - shot.strikeAt;
       if (flightT < 0) {
         mood = this.modeTime < 0.7 ? "taunt" : "idle"; gx += shot.outcome.plan.lean * 0.12;
-        // Penalties: settle onto the line during the run-up, so the dive starts from the physics' standing frame.
-        if (!this.fk) { const settle = 1 - clamp01(this.modeTime / shot.strikeAt); gx *= settle; lift *= settle; }
+        // Settle onto the home spot during the run-up, so the dive starts from the physics' standing frame.
+        const settle = 1 - clamp01(this.modeTime / shot.strikeAt); gx = start + (gx - start) * settle; lift *= settle;
       } else {
         // Free kicks (penalties draw the engine's KeeperFrame instead, see drawKeeperLayer).
         const hands = keeperAt(shot.outcome.plan, keeperClock(shot.outcome.target.time, shot.flight, flightT));
@@ -390,10 +412,10 @@ export class Stage {
     return 1;
   }
 
-  /** The keeper during a penalty flight: the engine's KeeperFrame (null outside a penalty in flight). */
+  /** The keeper during a penalty or free-kick flight: the engine's KeeperFrame (null outside a shot in flight). */
   keeperFrameNow(): KeeperFrame | null {
     const shot = this.shot;
-    if (!shot || this.mode !== "shot" || this.fk || this.kind !== "penalty") return null;
+    if (!shot || this.mode !== "shot" || this.kind === "target" || Boolean(this.fk) !== (this.kind === "freekick")) return null;
     const flightT = this.modeTime - shot.strikeAt;
     return flightT < 0 ? null : penaltyKeeperFrame(this.keeper, shot.outcome, shot.flight, flightT);
   }
@@ -515,8 +537,7 @@ export class Stage {
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt && this.fk && this.freeKick) {
       const since = this.modeTime - shot.strikeAt, last = this.fk.path[this.fk.path.length - 1];
       if (since <= last.t) {
-        const at = fkProject(this.freeKick.setup, pathAt(this.fk.path, since));
-        x = at.x; y = at.y; r = Math.max(1.4, 0.11 * at.pxPerM); spin = this.time * 14 * (Math.abs(this.fk.knuckle ? 0 : 1) || 0.1);
+        ({ x, y, r } = freeKickBall(this.freeKick.setup, this.fk, since)); spin = this.time * 14 * (Math.abs(this.fk.knuckle ? 0 : 1) || 0.1);
         if (this.fk.knuckle && !this.reduced) spin = Math.sin(this.time * 9) * 0.4;
         const ground = fkProject(this.freeKick.setup, { ...pathAt(this.fk.path, since), y: 0 });
         c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(ground.x, ground.y, r, r * 0.35, 0, 0, Math.PI * 2); c.fill();

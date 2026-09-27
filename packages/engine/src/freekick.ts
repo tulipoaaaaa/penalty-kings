@@ -4,7 +4,8 @@
  * on a timing; a keeper positioned relative to the wall. Metres, seconds. Same inputs + seed →
  * same result everywhere.
  */
-import { prng, clamp, keeperAt, type KeeperProfile, type KeeperPlan, type Difficulty, NEUTRAL, shotZone, type Zone } from "./index.ts";
+import { prng, clamp, type KeeperProfile, type KeeperPlan, type Difficulty, NEUTRAL, shotZone, type Zone } from "./index.ts";
+import { keeperFrame, keeperTouch, BALL_RADIUS, GOAL_ASPECT, LEG_CHANCE, type KeeperPart } from "./keeper-rig.ts";
 
 export const GOAL_HALF_WIDTH = 3.66, GOAL_HEIGHT = 2.44, WALL_DISTANCE = 9.15;
 const G = 9.81, DRAG = 0.0125, MAGNUS = 0.19, DT = 1 / 240, WIND_GAIN = 0.09;
@@ -50,7 +51,10 @@ export type FreeKickOutcome = Readonly<{
   knuckle: boolean;
   /** Wall centre and half-width in metres along x at the wall plane; which side it covers. */
   wall: { x: number; halfWidth: number; side: number; jumped: boolean };
+  /** The keeper's dive (plan.home = where he stood). The Stage draws keeperFrame(plan, t), the frame the save was tested on. */
   keeper: KeeperPlan;
+  /** Which part of the keeper the ball hit (keeper saves only). */
+  touch?: KeeperPart;
   /** 30 Hz samples for rendering. */
   path: FlightSample[];
 }>;
@@ -122,10 +126,12 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
   const read = clamp(keeper.read + difficulty.read, 0, 0.95);
   const guess = random() < read ? target.x : (random() < 0.5 ? -1 : 1) * (0.5 + random() * 0.4);
   const screened = Math.abs(target.x * GOAL_HALF_WIDTH - wallX) < halfWidth + 1.2;
+  const leg = random() < LEG_CHANCE;
   const plan: KeeperPlan = {
-    x: clamp(guess, -1, 1), y: clamp(target.y, 0.15, 0.85), lean: 0,
+    x: clamp(guess, -1, 1), y: clamp(target.y, 0.15, 0.85), lean: 0, home: startX,
     reaction: Math.max(0.05, keeper.reaction + difficulty.reaction + 0.12 + (screened ? 0.15 : 0)),
     diveTime: keeper.diveTime, reach: keeper.reach * difficulty.reach, body: keeper.body, maxY: keeper.maxY,
+    armScale: difficulty.reach, leg,
   };
   const wall = { x: wallX, halfWidth, side, jumped };
   const base = { target, zone, knuckle, wall, path };
@@ -137,11 +143,10 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
   if (hitsPost || hitsBar) return { ...base, result: "post", keeper: plan };
   if (ax > 1) return { ...base, result: "wide", keeper: plan };
   if (target.y > 1) return { ...base, result: "over", keeper: plan };
-  // Keeper hands relative to its start position.
-  const hands = keeperAt({ ...plan, x: plan.x - startX }, t);
-  const handX = startX + hands.x;
-  const saved = Math.hypot(target.x - handX, (target.y - Math.min(hands.y, plan.maxY)) * 1.2) < plan.reach || (Math.abs(target.x - startX) < plan.body && target.y < 0.8);
-  return { ...base, result: saved ? "save" : "goal", keeper: { ...plan, x: handX } };
+  // Round 6 B4b: saved ONLY when the ball (BALL_RADIUS at the crossing point) touches the keeper the
+  // Stage draws at that instant: keeperFrame(plan, t), the same rig and contact test as penalties.
+  const touch = keeperTouch(keeperFrame(keeper.id, plan, t), { x: target.x, y: target.y * GOAL_ASPECT }, BALL_RADIUS);
+  return touch ? { ...base, result: "save", keeper: plan, touch } : { ...base, result: "goal", keeper: plan };
 }
 
 /**
