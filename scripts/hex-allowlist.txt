@@ -1,0 +1,3 @@
+# Public 32-byte values allowed in the repo (tx hashes, pool ids, bytes32 constants). One per line.
+# RF/WETH Uniswap v4 pool id (rarefriends.com/docs/contracts)
+0x9116440ebd86be5f0b850524a0d52a97399c68027d3590fa3526e1039dda2240

@@ -1,6 +1,99 @@
-.starter-game{position:relative;width:100%;height:100%;overflow:hidden;color:#000;background:#fff;font:14px/1.4 monospace}.starter-world{position:absolute;inset:0}
-.starter-hud{position:absolute;inset:14px 16px auto;display:flex;align-items:center;gap:8px;pointer-events:none}.starter-hud span{margin-right:auto;background:#fff;padding:8px;border:1px solid #000}.starter-hud button{pointer-events:auto}
-.starter-game button,.starter-loading button{font:inherit;cursor:pointer;padding:9px 13px;border:2px solid #000;background:#fff;color:#000}.starter-game button:disabled{cursor:default;opacity:.5}.starter-game button.rf-frame-primary{background:#ccff00}
-.starter-hint{position:absolute;bottom:50px;left:16px;right:16px;margin:0;text-align:center;background:#fff;font-size:11px;pointer-events:none}.starter-mobile-hint{display:none}.starter-game table{width:100%;text-align:left;border-collapse:collapse;margin:18px 0}.starter-game th,.starter-game td{padding:8px 4px;border-bottom:1px solid #ddd}
-.starter-game label{display:block;margin:16px 0}.starter-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #ddd}.starter-item small{display:block;margin-top:3px}.starter-reward{text-align:center}.starter-reward>span{font-size:64px}.starter-reward button{margin:6px}.starter-loading{height:100%;display:flex;gap:16px;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
-@media(max-width:520px){.starter-hud{inset:8px 8px auto;gap:5px;font-size:10px}.starter-hud button{padding:7px}.starter-hud span{padding:6px}.starter-hint{bottom:44px;font-size:10px}.starter-mobile-hint{display:inline}.starter-desktop-hint{display:none}}
+/* Penalty Kings — game UI inside the SDK sandbox. Scales with the frame width (container units). */
+.pk {
+  --pk-ink: #0b0d1a; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2;
+  position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--pk-ink);
+  container-type: size; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; color: var(--pk-paper);
+  -webkit-user-select: none; user-select: none;
+}
+.pk-stage { position: absolute; inset: 0; }
+.pk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; touch-action: none; outline: none; cursor: crosshair; }
+.pk-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--pk-volt); }
+
+.pk-hud { position: absolute; top: 1.2cqh; display: flex; flex-wrap: wrap; gap: 0.6cqw; max-width: 49cqw; font-size: clamp(8px, 1.45cqw, 14px); pointer-events: none; }
+.pk-hud-left { left: 1.2cqw; }
+.pk-hud-right { right: 1.2cqw; justify-content: flex-end; }
+.pk-stat, .pk-chip { background: #0b0d1ad9; border: 1px solid #ffffff2e; padding: 0.35em 0.6em; border-radius: 3px; white-space: nowrap; }
+.pk-stat b { color: var(--pk-volt); }
+.pk-chip { font-weight: 700; letter-spacing: 0.06em; }
+.pk-sim { background: #ffd23f; color: var(--pk-ink); border-color: #ffd23f; }
+.pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
+
+.pk-round { position: absolute; top: 13cqh; left: 50%; transform: translateX(-50%); display: flex; gap: 1cqw; align-items: center; font-size: clamp(8px, 1.4cqw, 13px); pointer-events: none; }
+.pk-keeper { background: #0b0d1ad9; padding: 0.3em 0.6em; border-radius: 3px; }
+.pk-dots { display: inline-flex; gap: 0.35em; align-items: center; background: #0b0d1ad9; padding: 0.3em 0.6em; border-radius: 3px; }
+.pk-dots i { width: 0.8em; height: 0.8em; border-radius: 50%; border: 1px solid #fff9; display: inline-block; }
+.pk-dots i[data-goal="true"] { background: var(--pk-volt); border-color: var(--pk-volt); }
+.pk-dots i[data-goal="false"] { background: var(--pk-red); border-color: var(--pk-red); }
+
+.pk-banner { position: absolute; top: 34cqh; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
+.pk-banner strong { display: block; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
+.pk-banner span { display: inline-block; margin-top: 0.4em; font-size: clamp(8px, 1.6cqw, 15px); background: #0b0d1ae6; padding: 0.3em 0.7em; border-radius: 3px; }
+.pk-goal strong { color: var(--pk-volt); }
+.pk-miss strong { color: var(--pk-red); }
+@keyframes pk-pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+.pk-aimhint, .pk-art-status { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16cqh; margin: 0; max-width: 56cqw; text-align: center; font-size: clamp(7px, 1.35cqw, 13px); background: #0b0d1ad9; padding: 0.4em 0.8em; border-radius: 3px; pointer-events: none; }
+.pk-art-status { bottom: auto; top: 20cqh; }
+.pk-toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16cqh; margin: 0; max-width: 64cqw; font-size: clamp(8px, 1.4cqw, 13px); background: var(--pk-paper); color: var(--pk-ink); padding: 0.5em 0.9em; border-radius: 3px; }
+
+/* Bottom action bar: centred, clear of the runtime's wallet (bottom-left) and menu (bottom-right) controls. */
+.pk-actions { position: absolute; right: 1.2cqw; bottom: 13cqh; display: flex; flex-direction: column; align-items: stretch; gap: 1cqh; width: 17cqw; min-width: 76px; }
+.pk button { font: inherit; cursor: pointer; }
+.pk-actions button { font-size: clamp(9px, 1.7cqw, 16px); min-height: max(28px, 6.5cqh); padding: 0 0.8em; border-radius: 4px; border: 2px solid var(--pk-paper); background: #0b0d1ae6; color: var(--pk-paper); font-weight: 700; }
+.pk-actions button:disabled { opacity: 0.45; cursor: default; }
+.pk-primary { background: var(--pk-volt) !important; color: var(--pk-ink) !important; border-color: var(--pk-volt) !important; }
+.pk-actions button:focus-visible, .pk-reveal button:focus-visible { outline: 3px solid var(--pk-gold); outline-offset: 2px; }
+
+.pk-reveal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -52%); width: min(58cqw, 460px); background: #0b0d1af2; border: 2px solid var(--pk-gold); border-radius: 6px; padding: 2.2cqh 2.4cqw; text-align: center; font-size: clamp(8px, 1.5cqw, 14px); animation: pk-rise 0.4s ease-out; max-height: 84cqh; overflow: auto; box-sizing: border-box; }
+.pk-reveal h2 { margin: 0.2em 0; font-size: 1.9em; color: var(--pk-gold); }
+.pk-reveal small { text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.8; }
+.pk-reveal p { margin: 0.5em 0; }
+.pk-reveal b { color: var(--pk-volt); }
+.pk-reveal .pk-primary { font-size: 1.15em; padding: 0.6em 1.4em; border-radius: 4px; border: 0; font-weight: 700; min-height: 32px; }
+.pk-rule { font-size: 0.85em; opacity: 0.85; font-style: italic; }
+@keyframes pk-rise { from { transform: translate(-50%, -40%); opacity: 0; } }
+.pk-ballicon { image-rendering: pixelated; vertical-align: middle; }
+
+.pk-paused { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0d1a99; font-size: clamp(14px, 4cqw, 40px); font-weight: 700; letter-spacing: 0.2em; }
+.pk-loading { display: grid; place-items: center; align-content: center; gap: 12px; height: 100%; background: #0b0d1a; color: #f7f7f2; font-family: ui-monospace, Menlo, monospace; text-align: center; padding: 16px; }
+.pk-loading-ball { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #111; animation: pk-bounce 0.8s ease-in-out infinite alternate; }
+@keyframes pk-bounce { to { transform: translateY(-14px); } }
+
+/* Menu content (inside the SDK GameMenu). */
+.pk-hub { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.pk-hub button, .pk-keepers button, .pk-shopgroup button, .pk-settings button { min-height: 36px; text-align: left; }
+.pk-keepers { display: grid; gap: 8px; }
+.pk-keepers button { display: grid; gap: 2px; padding: 8px 10px; }
+.pk-keepers button[aria-pressed="true"], .pk-shopgroup button[aria-pressed="true"] { outline: 2px solid currentColor; }
+.pk-odds { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.pk-odds th, .pk-odds td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #8884; }
+.pk-buyrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.pk-warn { font-weight: 700; }
+.pk-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #8883; }
+.pk-item[data-current="true"] { font-weight: 700; }
+.pk-item small { display: block; opacity: 0.8; }
+.pk-table { padding-left: 0; list-style: none; margin: 6px 0; }
+.pk-table li { display: flex; justify-content: space-between; padding: 2px 4px; }
+.pk-table li[data-mine="true"] { font-weight: 700; outline: 1px dashed currentColor; }
+.pk-shopgroup { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.pk-shopgroup h3 { width: 100%; margin: 6px 0 0; font-size: 1em; }
+.pk-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid #0006; vertical-align: middle; }
+.pk-note { font-size: 0.85em; opacity: 0.85; }
+.pk-roundcard { text-align: center; }
+.pk-roundcard .pk-dots { background: transparent; }
+
+/* Phone frames (≈360 × 240): compact HUD, keep touch targets. */
+@container (max-width: 560px) {
+  .pk-hud { gap: 3px; max-width: 48cqw; }
+  .pk-hud .pk-stat:nth-child(n+4) { display: none; }
+  .pk-hud-right .pk-stat:nth-child(n+3) { display: none; }
+  .pk-round { top: 21cqh; }
+  .pk-actions { bottom: 13cqh; gap: 3px; width: 22cqw; }
+  .pk-actions button { padding: 0 0.4em; min-height: 24px; }
+  .pk-aimhint { display: none; }
+  .pk-reveal { width: 72cqw; padding: 1.5cqh 2cqw; }
+  .pk-reveal { font-size: 8px; }
+  .pk-reveal h2 { font-size: 1.5em; }
+  .pk-reveal .pk-rule { font-size: 7px; margin: 0.3em 0 0; }
+}
+@media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }

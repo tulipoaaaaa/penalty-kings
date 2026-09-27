@@ -72,7 +72,7 @@ export function shotTarget(shot: ShotInput) {
   const power = clamp(shot.power, 0, 1);
   return {
     x: clamp(shot.aimX, -1.6, 1.6) + clamp(shot.curl, -1, 1) * 0.3,
-    y: Math.max(0.02, 1.12 * power - 0.1 + clamp(shot.loft, -0.3, 0.3)),
+    y: Math.max(0.02, 1.25 * power - 0.15 + clamp(shot.loft, -0.3, 0.3)),
     time: 0.95 - 0.55 * power,
   };
 }

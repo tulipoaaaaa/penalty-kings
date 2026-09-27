@@ -1,0 +1,61 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Secret scan (mnemonics, private keys)
+        run: npm run secret-scan
+      - name: Engine copy matches packages/engine
+        run: npm run check:engine-sync
+      - run: npm run typecheck
+      - name: Odds (sum 10000 bps, EV 90.00% for every tier)
+        run: npm run verify:odds
+      - name: Engine unit tests
+        run: npm run test:engine
+      - name: FriendSDK game check
+        run: npm run check
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: FriendSDK smoke test (960px and 360px)
+        run: npm run test:smoke
+      - name: Interaction test (buy → place → reveal → shoot → HUD)
+        run: npm run test:game
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: artifacts/
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Forge build + unit tests
+        working-directory: contracts
+        run: |
+          if [ ! -f foundry.toml ]; then echo "SKIPPED: no contracts yet"; exit 0; fi
+          forge build
+          forge test -vv --no-match-contract Fork
+      - name: Fork tests (need a Robinhood RPC)
+        working-directory: contracts
+        env:
+          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+        run: |
+          if [ ! -f foundry.toml ]; then echo "SKIPPED: no contracts yet"; exit 0; fi
+          if [ -z "$ROBINHOOD_RPC_URL" ]; then echo "SKIPPED: fork tests (no ROBINHOOD_RPC_URL secret) — NOT a pass"; exit 0; fi
+          forge test -vv --match-contract Fork --fork-url "$ROBINHOOD_RPC_URL"

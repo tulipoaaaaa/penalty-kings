@@ -1,41 +1,80 @@
-# Game component starter
+# Penalty Kings
 
-SDK version **v0.1.2**. This component is a small playable garden with a pack
-dispenser and an opening station. It has no application routes, navigation,
-wallet connection code or identity gate. The SDK runtime supplies those game
-infrastructure capabilities and the selected, verified owned Friend.
+Your hardwired Rare Friend is the striker. Buy balls with RF, reveal each ball's rarity, then
+flick it past one of four original keepers. Built with **FriendSDK v0.1.2**.
 
-Use the SDK's local game command from your current project to run this component.
-For an existing project, mount the SDK runtime in its existing game slot and
-provide this component and `game.json`. Other project setups and layouts are
-welcome; retain the runtime's real ownership checks and sandbox boundary.
-See the package README for the exact installation and runtime command.
+> **Preview economy is SIMULATED.** RF balances, balls, rewards, $GBOOT, the Cup pot, race
+> tables and rivals in the preview are simulated and reset on reload. The wallet connection
+> and the hardwired-Friend ownership gate are real (SDK runtime).
 
-Move with WASD, arrow keys, or a tap/click destination. Walk to the dispenser,
-press E or tap its prompt, and buy a simulated pack. Walk to the crate to open
-it. Keep the revealed collectible or redeem it through the inventory menu.
-Settings include mute and reduced motion; failed artwork loads can be retried.
+**Your kick never changes what you win — ball rarity is decided by on-chain randomness. Skill is
+for glory, streaks and the leaderboard.**
 
-| Rule | Exact value |
-| --- | --- |
-| Pack price | 1 RF (`1000000000000000000` base units) |
-| Garden pebble | 60% / 6,000 basis points; 0.5 RF |
-| Pressed flower | 30% / 3,000 basis points; 1 RF |
-| Crystal | 10% / 1,000 basis points; 3 RF |
-| Expected reward | 0.9 RF per pack |
-| Consumable | One pack produces exactly one collectible |
-| Backing | Each purchased or pending pack reserves 3 RF; kept rewards reserve their fixed RF value |
-| Redemption | Fixed value, no expiry; paid to the selected Friend's canonical wallet in a future approved real integration |
+## Run
 
-All balances, purchases, openings, collectibles and redemptions are simulated.
-An owned hardwired Generations NFT is still required. The component only calls
-the SDK's fixed preview client. It does not deploy contracts or send transactions.
-No trading, creator fees or wearable NFTs are implemented.
+```sh
+npm ci
+npm run dev            # friendsdk dev ./games/penalty-kings  →  http://localhost:4173
+npm run build:site     # static site in site/ (Park at /, Pro at /pro/, Champions at /champions/)
+```
 
-The source uses public SDK modules only. This example uses `GameWorld` to render
-the bundled garden props and the selected Friend's live sprites, with collision,
-depth sorting and keyboard/touch movement. `GameWorld`, these assets, the camera
-and the garden's visual style are optional starting points. Build your own
-setting, assets, character art, renderer and menus, with controls suited to your
-genre. Custom artwork does not replace the runtime's NFT ownership checks. Use
-the supported action client for economy actions and keep the game accessible.
+Requires a browser wallet on Robinhood mainnet (chain 4663) holding a hardwired Rare Friends
+Generations NFT (generation ≥ 1).
+
+## Controls
+
+| | Touch / mouse | Keyboard |
+|---|---|---|
+| Aim | drag up from the ball — direction | ← → |
+| Power | drag length (meter beside the ball; red = over the bar) | hold Space, release to shoot |
+| Curl | curve the flick | A / D |
+| Loft | — | ↑ ↓ |
+| Continue | buttons | Enter on the reveal |
+
+Warm-up kicks are free and give no score or rewards. Mute and reduced motion are in Settings.
+The game pauses whenever the runtime menu is open.
+
+## Rules
+
+1. **Buy balls** in the Kit bag (one SDK consumable per stadium).
+2. **Place a ball**: the SDK `play` + `settle` actions draw its rarity. The rarity fixes its RF
+   redemption value (kept in your Locker, no expiry), its $GBOOT drop and its score multiplier.
+3. **Shoot.** Deterministic pseudo-3D flight (aim, height, curl) resolves goal / save / post /
+   over / wide against a seeded keeper dive.
+4. **Score** = 100 × keeper multiplier × ball multiplier × streak (×1, ×1.5, ×2 … capped at ×3).
+   A save or miss resets the streak. Rounds are 5 kicks; 3+ goals unlocks sudden death at ×2.
+
+### Keepers (original 16 × 16 art)
+
+| Keeper | Style | Score × |
+|---|---|---|
+| Showboat | commits before you strike, big early dives | 1 |
+| Octopus | random guesses, very long reach | 1.25 |
+| The Wall | holds the middle, fills the goal | 1.5 |
+| Ghost | waits, then reads your aim | 2 |
+
+## Stadiums and odds (identical odds, 90.00% return)
+
+| Ball | Chance | RF value × price | Park 10 RF | Pro 1,000 RF | Champions 10,000 RF | $GBOOT drop × |
+|---|---:|---:|---:|---:|---:|---:|
+| Scuffed Ball | 31.5% | 0 | 0 | 0 | 0 | 1 |
+| Training Ball | 27% | 0.5 | 5 | 500 | 5,000 | 1.5 |
+| Match Ball | 20% | 1 | 10 | 1,000 | 10,000 | 2 |
+| Pro Ball | 11% | 1.5 | 15 | 1,500 | 15,000 | 3 |
+| Silver Ball | 7% | 2.5 | 25 | 2,500 | 25,000 | 5 |
+| Gold Ball | 2.5% | 5 | 50 | 5,000 | 50,000 | 8 |
+| Golden Boot Ball | 1% | 10 | 100 | 10,000 | 100,000 | 15 |
+
+Every purchased ball reserves the top prize (10 × price) until settled; kept balls stay backed
+with no expiry. `game.json` is the Park definition; `tiers/*.json` hold all three. The SDK
+runtime runs one chance-game definition per session, so each stadium is its own build/page.
+
+Base $GBOOT drop (simulated preview, launch price 0.01 RF): Park 13, Pro 1,300, Champions 13,000
+× the rarity multiplier (average 2.15×, ≈ 2.8% of the ball price).
+
+## Assets
+
+All art is original and drawn in code: pitch, crowd, goal, four keepers, ball, UI. The Friend is
+drawn from its canonical on-chain Generations sprite (SDK sprite reader), unaltered. UI sounds
+use the FriendSDK sound kit (code-synthesised, see its NOTICE); crowd/kick sounds are synthesised
+noise in `audio.ts`. No real clubs, crests, players or brands.

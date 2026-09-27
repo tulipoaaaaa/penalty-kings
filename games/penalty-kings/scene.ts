@@ -9,7 +9,7 @@ import { BALL_ROWS, KEEPER_ART } from "./art.js";
 
 export const W = 480, H = 320;
 export const GOAL = { left: 150, right: 330, bar: 78, line: 168, unit: 90, cx: 240 } as const;
-export const SPOT = { x: 240, y: 262 } as const;
+export const SPOT = { x: 240, y: 246 } as const;
 
 export const toScreen = (gx: number, gy: number) => ({ x: GOAL.cx + gx * GOAL.unit, y: GOAL.line - gy * GOAL.unit });
 
@@ -89,10 +89,10 @@ function drawPitch(context: CanvasRenderingContext2D) {
   const line = (x1: number, y1: number, x2: number, y2: number) => { context.beginPath(); context.moveTo(x1 + 0.5, y1 + 0.5); context.lineTo(x2 + 0.5, y2 + 0.5); context.stroke(); };
   line(0, GOAL.line, W, GOAL.line);
   line(118, GOAL.line, 104, 196); line(362, GOAL.line, 376, 196); line(104, 196, 376, 196);
-  line(40, GOAL.line, -10, 250); line(440, GOAL.line, 490, 250); line(-10, 250, 490, 250);
+  line(40, GOAL.line, -10, 236); line(440, GOAL.line, 490, 236); line(-10, 236, 490, 236);
   context.fillStyle = "#e9f5e1"; context.fillRect(SPOT.x - 2, SPOT.y + 3, 5, 2);
   // D arc.
-  context.beginPath(); context.ellipse(240, 250, 50, 12, 0, 0, Math.PI); context.stroke();
+  context.beginPath(); context.ellipse(240, 236, 50, 12, 0, 0, Math.PI); context.stroke();
 }
 
 function drawGoal(context: CanvasRenderingContext2D, state: SceneState, front: boolean) {

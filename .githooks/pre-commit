@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks commits containing a mnemonic or an un-allowlisted 32-byte hex string.
+node scripts/secret-scan.mjs --staged || { echo "Commit blocked by secret scan."; exit 1; }
