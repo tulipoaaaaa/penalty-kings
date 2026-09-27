@@ -26,7 +26,13 @@ export const FIRST_SESSION: readonly FirstKick[] = [
 ];
 
 /** The card that flips into the Scouting Book after the first round, plus the next-unlock teaser. */
-export const FIRST_UNLOCK = { keeper: "octopus" as KeeperId, card: "New rival scouted: Octavia!", teaser: "Free Kicks unlock at level 2 — you're nearly there." } as const;
+export const FIRST_UNLOCK = {
+  keeper: "octopus" as KeeperId, card: "New rival scouted: Octavia!",
+  /** Shown while Free Kicks is still locked (below level 2). */
+  teaser: "Free Kicks unlock at level 2 — you're nearly there.",
+  /** Shown once the tutorial XP has opened Free Kicks (the usual case: the tutorial reaches level 2). */
+  teaserOpen: "Next up: Free Kicks — bend it round the wall!",
+} as const;
 
 /** The best goal so far (for the replay): highest points, then the most recent. */
 export function bestGoal<T extends { result: string; points: number }>(kicks: readonly T[]) {

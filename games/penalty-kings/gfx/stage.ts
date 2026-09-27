@@ -22,7 +22,7 @@ export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => 
 export const BACKDROP_DROP = Math.round(PENALTY_GOAL.y - 30 - 102);
 /** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. Defined in gfx/kick.ts. */
 export { STRIKE_AT };
-export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "walkon-done";
+export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "replay-done" | "walkon-done";
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
@@ -113,7 +113,7 @@ export class Stage {
   /** DEV (Showroom): draw the keeper hitbox and the ball at arrival over the scene. */
   debugHitbox = false;
   /** What the viewer actually saw (the 90-second QA reads this). */
-  stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0, walkOns: 0,
+  stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0, walkOns: 0, replays: 0,
     /** Every line shown, with real-time seconds (the QA checks 0 repeats within 60 s). Bounded. */
     lineLog: [] as { text: string; at: number }[] };
 
@@ -138,6 +138,8 @@ export class Stage {
   /** A keeper walk-on (surprise keeper, substitution, boss): the old keeper walks off, the new one walks on, then a taunt. */
   private walkOn: { from: KeeperId; t: number } | null = null;
   private walkOnFade = 0;
+  /** A net-cam slow-mo replay of a stored outcome (skill-layer visual only: no events, stats or lines). */
+  private replaying: { slow: number; label: string; keeper: KeeperId } | null = null;
 
   constructor(options: Partial<Pick<Stage, "stadium" | "weather" | "keeper" | "reduced">> = {}) {
     Object.assign(this, options);
@@ -150,11 +152,11 @@ export class Stage {
   setReduced(value: boolean) { this.reduced = value; this.camera.reduced = value; this.particles.budget = value ? 0.25 : 1; }
   get busy() { return this.mode !== "idle" || Boolean(this.reveal); }
   /** A moment a kick must not cut short: the walkout or a pack reveal sequence. */
-  get moment() { return this.mode === "walkout" || Boolean(this.reveal) || Boolean(this.walkOn); }
+  get moment() { return this.mode === "walkout" || Boolean(this.reveal) || Boolean(this.walkOn) || Boolean(this.replaying); }
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
 
   // ── Moments ───────────────────────────────────────────────────────────────
   say(context: CommentaryContext) {
@@ -183,14 +185,15 @@ export class Stage {
   /** Play the whole choreographed shot for an already-resolved outcome. */
   play(outcome: ShotOutcome, curl: number, flightOverride?: number) {
     this.timeline.reset(); this.mode = "shot"; this.modeTime = 0; this.ballVisible = true; this.reticle = null; this.clock = null; this.preview = null;
-    this.stats.shots++; if (this.kind !== "target") this.stats.keepers.add(this.keeper);
+    const live = !this.replaying;
+    if (live) { this.stats.shots++; if (this.kind !== "target") this.stats.keepers.add(this.keeper); }
     if (flightOverride === undefined) this.fk = null;
     // Snappy (round 6 B3): strike 0.4 s after release, flight 0.35–0.55 s by power (target.time 0.4–0.95).
     const flight = flightOverride ?? penaltyFlight(outcome.target.time);
     this.shot = this.lastShot = { outcome, curl, flight, strikeAt: STRIKE_AT };
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
-    this.sfx("heartbeat"); if (!this.said || this.said.t > 1.5) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
+    this.sfx("heartbeat"); if (live && (!this.said || this.said.t > 1.5)) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
     this.timeline
       .at(0, () => this.sfx("whistle"))
       .at(0.1, () => this.stepDust(0.1)).at(0.19, () => this.stepDust(0.19)).at(0.28, () => this.stepDust(0.28))
@@ -199,17 +202,31 @@ export class Stage {
         this.camera.hitStop = 2 / 60; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: ball.x, y: ball.y, t: 0 };
         this.ball.squash = 0.35; this.camera.addTrauma(0.25); this.camera.targetZoom = this.reduced ? 1 : 1.12;
         this.particles.emit("grass", ball.x, ball.y + 3, 10, { color: ["#2e7d32", "#8bc34a"], speed: 50, spread: 1.4, life: 0.5 });
-        this.sfx("kick"); this.sfx("whoosh"); this.onEvent("strike");
+        this.sfx("kick"); this.sfx("whoosh"); if (live) this.onEvent("strike");
         const k = KEEPER_DESIGNS[this.keeper].sfx; if (k === "stomp") { this.camera.addTrauma(0.3); this.sfx("stomp"); }
       })
       .at(STRIKE_AT + flight, () => this.resolve())
       // Next kick ready fast: a goal hands back control after 1.0 s while the celebration keeps
       // playing (the next strike cuts it); a miss after 1.3 s (the reaction beat has played).
       .at(STRIKE_AT + flight + (outcome.result === "goal" ? 1.0 : 1.3), () => {
+        if (this.replaying) { this.keeper = this.replaying.keeper; this.replaying = null; this.mode = "idle"; this.shot = null; this.ballVisible = false; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.onEvent("replay-done"); return; }
         if (this.kind === "target" || outcome.result !== "goal") { this.finish(); return; }
         this.startCelebration(this.celebration); this.onEvent("done");
       });
   }
+
+  /**
+   * Net-cam slow-mo replay of an already-resolved, stored outcome (first session: the best goal so far).
+   * A skill-layer visual only: it re-plays what the engine decided earlier, emits no strike/resolved/done
+   * events, counts no stats and says no line. Reduced motion: normal speed, no zoom, still captioned.
+   */
+  replay(outcome: ShotOutcome, curl: number, keeper: KeeperId = this.keeper, label = "NET-CAM REPLAY") {
+    this.replaying = { slow: this.reduced ? 1 : 0.4, label, keeper: this.keeper }; this.stats.replays++;
+    this.keeper = keeper; // the keeper who faced that kick (restored when the replay ends)
+    this.kind = "penalty"; this.freeKick = null;
+    this.play(outcome, curl);
+  }
+  get replayingNow() { return Boolean(this.replaying); }
 
   /** Free kick: the engine's flight path is the animation; "wall" plays as a block. */
   playFreeKick(outcome: FreeKickOutcome) {
@@ -235,6 +252,10 @@ export class Stage {
       return;
     }
     this.crowd.react(result === "goal" ? "cheer" : result === "post" || result === "over" ? "ooh" : "groan");
+    if (this.replaying) { // the replay: net ripple and confetti only (no line, no stats, no events)
+      if (result === "goal") { this.net.impulse(art.x, art.y, 160); this.particles.emit("confetti", end.x, end.y - 10, 30, { color: THEMES[this.stadium].confetti, speed: 120, spread: Math.PI * 1.2, gravity: 70, life: 2 }); this.sfx("net"); }
+      return;
+    }
     // Woodwork near the top is the crossbar, not the post (round 6 C13).
     const said = this.cue ?? result, bar = result === "post" && shot.outcome.target.y > 0.9;
     this.say(bar && (said === "post" || said === "near-miss") ? "crossbar" : said); this.cue = null;
@@ -270,7 +291,7 @@ export class Stage {
 
   startCelebration(id: CelebrationId) { this.celebration = id; this.mode = "celebrate"; this.modeTime = 0; this.ballVisible = false; this.crowd.react("cheer"); this.stats.celebrations.add(id); }
   react(kind: "miss" | "save" | "post") { this.reaction = kind; this.mode = "react"; this.modeTime = 0; }
-  walkout() { this.stats.walkouts++; this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say("walkout"); }
+  walkout(line: CommentaryContext = "walkout") { this.stats.walkouts++; this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say(line); }
   /** ETHICS: the reveal is driven ONLY by a RevealPlan built from the settled outcome (game/reveal.ts). */
   showReveal(plan: RevealPlan) {
     this.reveal = { rarity: plan.rarity, t: 0, plan }; this.rarity = plan.rarity; this.stats.reveals++;
@@ -301,6 +322,10 @@ export class Stage {
       const near = shot.outcome.result === "post" || (shot.outcome.result !== "goal" && (Math.abs(Math.abs(t.x) - 1) < 0.12 || Math.abs(t.y - 1) < 0.1));
       // Near-misses only (no default slow-mo), ≤ 0.5 s of real time.
       if (near && since > shot.flight * 0.85 && since < shot.flight + 0.1) slow = 0.5;
+    }
+    if (this.replaying && this.mode === "shot") {
+      slow = Math.min(slow, this.replaying.slow);
+      if (!this.reduced) { const goal = this.goalPoint(toScreen(0, 0.5)); this.camera.targetX = goal.x; this.camera.targetY = goal.y; this.camera.targetZoom = 1.5; }
     }
     const dt = realDt * this.camera.timeScale * slow;
     this.time += dt; this.modeTime += dt;
@@ -388,6 +413,7 @@ export class Stage {
     this.drawCommentary(c);
     this.drawBubble(c);
     if (this.mode === "walkout") this.drawWalkout(c);
+    if (this.replaying) this.drawReplayCaption(c);
     if (this.reveal) this.drawReveal(c);
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${this.flash})`; c.fillRect(0, 0, W, H); }
     if (this.rarity === 6 && this.ballVisible && !this.reduced) { const glow = 0.25 + 0.15 * Math.sin(this.time * 6); c.strokeStyle = `rgba(255,140,0,${glow})`; c.lineWidth = 6; c.strokeRect(3, 3, W - 6, H - 6); }
@@ -696,6 +722,15 @@ export class Stage {
     c.fillStyle = "#ffffff"; c.fillRect(0, -14, w, 13); c.fillRect(4, -2, 4, 3);
     c.fillStyle = "#0b0d1a"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillText(this.bubble.text, 5, -7); c.textBaseline = "alphabetic";
     c.restore();
+  }
+
+  private drawReplayCaption(c: CanvasRenderingContext2D) {
+    const label = this.replaying!.label, blink = this.reduced || Math.floor(this.time * 3) % 2 === 0;
+    // Top right, under the kick counter (the discovery toast lives top left).
+    const width = 16 + label.length * 5.2, x = Math.round(W - 8 - width), y = 66;
+    c.fillStyle = "#0b0d1ad9"; c.fillRect(x, y, width, 14);
+    if (blink) { c.fillStyle = "#ff3b1f"; c.fillRect(x + 4, y + 4, 6, 6); }
+    c.fillStyle = "#f7f7f2"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillText(label, x + 14, y + 7); c.textBaseline = "alphabetic";
   }
 
   private drawWalkout(c: CanvasRenderingContext2D) {

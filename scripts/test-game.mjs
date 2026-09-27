@@ -91,6 +91,9 @@ await testGame("./games/penalty-kings", {
     }
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
     assert.match(await game.getByTestId("results").textContent(), /Tutorial complete/);
+    // SIO-2: the keeper-unlock card (flips into the Scouting Book) and the Free Kicks teaser.
+    assert.match(await game.getByTestId("unlock-card").textContent(), /New rival scouted: Octavia!/);
+    assert.match(await game.getByTestId("teaser").textContent(), /Free Kicks/);
     await button("Modes").click();
 
     // Big Match, founder flow: BUY a pack → OPEN (SDK play + settle) → REVEAL ALL → true summary → BAG →

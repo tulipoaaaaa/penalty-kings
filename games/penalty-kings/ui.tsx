@@ -207,26 +207,37 @@ export function ScoutingBook({ progress }: { progress: Progress }) {
 }
 
 function KeeperCard({ id, stamped }: { id: KeeperId; stamped: boolean }) {
-  const ref = useRef<HTMLCanvasElement>(null), profile = keeperById(id);
+  return <div className="pk-keepercard" data-stamped={stamped}>
+    <KeeperPortrait id={id} lit={stamped} />
+    <strong>{keeperById(id).name}{stamped ? " ✓" : ""}</strong>
+    <KeeperFacts id={id} />
+  </div>;
+}
+function KeeperPortrait({ id, lit }: { id: KeeperId; lit: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const context = ref.current?.getContext("2d");
     if (!context) return;
     context.imageSmoothingEnabled = false; context.clearRect(0, 0, 64, 64);
-    drawKeeper(context, id, { x: 32, y: 60, rotate: 0, stretch: 1, armL: -0.5, armR: -0.5, alpha: stamped ? 1 : 0.35, scaleMul: 0.8, mood: "idle" }, 0);
-  }, [id, stamped]);
-  return <div className="pk-keepercard" data-stamped={stamped}>
-    <canvas ref={ref} width={64} height={64} aria-hidden="true" />
-    <strong>{profile.name}{stamped ? " ✓" : ""}</strong>
+    drawKeeper(context, id, { x: 32, y: 60, rotate: 0, stretch: 1, armL: -0.5, armR: -0.5, alpha: lit ? 1 : 0.35, scaleMul: 0.8, mood: "idle" }, 0);
+  }, [id, lit]);
+  return <canvas ref={ref} width={64} height={64} aria-hidden="true" />;
+}
+function KeeperFacts({ id }: { id: KeeperId }) {
+  const profile = keeperById(id);
+  return <>
     <small>{profile.bio}</small>
     <small><b>Tell:</b> {profile.tell} · dives the right way {Math.round(profile.read * 100)}% of the time · points ×{profile.mult}</small>
-  </div>;
+  </>;
 }
 
 export type SessionSummary = { title: string; kicks: number; goals: number; points: number; xp: number; stars?: number; stamp?: string; unlocked?: string[];
   /** A plain final-score line (Big Match). */
   final?: string;
+  /** First session: the keeper-unlock card that flips into the Scouting Book, plus the next-mode teaser. */
+  scouted?: { keeper: KeeperId; card: string; teaser: string };
   match?: { rf: string; gboot: string; race: string; toTop10: string } };
-export function Results({ summary, onAgain, onModes, next }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null }) {
+export function Results({ summary, onAgain, onModes, next, onBook }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null; onBook?: () => void }) {
   const hasNext = Boolean(next && "onNext" in next);
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
@@ -240,6 +251,16 @@ export function Results({ summary, onAgain, onModes, next }: { summary: SessionS
     {summary.final && summary.xp > 0 && <p className="pk-note">You earned {summary.xp} XP.</p>}
     {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
+    {summary.scouted && <div className="pk-unlockcard" data-testid="unlock-card">
+      <p className="pk-badge" data-icon="book"><b>{summary.scouted.card}</b></p>
+      {/* The rival's card flips over into its Scouting Book page (CSS; reduced motion shows both, still). */}
+      <div className="pk-unlock-flip">
+        <div className="pk-unlock-front"><KeeperPortrait id={summary.scouted.keeper} lit /><strong>{keeperById(summary.scouted.keeper).name}</strong></div>
+        <div className="pk-unlock-back"><small>Scouting Book · new page</small><strong>{keeperById(summary.scouted.keeper).name} · scouted</strong><small><b>Tell:</b> {keeperById(summary.scouted.keeper).tell}</small></div>
+      </div>
+      <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>
+      {onBook && <button type="button" className="pk-link" onClick={onBook} data-testid="open-book">Open the Scouting Book</button>}
+    </div>}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
     <div className="pk-buyrow">

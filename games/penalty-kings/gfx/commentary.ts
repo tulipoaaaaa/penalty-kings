@@ -9,11 +9,12 @@ export type CommentaryContext =
   | "walkout" | "buildup" | "goal" | "save" | "post" | "crossbar" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
   | "timeout" | "level-up" | "stamp" | "tutorial-1" | "here-comes-trouble" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
-  | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
+  | "first-walkout" | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
   /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
   | `line:${string}`;
 
 const LINES: Readonly<Record<string, readonly string[]>> = {
+  "first-walkout": ["Introducing YOUR striker: {friend}!", "Ladies and gentlemen, your very own {friend}!", "Here's the star of the show: YOUR {friend}!"],
   walkout: ["And here comes {friend}, cool as a cucumber.", "What an entrance from {friend}!", "The crowd rise for {friend}.", "{friend} steps out of the tunnel. Goosebumps.", "Listen to that noise for {friend}!", "{friend} kisses the badge on the way out."],
   buildup: ["The stadium holds its breath...", "Deep breaths now.", "{keeper} is bouncing on the line.", "You could hear a pin drop.", "This is the moment.", "Eyes on the ball, {friend}.", "The ref checks his watch.", "Nobody's sitting down for this one."],
   goal: ["GOOOAL! Top drawer!", "Absolutely buried it!", "No chance for {keeper}!", "Right in the onion bag!", "That's in the history books!", "Cool as you like!", "Get the net-mender on the phone!", "What a finish from {friend}!", "Pass it into the net, why don't you!", "The keeper's still looking for it!", "Unstoppable!", "Clinical. Absolutely clinical."],
