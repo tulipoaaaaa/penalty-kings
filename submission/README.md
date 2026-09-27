@@ -8,9 +8,9 @@ against RF.
 Spotlight and Token Activity) · **SDK:** FriendSDK v0.1.2
 
 [Source code](https://github.com/tulipoaaaaa/penalty-kings) ·
-[Game rules](https://github.com/tulipoaaaaa/penalty-kings/blob/main/games/penalty-kings/README.md) ·
-[Economy design](https://github.com/tulipoaaaaa/penalty-kings/blob/main/docs/ECONOMY.md) ·
-[Deployment record](https://github.com/tulipoaaaaa/penalty-kings/blob/main/docs/DEPLOYMENT.md)
+[Game rules](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/games/penalty-kings/README.md) ·
+[Economy design](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md) ·
+[Deployment record](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/DEPLOYMENT.md)
 
 **One sentence:** Penalty Kings makes your Rare Friend the striker in a pixel-art penalty
 shootout where every ball is bought with RF and carries an on-chain-random rarity. That rarity
@@ -96,13 +96,13 @@ That adds RF buy pressure and pays the Rare Friends 5% WETH fee to active Friend
 paid to the Cup. Pool fees follow the same split: the RF side is burned and the $GBOOT side
 goes to the Cup.
 
-**Full design:** [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/main/docs/ECONOMY.md)
+**Full design:** [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md)
 covers the money-flow diagram, prize-bank capacity and solvency maths (simulated), pool growth
 (×2 needs about 2.6M RF), the farm check, a 50 / 500 / 5,000-player scale table and the
 roadmap.
 
 **Live contracts (optional extra, real RF):** see
-[docs/DEPLOYMENT.md](https://github.com/tulipoaaaaa/penalty-kings/blob/main/docs/DEPLOYMENT.md).
+[docs/DEPLOYMENT.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/DEPLOYMENT.md).
 Nothing is claimed live unless a verified transaction is linked there.
 
 ## Run it
