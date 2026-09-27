@@ -19,7 +19,9 @@ import { createGameDirector, applyBeat, playMoment, type Beat } from "../../game
 import { keyShot, type KeyAim } from "../../games/penalty-kings/game/input.js";
 import { createCrowd } from "../../games/penalty-kings/audio.js";
 import { isSfx } from "../../games/penalty-kings/audio-core.js";
-import { strikerRows } from "./striker.js";
+import { strikerRows, STRIKER_STAND } from "./striker.js";
+import { cardImage, shareAbilities, CARD_TAGLINE } from "../../games/penalty-kings/gfx/sharecard.js";
+import { PUBLIC_URL } from "../../games/penalty-kings/game/challenge.js";
 
 export const PRACTICE_KICKS = 5;
 /** Ad boards without token or cup names (the stadium's usual jokes minus the economy ones). */
@@ -164,8 +166,35 @@ function finish() {
   count.textContent = "Full time";
   endScore.textContent = `You scored ${state.goals} of ${PRACTICE_KICKS}.`;
   setStatus(`Practice over: ${state.goals} of ${PRACTICE_KICKS}.`);
+  resetShare();
   later(reducedMotion ? 200 : 1200, () => { end.hidden = false; document.body.classList.add("pp-finished"); (end.querySelector("h2") as HTMLElement | null)?.focus(); });
 }
+
+// ── C4 share card: the stand-in striker (never Friend art), goals and best streak; no network (a data: image) ──
+const shareButton = $<HTMLButtonElement>("pp-share-btn"), shareImage = $<HTMLImageElement>("pp-share-img"), shareNote = $("pp-share-note");
+const shareActions = $("pp-share-actions"), shareNative = $<HTMLButtonElement>("pp-share-native"), shareSave = $<HTMLAnchorElement>("pp-share-save");
+let shareFile: File | null = null;
+const longestRun = () => { let best = 0, run = 0; for (const kick of state.kicks) { run = kick.result === "goal" ? run + 1 : 0; best = Math.max(best, run); } return best; };
+function resetShare() {
+  shareFile = null; shareImage.hidden = true; shareImage.removeAttribute("src"); shareNote.hidden = true; shareActions.hidden = true;
+  shareButton.hidden = false; shareButton.disabled = false; shareButton.textContent = "Make my share card";
+}
+shareButton.addEventListener("click", async () => {
+  shareButton.disabled = true; shareButton.textContent = "Drawing…";
+  const image = await cardImage({ name: scene.friendName, score: state.goals, scoreLabel: "goals", goals: state.goals, kicks: state.kicks.length, bestStreak: longestRun(), subtitle: "Free practice", link: PUBLIC_URL }, STRIKER_STAND, "#ffffff");
+  shareFile = image.file;
+  shareImage.src = image.url; shareImage.alt = `Share card: ${state.goals} of ${state.kicks.length} goals, best streak ${longestRun()}. ${CARD_TAGLINE}.`; shareImage.hidden = false;
+  shareImage.dataset.bytes = String(image.bytes);
+  const can = shareAbilities(image.file);
+  shareNative.hidden = !can.share; shareSave.hidden = !can.download; shareSave.href = image.url;
+  shareActions.hidden = !can.share && !can.download; shareNote.hidden = false; shareButton.hidden = true;
+});
+shareNative.addEventListener("click", async () => {
+  if (!shareFile) return;
+  try { await navigator.share({ files: [shareFile], title: "Penalty Kings", text: `${CARD_TAGLINE}: ${PUBLIC_URL}` }); }
+  catch (error) { if ((error as { name?: string })?.name !== "AbortError") { shareNote.textContent = "Sharing is blocked here: long-press or right-click the image to save it."; } }
+});
+($<HTMLInputElement>("pp-share-link")).addEventListener("focus", event => (event.currentTarget as HTMLInputElement).select());
 
 // ── DOM bits ───────────────────────────────────────────────────────────────
 function renderResults() {

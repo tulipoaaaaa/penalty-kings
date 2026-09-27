@@ -90,3 +90,14 @@ button { font: inherit; }
 .pp-home, .pp-foot a { display: inline-flex; align-items: center; min-height: 44px; }
 .pp-rotate button { min-width: 44px; min-height: 44px; }
 @media (orientation: landscape) and (max-height: 560px) { :root { --top: 50px; } }
+
+/* C4: the share card on the end card (a data: PNG; no network) and the "Get a Friend" line. */
+.pp-share { display: grid; gap: 8px; margin: 12px 0 4px; padding: 8px; border: 2px dashed var(--pk-line); }
+.pp-share img { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 2px solid var(--pk-gold); -webkit-touch-callout: default; }
+.pp-share img[hidden], .pp-share [hidden] { display: none; }
+.pp-share .pp-end-links { margin-top: 0; }
+.pp-share-note { margin: 0; font-size: 12px; }
+.pp-share-link { display: grid; gap: 2px; font-size: 12px; }
+.pp-share-link input { min-height: 44px; padding: 4px 6px; font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--pk-paper); background: var(--pk-ink); border: 2px solid var(--pk-line); }
+.pp-btn-link { display: inline-flex; align-items: center; text-decoration: none; }
+.pp-end-card .pp-how { margin: 8px 0 0; font-size: 12px; color: #c9cde0; }

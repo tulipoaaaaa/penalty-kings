@@ -2,7 +2,7 @@
 // Practice (kicks + a timed-out round is not waited for) → World Tour level → Daily Challenge.
 // Screenshots each mode. Usage: node scripts/test-modes.mjs [--width 960] [--out artifacts/modes]
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
 import { playInPortraitIfAsked } from "./lib/phone.mjs";
@@ -49,7 +49,25 @@ await testGame("./games/penalty-kings", {
     for (let i = 1; i <= 3; i++) await kick(`tutorial ${i}`, { dx: i === 2 ? -0.4 : 0.4 });
     await game.getByTestId("results").waitFor();
     assert.match(await game.getByTestId("results").textContent(), /Level 2/);
+    // C4 SHARE CARD in the real sandbox: one tap draws a non-empty PNG. What the allow-scripts frame permits is probed
+    // and logged: an opaque origin cannot download (no allow-downloads), so no "Save image" link is offered there.
+    const sandbox = await game.locator("body").evaluate(() => ({ origin: window.origin, share: typeof navigator.share, canShare: typeof navigator.canShare, clipboard: typeof navigator.clipboard?.writeText }));
+    console.log(`sandbox abilities: ${JSON.stringify(sandbox)}`);
+    await game.getByTestId("share-card").click();
+    const shareImage = game.getByTestId("share-image");
+    await shareImage.waitFor();
+    const card = await shareImage.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes) }));
+    assert.equal(card.src, "data:image/png;base64,"); assert.deepEqual([card.w, card.h], [640, 360]);
+    assert.ok(card.bytes > 5000, `the share card is not empty (${card.bytes} bytes)`);
+    assert.equal(await game.getByTestId("share-download").count(), sandbox.origin === "null" ? 0 : 1, "no download link where the sandbox blocks downloads");
+    assert.equal(await game.getByTestId("share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");
+    console.log(`share card: ${card.w}x${card.h} PNG, ${card.bytes} bytes`);
     await button("Modes").click();
+    // C4: Day N (the check-in run) and the Keeper of the Week line on the modes screen.
+    assert.match(await game.getByTestId("streak-day").textContent(), /^Day 1/);
+    const weekly = await game.getByTestId("weekly-keeper").textContent();
+    assert.match(weekly, /^KEEPER OF THE WEEK: .+\. Score 3 in a round for ×2 XP/);
+    console.log(`weekly: ${weekly}`);
 
     // Free Kicks: engine physics, wall, wind, trajectory preview.
     // D20: the modes screen always names the next goal (free progression only).
@@ -69,7 +87,39 @@ await testGame("./games/penalty-kings", {
     }
     for (const result of fk) assert.match(result, /GOAL!|SCREAMER!|SAVED!|TIPPED OVER!|OFF THE POST!|OFF THE BAR!|OVER THE BAR!|WIDE!|BLOCKED!/);
     await game.getByTestId("results").waitFor();
+    // C4 CHALLENGE A FRIEND: the share card carries a challenge code; come back tomorrow for day 2.
+    assert.equal(await game.getByTestId("come-back").textContent(), "Come back tomorrow for day 2.");
+    await game.getByTestId("share-card").click();
+    const challengeCode = await game.getByTestId("challenge-code").inputValue();
+    assert.match(challengeCode, /^pkc1\.f\./, "a free-kick challenge code");
+    assert.equal(await game.getByTestId("share-link").inputValue(), `https://tulipoaaaaa.github.io/penalty-kings/?challenge=${challengeCode}`);
+    const fkScore = Number(await game.getByTestId("round").getAttribute("data-score"));
+    await frame.screenshot({ path: `${out}/c4-share-dialog-${width}.png` });
+    await writeFile(`${out}/c4-share-card.png`, Buffer.from((await game.getByTestId("share-image").getAttribute("src")).split(",")[1], "base64")); // the card itself, as shared
     await button("Modes").click();
+    // A tampered code is refused; the real one plays the same 3 free kicks against the same keeper.
+    await game.getByTestId("challenge-box").locator("summary").click();
+    const parts = challengeCode.split("."); parts[4] = (Number.parseInt(parts[4], 36) + 500).toString(36);
+    await game.getByTestId("challenge-in").fill(parts.join("."));
+    await game.getByTestId("challenge-play").click();
+    assert.match(await game.getByTestId("challenge-error").textContent(), /changed or mistyped/);
+    await game.getByTestId("challenge-in").fill(`https://tulipoaaaaa.github.io/penalty-kings/?challenge=${challengeCode}`);
+    assert.match(await game.getByTestId("challenge-brief").textContent(), /^Friend #7730 scored .* in 3 free kicks against .+\. Beat it!$/);
+    await game.getByTestId("challenge-play").click();
+    assert.equal(await game.getByTestId("mode-chip").textContent(), "CHALLENGE");
+    for (let i = 1; i <= 3; i++) await kick(`challenge free kick ${i}`, { fromY: 262, dx: [0.25, -0.3, 0.2][i - 1], steps: 10, step: 14 });
+    await game.getByTestId("results").waitFor();
+    const verdict = await game.getByTestId("results").locator("h3").textContent(); // the verdict is the Results title
+    const mine = Number(await game.getByTestId("round").getAttribute("data-score"));
+    assert.match(verdict, mine > fkScore ? /^You beat Friend #7730's / : mine === fkScore ? /^Level with Friend #7730/ : /^Friend #7730 still leads by /);
+    console.log(`challenge: ${fkScore} to beat, scored ${mine}: ${verdict}`);
+    await frame.screenshot({ path: `${out}/c4-challenge-result-${width}.png` });
+    await button("Modes").click();
+    // Keeper of the Week: a 5-penalty round against the featured keeper (the chip names the mode).
+    await game.getByTestId("weekly-keeper").click();
+    assert.equal(await game.getByTestId("mode-chip").textContent(), "KEEPER OF THE WEEK");
+    await game.getByTestId("menu").click();
+    await button("Change mode").click();
 
     // Target Practice: a few kicks against moving targets (the 60 s clock keeps running).
     await game.getByTestId("mode-target").click();

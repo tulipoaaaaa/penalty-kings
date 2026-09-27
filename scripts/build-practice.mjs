@@ -6,6 +6,8 @@ import { copyFile, mkdir, writeFile } from "node:fs/promises";
 
 /** The Rare Friends site, as cited in the repo docs (docs/ADDRESSES.md, docs/HUMAN-CHECKS.md). */
 export const RARE_FRIENDS_URL = "https://rarefriends.com";
+/** The public game (the share card and its link point here). */
+export const PUBLIC_URL = "https://tulipoaaaaa.github.io/penalty-kings/";
 
 export async function buildPractice(outdir, { mainGame = "../" } = {}) {
   await mkdir(`${outdir}/assets`, { recursive: true });
@@ -61,11 +63,22 @@ export async function buildPractice(outdir, { mainGame = "../" } = {}) {
     <h2 id="pp-end-title" tabindex="-1">Get your Friend to play for real</h2>
     <p>In Penalty Kings your striker is your own Rare Friend: a Rare Friends Generations NFT takes the kicks, and the stands fill with little copies of it.</p>
     <p>The full game (the 12-keeper ladder, free kicks, the World Tour, the daily challenge) runs inside the Rare Friends app through its SDK, which looks after signing in and your Friend. This page never connects a wallet.</p>
+    <div class="pp-share" data-testid="practice-share">
+      <button type="button" class="pp-btn" id="pp-share-btn" data-testid="practice-share-btn">Make my share card</button>
+      <img id="pp-share-img" data-testid="practice-share-img" width="640" height="360" alt="" hidden>
+      <p class="pp-share-note" id="pp-share-note" hidden>Long-press or right-click the image to save it, or send the link.</p>
+      <div class="pp-end-links" id="pp-share-actions" hidden>
+        <button type="button" class="pp-btn" id="pp-share-native" data-testid="practice-share-native" hidden>Share</button>
+        <a class="pp-btn pp-btn-link" id="pp-share-save" data-testid="practice-share-save" download="penalty-kings-practice.png" href="#" hidden>Save image</a>
+      </div>
+      <label class="pp-share-link">Link<input readonly id="pp-share-link" data-testid="practice-share-link" value="${PUBLIC_URL}"></label>
+    </div>
     <div class="pp-end-links">
       <a class="pp-cta" href="${mainGame}" data-testid="cta-game">Open the full game</a>
-      <a class="pp-cta pp-cta-alt" href="${RARE_FRIENDS_URL}" target="_blank" rel="noopener noreferrer" data-testid="cta-rarefriends">Rare Friends ↗</a>
+      <a class="pp-cta pp-cta-alt" href="${RARE_FRIENDS_URL}" target="_blank" rel="noopener noreferrer" data-testid="cta-rarefriends">Get a Friend to play for the pot ↗</a>
       <button type="button" class="pp-btn pp-btn-quiet" id="pp-again">Practice again</button>
     </div>
+    <p class="pp-how" data-testid="cta-how">How: a Friend is a hardwired Rare Friends Generations NFT on Robinhood; hold one and it takes the kicks.</p>
   </div>
 </section>
 <script src="./practice.js"></script>

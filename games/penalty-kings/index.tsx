@@ -46,6 +46,8 @@ import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview, type PackPhase } from "./ballui.js";
 import { RotateOverlay } from "./layout.js";
+import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf } from "./share.js"; // C4 social (own file: other lanes edit ui.tsx)
+import { keeperOfTheWeek, weeklyBonusXp, challengeSetup, challengeVerdict, type Challenge } from "./game/challenge.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
 import { SHOT_RULES, REPLAY_SECONDS, REPLAY_LABEL, replayReason, longestRun, withBestStreak, clockSeconds } from "./game/shots.js";
@@ -60,7 +62,7 @@ const goalsInARow = (kicks: readonly { result: string }[]) => { let run = 0; for
 type Menu = "hub" | "balls" | "bag" | "market" | "odds" | "cups" | "shop" | "book" | "tour" | "daily" | "settings" | "rules" | "results" | null;
 type Screen = "title" | "modes" | "play";
 type Phase = "idle" | "reveal" | "aim" | "shooting";
-type PlayMode = ModeId | "tutorial";
+type PlayMode = ModeId | "tutorial" | "challenge";
 type Session = {
   mode: PlayMode; kind: "penalty" | "freekick" | "target"; keeper: KeeperId; seed: number; total: number;
   kicks: KickRecord[]; points: number; streak: number; rung: number;
@@ -70,6 +72,8 @@ type Session = {
   earned: { rf: bigint; gboot: number; race: number };
   /** C2: the all-time BEST STREAK when this session started (Results says "new record" when it is beaten). */
   bestBefore?: number;
+  /** C4: a friend's challenge (same keeper, seed and kicks; `vs` holds their score) or a Keeper of the Week round. */
+  challenge?: { vs: Challenge | null; weekly: boolean };
 };
 type SkillEntry = { id: number; name: string; score: number; mine: boolean };
 type PackState = { rarities: number[]; revealed: boolean[]; gboot: number; sealed?: { count: number; expectedMs: number }; phase?: PackPhase };
@@ -542,7 +546,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   // ── Difficulty for the current kick ─────────────────────────────────────
   function difficultyFor(current: Session): Difficulty {
-    if (current.mode === "skill") return NEUTRAL; // the referee's rules
+    if (current.mode === "skill" || current.challenge?.vs) return NEUTRAL; // the referee's rules (C4: a friend's challenge is played on equal terms)
     if (current.mode === "tutorial") return { ...DIFFICULTY_LADDER[0], clock: 0 };
     return DIFFICULTY_LADDER[current.rung];
   }
@@ -634,7 +638,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let next: Session = { ...start, bestBefore: progressRef.current.bestStreak }, opening: Beat | null = null;
     const setup = { stadium: tier.id, weather: scene?.weather ?? "sun", timeOfDay: timeOfDay() } as const;
     if (next.mode === "tutorial") { tutorialShots.current = []; director().startSession({ ...setup, mode: "tutorial", keeper: next.keeper }); }
-    else { opening = director().startSession({ ...setup, mode: next.mode, keeper: next.keeper }); if (opening.keeperChanged && next.kind !== "target") next = { ...next, keeper: opening.keeper }; }
+    else { opening = director().startSession({ ...setup, mode: next.mode === "challenge" ? "daily" : next.mode, keeper: next.keeper }); /* C4: a challenge keeps its keeper, like the Daily */ if (opening.keeperChanged && next.kind !== "target") next = { ...next, keeper: opening.keeper }; }
     setSessionNow(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
       if (!inFlight.current) scene.cancel(); // clear any showreel/attract shot still playing on the Stage
@@ -681,6 +685,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     updateProgress(p => ({ ...p, daily: { ...record, attempts: record.attempts + 1 } }));
     beginSession(newSession("daily", { kind: scenario.mode === "freekick" ? "freekick" : "penalty", keeper: scenario.keeper, total: scenario.kicks, daily: scenario, setup: scenario.setup, seed: scenario.seed }));
   }
+
+  /** C4: a friend's challenge (their keeper, seed and kick count; no beacon, so the keeper plans are the same) or, with null, a Keeper of the Week round. */
+  const challengeSession = (vs: Challenge | null): Session => vs
+    ? newSession("challenge", { kind: vs.kind, keeper: vs.keeper, seed: vs.seed, total: vs.kicks, setup: vs.kind === "freekick" ? challengeSetup(vs.seed) : undefined, challenge: { vs, weekly: false } })
+    : newSession("challenge", { keeper: keeperOfTheWeek(today), total: 5, challenge: { vs: null, weekly: true } });
+  function startChallenge(vs: Challenge | null) { if (!may("start-mode")) return; void unlockAudio(); setError(""); beginSession(challengeSession(vs)); }
 
   function startAim(start: Session | null = live.current.session) {
     const scene = stage.current;
@@ -1087,6 +1097,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
         result.title = `Skill Cup entry: ${formatNumber(current.points)} pts${tag}`;
       }
+      if (current.mode === "challenge") { // C4: a friend's challenge, or the Keeper of the Week (3+ goals: the round's XP doubles)
+        const bonus = current.challenge?.weekly ? weeklyBonusXp(sessionXp.current + xp, goals) : 0;
+        xp += bonus;
+        result.title = current.challenge?.vs ? challengeVerdict(current.challenge.vs, current.points).text : bonus ? `Keeper of the Week beaten: ×2 XP (+${bonus})` : `Keeper of the Week: ${goals} goal${goals === 1 ? "" : "s"} (3 for ×2 XP)`;
+      }
       // The kicks' XP is already in p.xp: the Results total and the level-ups count from the session's start.
       const kickXp = sessionXp.current; sessionXp.current = 0;
       result = { ...result, xp: result.xp + kickXp + xp };
@@ -1424,7 +1439,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // World Tour results (round 6 C16): "Next level" opens the following level's brief, or says what opens its city.
   const after = menu === "results" && s?.mode === "tour" && s.level ? levelAfter(LEVELS, s.level, progress) : null;
   const tourNext = after && "level" in after ? { onNext: () => { setPendingLevel(after.level); setMenu("tour"); } } : after;
-  const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
+  const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "challenge" ? (s.challenge?.weekly ? "Keeper of the Week" : "Challenge") : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
   const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
   return <section className={`pk pk-stadium-${tier.id}${reducedMotion ? " pk-reduce-motion" : ""}`} aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
@@ -1497,6 +1512,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       <div className="pk-attract-top">
         <h1>PENALTY KINGS</h1>
         <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
+        <StreakBadge login={progress.login} today={today} />
       </div>
       <div className="pk-attract-bottom">
         <button type="button" className="pk-primary" autoFocus onClick={() => { void unlockAudio(); if (progress.tutorialDone) setScreen("modes"); else startMode("penalties"); }} data-testid="play">{progress.tutorialDone ? "Play" : "Kick off"}</button>
@@ -1508,7 +1524,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
     {screen === "modes" && !menu && <div className="pk-title pk-modescreen" role="dialog" aria-label="Choose a mode">
       <h2>Level {playerLevel} · {into}/{next} XP</h2>
+      <StreakBadge login={progress.login} today={today} />
       {(() => { const goal = nextGoal(progress, LEVELS, today); return <button type="button" className="pk-nextgoal" data-testid="next-goal" data-mode={goal.mode} onClick={() => startMode(goal.mode)}><b>NEXT GOAL</b> {goal.text} ▸</button>; })()}
+      <WeeklyKeeper keeper={keeperOfTheWeek(today)} onPlay={() => startChallenge(null)} />
       {checkinNote && <p className="pk-note" role="status" data-testid="checkin">{checkinNote}</p>}
       <ModeSelect progress={progress} onPick={startMode} />
       <div className="pk-buyrow">
@@ -1518,6 +1536,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <button type="button" onClick={() => setMenu("cups")}>Cups</button>
         <button type="button" onClick={() => setMenu("settings")}>Settings</button>
       </div>
+      <ChallengeBox onPlay={startChallenge} />
     </div>}
 
     <RotateOverlay onShownChange={setRotating} />
@@ -1640,7 +1659,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }
-          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+      {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={sprites.current ? spriteFrame(sprites.current, "down", false, 0, "right").frame.rows : null} halo={ALL_COSMETICS.find(item => item.id === equipped.kit)?.color} login={progress.login} today={today} />; })()}
     </GameMenu>}
   </section>;
 

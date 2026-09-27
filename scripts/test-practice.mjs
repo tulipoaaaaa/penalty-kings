@@ -12,7 +12,7 @@ import { mkdir, readFile, readdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import { serveStatic } from "./lib/static-server.mjs";
 
-const SITE = "site", SHOTS = process.env.PK_DOC_SHOTS ? "docs/screenshots" : "artifacts";
+const SITE = "site", SHOTS = process.env.PK_DOC_SHOTS ? "docs/screenshots" : "artifacts", C4_SHOTS = process.env.PK_DOC_SHOTS ? "docs/screenshots/greatness" : "artifacts";
 const RPC_HOSTS = ["rpc.mainnet.chain.robinhood.com", "robinhood", "infura", "alchemy", "quicknode", "walletconnect", "privy", "moonpay", "blockscout", "rarefriends.com"];
 const BUNDLE_BANNED = [/window\.ethereum/, /eth_requestAccounts/, /eth_chainId/, /wallet_switchEthereumChain/, /privy/i, /moonpay/i, /walletconnect/i, /metamask:\/\//i, /isPenaltyKingsDevWallet/, /mock-wallet/];
 
@@ -106,8 +106,28 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   const endText = await end.innerText();
   assert.match(endText, /Rare Friends Generations NFT/);
   assert.match(endText, /Rare Friends app/);
-  assert(!/\bRF\b|\$GBOOT|GBOOT|prize|jackpot|\bpot\b/i.test(await page.locator("body").innerText()), `${name}: economy words on the practice page`);
+  // C4: the one owner-approved CTA "Get a Friend to play for the pot" (a link out to Rare Friends) is the only place the pot is named.
+  const cta = await page.getByTestId("cta-rarefriends").innerText();
+  assert.match(cta, /^Get a Friend to play for the pot/);
+  assert.match(await page.getByTestId("cta-how").innerText(), /hardwired Rare Friends Generations NFT on Robinhood/);
+  assert(!/\bRF\b|\$GBOOT|GBOOT|prize|jackpot|\bpot\b/i.test((await page.locator("body").innerText()).replace(cta, "")), `${name}: economy words on the practice page`);
   if (!blockStorage) await page.screenshot({ path: `${SHOTS}/practice-${name}-end.png` });
+  // C4 share card: one tap draws a non-empty PNG (a data: URL, so still no network) with the stand-in striker.
+  await page.getByTestId("practice-share-btn").click();
+  const img = page.getByTestId("practice-share-img");
+  await img.waitFor({ state: "visible", timeout: 10_000 });
+  const card = await img.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes), alt: el.alt, download: !document.getElementById("pp-share-save").hidden }));
+  assert.equal(card.src, "data:image/png;base64,", `${name}: the card is a PNG data URL`);
+  assert.deepEqual([card.w, card.h], [640, 360], `${name}: card size`);
+  assert(card.bytes > 5000, `${name}: the card is not empty (${card.bytes} bytes)`);
+  assert.match(card.alt, /Beat me at Penalty Kings/);
+  assert.equal(card.download, true, `${name}: a normal page can save the image`);
+  assert.equal(await page.getByTestId("practice-share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");
+  // Is the card really drawn (not a blank canvas)? Count distinct colours in a sample.
+  const colours = await img.evaluate(el => { const c = document.createElement("canvas"); c.width = 640; c.height = 360; const x = c.getContext("2d"); x.drawImage(el, 0, 0); const d = x.getImageData(0, 0, 640, 360).data, set = new Set(); for (let i = 0; i < d.length; i += 4 * 97) set.add(`${d[i]},${d[i + 1]},${d[i + 2]}`); return set.size; });
+  assert(colours >= 6, `${name}: the card has content (${colours} colours)`);
+  if (name === "1280x800" && !blockStorage) { await page.setViewportSize({ width, height: 1300 }); await page.locator(".pp-end-card").screenshot({ path: `${C4_SHOTS}/c4-practice-end.png` }); await page.setViewportSize({ width, height }); }
+  report.push({ name: `${name} share card`, results: `${card.w}x${card.h} PNG, ${card.bytes} bytes, ${colours} colours`, goals: "-", keepers: "-", lines: 0, requests: "-" });
   assert.deepEqual(await smallTargets(page, ".pp-end"), [], `${name}: end-card tap targets under ${MIN_TAP} CSS px`);
   const cardSmall = await page.evaluate(() => [...document.querySelectorAll(".pp-end *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(el).fontSize) < 11).map(el => el.tagName));
   assert.deepEqual(cardSmall, [], `${name}: end card text under 11px`);
@@ -137,6 +157,19 @@ try {
     await page.goto(`${server.url}${path}`, { waitUntil: "load" });
     assert.deepEqual(await smallTargets(page, ".pk-stadiums"), [], `stadium bar /${path} at ${width}x${height}: tap targets under ${MIN_TAP} CSS px`);
     report.push({ name: `stadium bar /${path} ${width}x${height}`, results: "links >= 44px", goals: "-", keepers: "-", lines: 0, requests: "-" });
+    await context.close();
+  }
+  // C4: a challenge link (?challenge=CODE) on the trusted host page shows the code to paste into the sandboxed game.
+  {
+    const code = "pkc1.p.sumo.1fyf8el.13g.2lsohxawjui8i.02d36836";
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(`${server.url}?challenge=${code}`, { waitUntil: "load" });
+    assert.equal(await page.getByTestId("host-challenge-code").inputValue(), code, "the host page shows the challenge code");
+    assert.deepEqual(await smallTargets(page, ".pk-challenge"), [], "challenge banner tap targets");
+    await page.goto(`${server.url}?challenge=%3Cimg%20src%3Dx%3E`, { waitUntil: "load" });
+    assert.equal(await page.locator(".pk-challenge").isVisible(), false, "a malformed code is ignored");
+    report.push({ name: "host challenge banner", results: "code shown; junk ignored", goals: "-", keepers: "-", lines: 0, requests: "-" });
     await context.close();
   }
 } finally {

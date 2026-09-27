@@ -774,3 +774,25 @@ These are the things $GBOOT *does* in the game. None of them is a promise about 
   - PvP keepers on the same replay referee;
   - clubs and seasons;
   - stadium naming rights auctioned for $GBOOT (burned).
+
+### C4 social loop: what shipped, and what is NOT now
+
+Shipped without a backend (the SDK frame is an `allow-scripts` sandbox whose CSP connects to the chain RPC only),
+and in points / XP only — none of it moves RF, balls or $GBOOT:
+
+- **Share card**: one tap draws a PNG of your Friend (the canonical sprite), score, best streak and the public link.
+  Inside the sandbox there is no Web Share and no download (opaque origin, no `allow-downloads`), so the game shows
+  the image to long-press / right-click and a link to copy; the free practice page can also save it.
+- **Challenge a friend**: a checksummed code (mode, keeper, seed, score) replays the same kicks against the same
+  keeper. The sandbox cannot read the host page's URL, so a `?challenge=` link shows the code on the host page and
+  the player pastes it into the game's Challenge box. The checksum stops typos and casual edits, not a determined
+  cheat (no key can live in client code) — acceptable because only bragging rights are at stake.
+- **Keeper of the Week** (×2 XP for 3+ goals against the featured keeper) and the **Day N** check-in badge.
+
+NOT now (each needs a backend, shared state or an audit, so none is promised):
+
+- Generation-vs-Generation leagues (standings shared across players);
+- clubs (membership, chat, club tables);
+- PvP keepers (a live opponent or a referee-verified async match);
+- global challenge leaderboards, verified challenge scores, friend lists or notifications;
+- anything else that needs a server: the game stays client-only until the referee Worker is deployed and reviewed.
