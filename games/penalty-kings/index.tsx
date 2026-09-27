@@ -23,7 +23,7 @@ import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
 import { isSfx } from "./audio-core.js";
-import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, discoveryLabel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
+import { loadProgress, saveProgress, levelFromXp, isUnlocked, nextRung, assistLevel, shotClockOn, recordsDifficulty, discoveryLabel, XP, MODES, type Progress, type ModeId } from "./game/progress.js";
 import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
@@ -962,7 +962,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
       if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
-    updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
+    if (recordsDifficulty(current.mode, current.kind)) updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) })); // ladder modes only (BQ-P2-2)
     const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > BAR_CONTACT_Y ? "OFF THE BAR!" : record.screamer ? "SCREAMER!" : record.tipOver ? "TIPPED OVER!" : LABELS[result]; // the ball can only touch the bar above BAR_CONTACT_Y
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
