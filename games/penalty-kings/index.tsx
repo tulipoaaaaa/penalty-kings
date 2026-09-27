@@ -8,7 +8,7 @@ import { maximumPrize, type GameSnapshot } from "@rarefriends/friendsdk/game";
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
-  KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, streakMultiplier, shotTarget, clamp,
+  KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, shotTarget, clamp,
   swipeToShot, aimedShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
@@ -32,7 +32,7 @@ import { MatchDirector, type KickFacts } from "./game/director.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
-import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
+import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
@@ -567,12 +567,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     }
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = streak; }
-    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} pts · ${record.zone === "bin" ? "TOP BIN ×5" : record.zone === "corner" ? "corner ×3" : record.zone === "side" ? "side ×2" : "centre ×1"}${record.postIn ? " · in off the post +50%" : ""}${record.knuckle ? " · knuckleball ×2" : ""}` : "Streak reset";
+    // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${streak >= 2 ? ` · ${streak} in a row` : ""}` : current.streak >= 2 ? `Your run of ${current.streak} goals ends` : "No goal this time";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
     if (xp) addXp(xp);
-    // Big Match: 5 kicks, then sudden death at ×2 if 3+ goals (unchanged rule).
+    // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
       const regular = kicks.length <= 5 && !current.suddenDeath;
       if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
@@ -911,12 +912,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {screen === "play" && s && <>
         <header className="pk-hud pk-hud-left">
-          <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : `${modeName.toUpperCase()} · ${rungName(s.rung).toUpperCase()}`}</span>
+          <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : modeName.toUpperCase()}</span>
           {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Bag <b data-testid="bag-count">{bag.filter(ball => !ball.sample).length}</b> · Unopened <b data-testid="unopened">{balls.toString()}</b></span>
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
-          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel} · ×{streakMultiplier(s.streak)}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
+          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel}{s.kind !== "target" && s.streak >= 2 ? ` · ${s.streak} in a row` : ""}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
           <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={5}><span>Shot clock</span><i /></div>
         </header>
       </>}

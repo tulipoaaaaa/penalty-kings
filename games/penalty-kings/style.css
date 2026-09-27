@@ -144,6 +144,8 @@
 .pk-levels button { display: grid; gap: 1px; padding: 6px 8px; }
 .pk-levels small { opacity: 0.8; }
 .pk-brief { line-height: 1.6; }
+.pk-scoring { margin: 0.3em 0 0.8em; padding-left: 1.2em; }
+.pk-scoring li { margin: 0.2em 0; }
 .pk-book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .pk-keepercard { display: grid; gap: 2px; padding: 6px; border: 1px solid #8884; }
 .pk-keepercard canvas { width: 64px; height: 64px; image-rendering: pixelated; }

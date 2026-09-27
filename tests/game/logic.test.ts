@@ -126,6 +126,18 @@ test("token explainer (round 6 C11): the five lines word for word, RF + $GBOOT o
   assert.match(index, /setConfirmWildcard\(true\)/, "the Wildcard button only opens a confirmation");
 });
 
+test("HUD jargon (round 6 C15): rung names, ×N multipliers and keeper reads live in the Scouting Book, not on the pitch", () => {
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../../games/penalty-kings/ui.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(index, /rungName|streakMultiplier\(/, "no difficulty rung or streak multiplier in the shell's HUD");
+  const hud = index.slice(index.indexOf('className="pk-hud pk-hud-left"'), index.indexOf("{banner &&"));
+  assert.doesNotMatch(hud, /×/, "no ×N in the HUD");
+  const onResolved = index.slice(index.indexOf("function onResolved"), index.indexOf("function onKickDone"));
+  assert.doesNotMatch(onResolved, /×\d/, "no ×N in the kick banners");
+  const book = ui.slice(ui.indexOf("export function ScoutingBook"), ui.indexOf("export type SessionSummary"));
+  assert.match(book, /rungName\(progress\.difficulty\)/); assert.match(book, /ZONE_MULT/); assert.match(book, /streakMultiplier/); assert.match(book, /profile\.read/);
+});
+
 test("ETHICS: the paid ball reveal is derived only from the settled outcome — no fake near-misses", () => {
   for (let outcome = 1; outcome <= 7; outcome++) {
     const plan = revealPlan(outcome);

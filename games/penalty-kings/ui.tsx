@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
-import { KEEPERS, keeperById, DIFFICULTY_LADDER, type KeeperId } from "@penalty-kings/engine";
+import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
 import { RARITIES, TIERS, TOKEN_LINES, formatNumber, type Tier } from "./economy.js";
 import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
@@ -152,7 +152,18 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
 }
 
 export function ScoutingBook({ progress }: { progress: Progress }) {
+  const streaks = [1, 2, 3, 4, 5].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
   return <div className="pk-book">
+    {/* The numbers kept off the pitch (round 6 C15): difficulty, multipliers, keeper reads. */}
+    <h3>How scoring works</h3>
+    <ul className="pk-scoring" data-testid="scoring">
+      <li><b>Challenge level:</b> {rungName(progress.difficulty)} (it adjusts between rounds to how you play, from Sunday League to Legend).</li>
+      <li><b>Where it goes in:</b> centre ×{ZONE_MULT.centre} (and usually saved), side ×{ZONE_MULT.side}, corner ×{ZONE_MULT.corner}, top bin ×{ZONE_MULT.bin}; in off the post +{Math.round((POST_IN_BONUS - 1) * 100)}%; a free-kick knuckleball ×2.</li>
+      <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}).</li>
+      <li><b>Keepers:</b> each card shows how often the keeper dives the right way (before your challenge level) and the points multiplier for scoring past them.</li>
+      <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>
+      <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
+    </ul>
     <h3>Keepers ({progress.stamps.length}/{KEEPERS.length} stamped)</h3>
     <div className="pk-book-grid">{LADDER.map(id => <KeeperCard key={id} id={id} stamped={progress.stamps.includes(id)} />)}</div>
     <h3>Ball Collection ({new Set(progress.pulled).size}/7 pulled)</h3>
@@ -174,7 +185,7 @@ function KeeperCard({ id, stamped }: { id: KeeperId; stamped: boolean }) {
     <canvas ref={ref} width={64} height={64} aria-hidden="true" />
     <strong>{profile.name}{stamped ? " ✓" : ""}</strong>
     <small>{profile.bio}</small>
-    <small><b>Tell:</b> {profile.tell} · reads {Math.round(profile.read * 100)}% · score ×{profile.mult}</small>
+    <small><b>Tell:</b> {profile.tell} · dives the right way {Math.round(profile.read * 100)}% of the time · points ×{profile.mult}</small>
   </div>;
 }
 
