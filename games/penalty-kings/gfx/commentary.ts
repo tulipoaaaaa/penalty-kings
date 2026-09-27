@@ -5,7 +5,7 @@
 import type { KeeperId } from "@penalty-kings/engine";
 
 export type CommentaryContext =
-  | "walkout" | "buildup" | "goal" | "save" | "post" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
+  | "walkout" | "buildup" | "goal" | "save" | "post" | "crossbar" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
   | "timeout" | "level-up" | "stamp" | "tutorial-1" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
   | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`;
@@ -15,6 +15,7 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   buildup: ["The stadium holds its breath...", "Deep breaths now.", "{keeper} is bouncing on the line.", "You could hear a pin drop.", "This is the moment.", "Eyes on the ball, {friend}.", "The ref checks his watch.", "Nobody's sitting down for this one."],
   goal: ["GOOOAL! Top drawer!", "Absolutely buried it!", "No chance for {keeper}!", "Right in the onion bag!", "That's in the history books!", "Cool as you like!", "Get the net-mender on the phone!", "What a finish from {friend}!", "Pass it into the net, why don't you!", "The keeper's still looking for it!", "Unstoppable!", "Clinical. Absolutely clinical."],
   save: ["Saved! {keeper} says no!", "What a stop from {keeper}!", "Denied!", "{keeper} reads it all the way.", "Gloves of steel!", "That was always going to be saved.", "Fingertips! {keeper} gets there!", "{keeper} guessed right.", "Straight at the keeper. Wasted."],
+  crossbar: ["OFF THE BAR! Ooooh!", "Crossbar! The whole frame is shaking.", "Rattled the bar!", "Clang! Off the underside of the bar!"],
   post: ["OFF THE POST! Ooooh!", "Woodwork! The post is still shaking.", "Inches away!", "The frame of the goal saves {keeper}!", "Clang! Hear that?"],
   over: ["Row Z! Somebody catch that!", "That's gone into orbit.", "A souvenir for the fans!", "Aim lower, friend.", "That's landed in the car park."],
   wide: ["Wide! Just wide!", "Dragged it past the post.", "The corner flag had no chance.", "Wrong side of the post.", "The side netting fools a few in the crowd!"],

@@ -531,7 +531,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · SUDDEN DEATH: ×2 until you miss"; scene?.say("sudden-death"); }
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : LABELS[result];
+    const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;
@@ -581,6 +581,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }
 
   function endSession(current: Session) {
+    setMessage(""); // the tutorial/session tips never follow the player into menus or the shop (round 6 C9)
     const goals = current.kicks.filter(kick => kick.result === "goal").length;
     const scene = stage.current;
     if (scene) { scene.clock = null; scene.preview = null; scene.reticle = null; }
@@ -883,7 +884,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
       {menu === "hub" && <div className="pk-hub">
-        {(["balls", "bag", "cups", "book", "shop", "market", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
+        {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
         <button type="button" onClick={() => { cancelKick(); setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
         {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.</p>}
       </div>}

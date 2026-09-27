@@ -27,7 +27,7 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
     <div className="pk-tiers" role="radiogroup" aria-label="Stadium">
       {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
         <strong>{item.name}</strong><small>{item.priceRF.toLocaleString("en-US")} RF per ball · top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
-        <small>{item.id === tier.id ? "You are here" : "Switch with the stadium bar above the game"}</small>
+        <small>{item.id === tier.id ? "You are here" : "Open its own page to play there (/pro/ or /champions/)"}</small>
       </div>)}
     </div>
     <div className="pk-packs" role="radiogroup" aria-label="Pack size">

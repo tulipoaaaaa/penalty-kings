@@ -168,7 +168,9 @@ export class Stage {
       return;
     }
     this.crowd.react(result === "goal" ? "cheer" : result === "post" || result === "over" ? "ooh" : "groan");
-    this.say(this.cue ?? result); this.cue = null;
+    // Woodwork near the top is the crossbar, not the post (round 6 C13).
+    const said = this.cue ?? result, bar = result === "post" && shot.outcome.target.y > 0.9;
+    this.say(bar && (said === "post" || said === "near-miss") ? "crossbar" : said); this.cue = null;
     if (result === "goal") this.stats.goals++; else if (result === "save") this.stats.saves++; else if (result === "post") this.stats.woodwork++;
     this.onEvent("resolved", result);
     this.camera.targetZoom = 1; this.camera.targetY = H / 2;
