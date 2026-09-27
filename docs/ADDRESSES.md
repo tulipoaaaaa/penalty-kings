@@ -63,3 +63,14 @@ Verified-source note: Blockscout sits behind a Cloudflare challenge that blocks 
 ## Our deployments
 
 None yet. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Pons launchpad (checked 2026-09-27, block 73,858,608; read-only)
+
+| Contract | Address | Source | Verified |
+|---|---|---|---|
+| Pons V2 LaunchFactory | `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` | Official repo github.com/ponsdotdev/pons-labs (README) | Code present (24 KB). `owner()` = `0x263ed295dAFaE1d9AAdD6E56c4B6F9f38eE019Dd`. |
+| Pons V1 LaunchFactory | `0xA5aAb3F0c6EeadF30Ef1D3Eb997108E976351feB` | Same README | V1 pairs every launch with WETH (Uniswap v3, locked LP) |
+
+- **Can $GBOOT launch on Pons against RF?** Not today. V2 launches pair only with tokens in the owner-controlled allowlist `approvedPairTokens` (`setPairTokenApproved` is `onlyOwner`). `approvedPairTokens(RF 0x0779…B71f)` = **false**, and `pairTokenEconomics(RF)` is unset. `approvedPairTokens(USDG)` = true, which shows the check works.
+- A Pons V2 launch trades on a bonding curve first, then "graduates" into a full-range **Uniswap v4** pool in the chosen pair token. A curve fee (≤ 10%) and a creator tax (≤ 10%) apply.
+- To launch on Pons against RF, the Pons team must approve RF as a pair token.
