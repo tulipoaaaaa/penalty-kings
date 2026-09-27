@@ -14,7 +14,7 @@ import {
 } from "@penalty-kings/engine";
 import { FREE_PLAY_MODES, type BallGlow, type TimeOfDay } from "@penalty-kings/game-director";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
-import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight } from "./gfx/stage.js";
+import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight, type WaitBeatEvent } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { ReelPlayer } from "./gfx/reelplayer.js";
 import { MONTAGE } from "./gfx/showreel.js";
@@ -29,6 +29,8 @@ import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
 import { revealPlan } from "./game/reveal.js";
+import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/randomness.js";
+import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence } from "./game/suspense.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
@@ -115,7 +117,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [now, setNow] = useState(() => Date.now());
   // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
   const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
-  const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number } | null>(null);
+  /** The open pack; `sealed` while its roll is on the way (FD-3b: the sealed pack shows on the Stage). */
+  const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number; sealed?: { count: number; expectedMs: number } } | null>(null);
+  /** FD-3b: the a11y/status line of a wait for randomness (the Stage draws the wait itself). */
+  const [waitNote, setWaitNote] = useState<string | null>(null);
   /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
   const [selectedBall, setSelectedBall] = useState<string | null>(() => loadLastBall());
   const [carousel, setCarousel] = useState(false);
@@ -200,9 +205,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** The visible shot-clock bar (round 6 C14), updated every frame without a React render. */
   const clockBar = useRef<HTMLDivElement>(null);
   /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
-  const timing = useRef<{ release: number; resolved: number; log: { kind: string; toResult: number; toReady: number }[] }>({ release: 0, resolved: 0, log: [] });
+  const timing = useRef<{ release: number; resolved: number; wait: number; log: { kind: string; toResult: number; toReady: number; wait: number }[] }>({ release: 0, resolved: 0, wait: 0, log: [] });
+  /**
+   * FD-3b: the pending randomness waits. A penalty's keeper roll (the shot is committed; aborted, with no
+   * scoring, by a mode switch, a pause or a redeem) and a pack's roll (aborted when the session ends).
+   */
+  const pendingRoll = useRef<AbortController | null>(null), packRoll = useRef<AbortController | null>(null);
+  /** The pack reveal sequence's timers (Reveal all and closing the pack clear them). */
+  const packTimers = useRef<number[]>([]);
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
-  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
+  const latest = useRef({ tickAim: (_dt: number) => {}, tickTargets: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, onWait: (_e: WaitBeatEvent) => {}, haptics: true });
 
   const maxPrize = maximumPrize(definition);
   const pending = snapshot?.plays.find(play => play.outcomeId === null) ?? null;
@@ -243,7 +255,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       .catch(() => { if (version === epoch.current) setArtStatus("Friend artwork unavailable. Playing with a placeholder."); });
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
-    return () => { epoch.current++; sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
+    return () => { epoch.current++; packRoll.current?.abort(); packRoll.current = null; clearPackTimers(); sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
   }, [client, friendId]);
 
   // Live mode: cosmetics come from on-chain KitShop unlocks for this Friend (read-only RPC).
@@ -285,6 +297,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (event === "done") h.onKickDone();
       if (event === "replay-done") replayDone.current?.();
       if (event === "reveal-done") setPhase(current => (current === "reveal" ? "reveal" : current));
+      if (event === "wait") h.onWait(data as WaitBeatEvent);
     };
     let frame = 0, last = performance.now();
     const loop = (time: number) => {
@@ -534,6 +547,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   /** Abandon an in-flight kick without scoring it (mode switch, redeemed ball). */
   function cancelKick() {
+    pendingRoll.current?.abort(); pendingRoll.current = null; setWaitNote(null); // a pending keeper roll never scores
     stage.current?.cancel(); pendingKick.current = null; afterBeat.current = null; inFlight.current = 0; kickId.current++; sessionEpoch.current++;
     window.clearTimeout(timeoutTimer.current); swipe.current = null; pointer.current = null; keyAim.current.charging = false; setBanner(null);
   }
@@ -627,7 +641,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         playBeat(beat, current.kind);
       }
       if (current.kind !== "target") {
-        scene.tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
+        const tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
+        // FD-3b: with the beacon, the keeper's dive does not exist until the shot is committed, so there is no
+        // pre-kick tell to show (it would be a guess dressed up as a tell). Disco Dee's beat is fixed by the kick
+        // number, so his lean stays. The true tell plays in the run-up (the Stage leans the keeper from the dive).
+        scene.tell = usesBeacon(current.mode) && current.keeper !== "disco" ? null : tell;
         syncDiscovery({ keeper: current.keeper });
         qaLog.current.keepers.push({ id: current.keeper, at: Math.round(performance.now() / 100) / 10 });
       }
@@ -639,7 +657,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function shootPenalty(raw: ShotInput) {
     const current = live.current.session, scene = stage.current;
     if (!current || !scene || !may("shoot")) return;
-    inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now();
+    inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now(); timing.current.wait = 0;
     const difficulty = difficultyFor(current);
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak));
     const shot = aimedShot(raw, wobble, kickAssist(current));
@@ -656,8 +674,59 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.play({ result, target, plan: keeperPlan(keeperById("mouse"), 1, target), zone: "centre", postIn: false }, shot.curl);
       return;
     }
+    // FD-3b, roll 2: free play penalties and the Big Match commit the shot, then the beacon seeds the keeper.
+    if (usesBeacon(current.mode)) { awaitKeeper(current, shot, index, difficulty); return; }
+    // The tutorial, World Tour, Daily (same for everyone) and the Skill Cup (the referee's own path) keep their fixed seeds.
+    strikePenalty(current, shot, index, difficulty, kickSeed(current.seed, index, current.keeper));
+  }
+
+  /** Where randomness comes from. Preview: the simulated beacon (0 s unless a dev build sets a delay; the judged preview has none). */
+  function randomnessSource(): RandomnessSource {
+    if (!simulated) return instantBeacon; // live: instant until the SDK v0.2.1 beacon adapter is wired in (docs/RNG-INTEGRATION.md)
+    return simulatedBeacon(() => { const value = Number((globalThis as { __pkDevRandomnessDelayMs?: unknown }).__pkDevRandomnessDelayMs); return Number.isFinite(value) && value > 0 ? Math.min(15_000, value) : 0; });
+  }
+
+  /**
+   * The ONE beacon path for penalties: the shot is fixed (already aimed, wobbled and assisted), committed,
+   * THEN the beacon is requested; its value seeds only the keeper's dive. The wait shows on the Stage
+   * (warm-up, drumroll, mind-games, meter); instant randomness shows nothing and strikes at once.
+   */
+  function awaitKeeper(current: Session, shot: ShotInput, index: number, difficulty: Difficulty) {
+    const id = kickId.current, epochAt = sessionEpoch.current, source = randomnessSource(), expected = source.expectedWaitMs();
+    pendingRoll.current?.abort();
+    const controller = new AbortController(); pendingRoll.current = controller;
+    const live_ = () => !controller.signal.aborted && kickId.current === id && sessionEpoch.current === epochAt && inFlight.current > 0;
+    const context = { friendId: friendId.toString(), sessionId: current.seed.toString(), kickIndex: index };
+    void rollKeeper(shot, context, source, controller.signal, () => {
+      if (!live_()) return;
+      stage.current?.startWait("penalty", expected);
+      if (expected >= 800) setWaitNote(`Shot locked in. ${keeperById(current.keeper).name} is deciding…${simulated ? " (simulated randomness)" : ""}`);
+    }).then(roll => {
+      if (!live_()) return;
+      pendingRoll.current = null; setWaitNote(null);
+      stage.current?.endWait(); timing.current.wait = Math.round(performance.now() - timing.current.release); // release → strike (the hashing alone when instant)
+      strikePenalty(current, shot, index, difficulty, roll.seed);
+    }, error => { // (two-argument then: an error inside the strike itself is not swallowed here)
+      if (isAbort(error) || !live_()) return;
+      // No randomness (e.g. no WebCrypto on an insecure page): the kick is not taken, nothing is scored.
+      pendingRoll.current = null; abandonWait("Randomness is unavailable here, so that kick was not taken. Try again.");
+    });
+  }
+
+  /** Abort a penalty's wait for randomness: the kick never happened (no scoring), the same kick is aimed again. */
+  function abandonWait(note: string) {
+    pendingRoll.current?.abort(); pendingRoll.current = null;
+    stage.current?.endWait(); setWaitNote(null);
+    if (!inFlight.current || pendingKick.current) return; // nothing waiting (or the strike already started)
+    inFlight.current = 0; kickId.current++; timing.current.release = 0; timing.current.wait = 0;
+    swipe.current = null; pointer.current = null; keyAim.current = { ...keyAim.current, power: 0, charging: false };
+    aimStarted.current = clockNow(); setPhaseNow("aim"); setMessage(note);
+  }
+
+  /** The strike for a seeded penalty (every path lands here): the engine decides, the Stage plays it exactly as before. */
+  function strikePenalty(current: Session, shot: ShotInput, index: number, difficulty: Difficulty, seed: number) {
+    const scene = stage.current; if (!scene) return;
     const profile = keeperById(current.keeper);
-    const seed = current.mode === "match" && current.ball ? kickSeed(hashId(current.ball.recordId), index, profile.id) : kickSeed(current.seed, index, profile.id);
     const outcome = resolveShot(shot, profile, seed, { kickIndex: index, history: current.kicks.map(kick => kick.x) }, difficulty);
     // The chosen ball sets ONLY the skill-layer score multiplier (kickStyle); RF values never change.
     const ballMult = current.mode === "match" && current.ball ? kickStyle(bagRef.current.find(record => record.id === current.ball!.recordId) ?? null, RARITIES.map(r => r.dropMult)).scoreMult : 1;
@@ -665,6 +734,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y }, result: outcome.result };
     direct(current, pendingKick.current.record);
     if (current.mode === "tutorial") tutorialShots.current.push({ outcome, curl: shot.curl, keeper: profile.id, result: outcome.result, points: pendingKick.current.record.points });
+    if (usesBeacon(current.mode)) scene.tell = outcome.plan; // the dive now exists: its true tell shows in the run-up (fan, scan, wall)
     scene.play(outcome, shot.curl);
   }
 
@@ -770,7 +840,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let current = live.current.session;
     if (!inFlight.current) return; // a cancelled kick, or a duplicate "done"
     inFlight.current = 0;
-    { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved) }); t.release = 0; }
+    { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved), wait: t.wait }); t.release = 0; t.wait = 0; }
     setBanner(null);
     if (!current) return;
     // The Director's between-kick moments (substitution walk-ons, weather, the cat…).
@@ -913,21 +983,46 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       () => { sound.current?.play("purchase"); setMessage(`${quantity} ball${quantity > 1n ? "s" : ""} bought. Open the pack to reveal them.`); });
   }
 
-  /** PACK OPENING: SDK play + settle for every unopened ball (and any pending one), then reveal one by one. */
+  /**
+   * PACK OPENING: SDK play + settle for every unopened ball (and any pending one) is the roll. FD-3b: while
+   * it is on the way the pack sits SEALED on the Stage (shaking and glowing more as the wait goes on, a
+   * crowd drumroll, the commentator teasing); then the cards reveal lowest to highest with a pause and a
+   * building sting before the best ball. The preview can add a simulated beacon delay (dev only; judged: 0).
+   */
   function openPack() {
     if (!snapshot) return;
     void act(async () => {
       const version = epoch.current;
       const plays = [...snapshot.plays.filter(play => play.outcomeId === null), ...(snapshot.consumables > 0n ? await client.play(snapshot.consumables) : [])];
       sound.current?.play("anticipation");
-      const rarities: number[] = [];
-      for (const play of plays) {
-        const settled = await client.settle(play.id);
-        if (version !== epoch.current) return;
-        if (settled.outcomeId !== null) rarities.push(settled.outcomeId - 1);
+      const source = randomnessSource(), expected = source.expectedWaitMs(), controller = new AbortController(), started = performance.now();
+      packRoll.current?.abort(); packRoll.current = controller;
+      if (plays.length) {
+        setMenu(null); setScreen("play");
+        live.current = { ...live.current, pack: true, menu: null, screen: "play" };
+        setPack({ rarities: [], revealed: [], gboot: 0, sealed: { count: plays.length, expectedMs: expected } });
+        stage.current?.startWait("pack", expected, plays.length);
       }
+      const rarities: number[] = [];
+      try {
+        const settle = (async () => {
+          for (const play of plays) {
+            const settled = await client.settle(play.id);
+            if (version !== epoch.current) return;
+            if (settled.outcomeId !== null) rarities.push(settled.outcomeId - 1);
+          }
+        })();
+        // The (simulated) beacon for this pack, requested after the plays are fixed. Instant: no timer at all.
+        const beacon = expected > 0 ? packCommitment(plays.map(play => String(play.id)), { friendId: friendId.toString() }).then(commitment => source.next("pack", commitment, controller.signal)) : null;
+        await Promise.all([settle, beacon]);
+      } finally {
+        if (packRoll.current === controller) packRoll.current = null;
+        stage.current?.endWait();
+        if (version === epoch.current) setPack(current => (current?.sealed ? null : current));
+      }
+      if (version !== epoch.current) return;
       if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
-      if (!rarities.length) return;
+      if (!rarities.length) { live.current = { ...live.current, pack: false }; setMenu("balls"); return; }
       let drops = 0, race = 0, value = 0n;
       for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight; value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
@@ -938,15 +1033,44 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       setBag(list => addPulls(list, rarities, tier.id, Date.now()));
       setPack({ rarities, revealed: rarities.map(() => false), gboot: drops });
       setMenu(null); setScreen("play"); stage.current?.say("pack");
+      runPackSequence(rarities, performance.now() - started);
     });
   }
-  /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). */
-  function flipCard(index: number) {
-    setPack(current => { if (!current || current.revealed[index]) return current; stage.current?.showReveal(revealPlan(current.rarities[index] + 1)); return { ...current, revealed: current.revealed.map((value, i) => value || i === index) }; });
+  /**
+   * The reveal sequence (game/suspense.ts packRevealSequence, a pure function of the SETTLED rarities):
+   * lowest to highest, a pause and a building sting, then the best ball's full Stage reveal (a Golden Boot
+   * keeps its full-screen moment). Tapping a card or "Reveal all" still works at any time.
+   */
+  function runPackSequence(rarities: readonly number[], waitedMs: number) {
+    clearPackTimers();
+    const plan = packRevealSequence(rarities, waitedMs), epochAt = epoch.current;
+    const later = (ms: number, run: () => void) => packTimers.current.push(window.setTimeout(() => { if (epoch.current === epochAt) run(); }, ms));
+    for (const step of plan.steps) later(step.at, () => (step.best ? flipCard(step.index) : flipCard(step.index, true)));
+    if (plan.stingAt !== null) later(plan.stingAt, () => { crowd.current?.sting(plan.stingLevel); stage.current?.crowd.react("tense"); });
+  }
+  function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
+  /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
+  function flipCard(index: number, quiet = false) {
+    setPack(current => {
+      if (!current || current.sealed || current.revealed[index]) return current;
+      if (quiet) sound.current?.play("reveal-common"); else stage.current?.showReveal(revealPlan(current.rarities[index] + 1));
+      return { ...current, revealed: current.revealed.map((value, i) => value || i === index) };
+    });
   }
   /** Reveal all: flip every card; the best ball gets its reveal sequence (a Golden Boot keeps its full-screen moment). */
   function revealAll() {
-    setPack(current => { if (!current) return current; const best = Math.max(...current.rarities); stage.current?.showReveal(revealPlan(best + 1)); return { ...current, revealed: current.revealed.map(() => true) }; });
+    clearPackTimers();
+    setPack(current => { if (!current || current.sealed) return current; const best = Math.max(...current.rarities); stage.current?.showReveal(revealPlan(best + 1)); return { ...current, revealed: current.revealed.map(() => true) }; });
+  }
+
+  /** FD-3b: a beat inside a wait for randomness (the Stage draws the wait; the shell plays audio and the Director). */
+  function onWait(event: WaitBeatEvent) {
+    if (event.beat === "drumroll") crowd.current?.drumroll(event.level);
+    if (event.beat === "moment" && event.kind === "penalty") {
+      // A Director micro-moment while the keeper decides (cosmetic; it never touches the roll).
+      const scene = stage.current, moment = scene ? director().trigger("keeper-mind-games") : null;
+      if (scene && moment) { playMoment(scene, moment, lineLater); noteMoment(moment); }
+    }
   }
 
   /** BAG → Redeem one ball for its RF (SDK redeem); its record leaves the Bag. */
@@ -956,6 +1080,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       sound.current?.play("reward"); setBag(list => removeBall(list, record.id));
       // You cannot kick a ball you no longer hold: cancel an aim with the redeemed ball.
       const current = live.current.session;
+      if (pendingRoll.current && current?.ball?.recordId === record.id) cancelKick(); // FD-3b: never score a kick with a ball you no longer hold
       if (current?.mode === "match" && current.ball?.recordId === record.id) {
         setSession({ ...current, ball: undefined }); if (live.current.phase === "aim") setPhaseNow("idle");
       }
@@ -1040,7 +1165,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { if (paused) { keys.current.clear(); keyAim.current.charging = false; swipe.current = null; pointer.current = null; } }, [paused]);
+  useEffect(() => {
+    if (!paused) return;
+    keys.current.clear(); keyAim.current.charging = false; swipe.current = null; pointer.current = null;
+    // FD-3b: a pause while the keeper is deciding cancels that kick cleanly (the beacon request is aborted; nothing is scored).
+    if (pendingRoll.current) abandonWait("Paused while the keeper was deciding: that kick was cancelled and nothing was scored. Take it again.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
   // Resize / rotate mid-swipe: the points were measured at the old scale, so drop the gesture (no shot).
   useEffect(() => {
     const drop = () => { swipe.current = null; pointer.current = null; };
@@ -1049,10 +1180,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, []);
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
-  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log }; };
+  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed) }; };
   // QA hook (read-only): the Director's seen moments, the moments played and keepers faced (seconds since load), the Discovery meter.
   (window as unknown as { __pkDirector?: () => unknown }).__pkDirector = () => ({ seen: dir.current?.seenIds() ?? [], discovery: dir.current?.discovery().label ?? "", played: qaLog.current.moments, keepers: qaLog.current.keepers, debug: dir.current?.debugState() ?? null });
-  latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
+  latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), onWait, haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
   function swipeOptions(current: Session) {
@@ -1132,7 +1263,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {banner && <div className={`pk-banner pk-${banner.tone}`} role="status"><strong>{banner.text}</strong><span>{banner.sub}</span></div>}
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
-      {pack && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={flipCard} onRevealAll={revealAll} onDone={() => { setPack(null); setMenu("bag"); }} />}
+      {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
+      {pack?.sealed && <p className="pk-wait" role="status" aria-live="polite" data-testid="pack-sealed">{pack.sealed.count} ball{pack.sealed.count === 1 ? "" : "s"} sealed: the rarity roll is on its way{simulated ? " (the preview's simulated draw)" : " (on-chain randomness)"}. Nothing is decided by waiting or tapping.</p>}
+      {waitNote && !pack && <p className="pk-wait pk-wait-sr" role="status" aria-live="polite" data-testid="randomness-wait">{waitNote}</p>}
       {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={closeCarousel} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
@@ -1304,7 +1437,5 @@ const LAST_BALL_KEY = "penalty-kings/last-ball/v1";
 function loadLastBall(): string | null { try { return typeof localStorage === "undefined" ? null : localStorage.getItem(LAST_BALL_KEY); } catch { return null; } }
 function saveLastBall(id: string | null) { try { if (id) localStorage.setItem(LAST_BALL_KEY, id); else localStorage.removeItem(LAST_BALL_KEY); } catch { /* not persisted */ } }
 function saveBag(records: readonly BallRecord[]) { try { localStorage.setItem(BAG_KEY, JSON.stringify(records.filter(record => !record.sample))); } catch { /* not persisted */ } }
-/** Stable 32-bit hash of a ball id (kick seeds for the skill layer). */
-function hashId(id: string) { let h = 2166136261; for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
 
 void KEEPERS; void TIERS;

@@ -15,6 +15,8 @@ import { freshCommentary, drawCommentator, type CommentaryContext } from "./comm
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
 import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, FRIEND_CELL, type KickView, type KickPose } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
+import { waitCue, WAIT_EVENTS, type WaitCue } from "../game/suspense.js";
+import { drawBallWarmup, drawPenaltyWait, drawSealedPack } from "./waits.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
@@ -22,7 +24,9 @@ export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => 
 export const BACKDROP_DROP = Math.round(PENALTY_GOAL.y - 30 - 102);
 /** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. Defined in gfx/kick.ts. */
 export { STRIKE_AT };
-export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "replay-done" | "walkon-done";
+export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal" | "replay-done" | "walkon-done" | "wait";
+/** FD-3b: a beat inside a wait for randomness (the shell plays the crowd drumroll and a Director moment). */
+export type WaitBeatEvent = Readonly<{ kind: "penalty" | "pack"; beat: "drumroll" | "moment" | "hush"; level: number }>;
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
@@ -142,6 +146,13 @@ export class Stage {
   private walkOnFade = 0;
   /** A net-cam slow-mo replay of a stored outcome (skill-layer visual only: no events, stats or lines). */
   private replaying: { slow: number; label: string; keeper: KeeperId } | null = null;
+  /**
+   * FD-3b: a wait for randomness. PENALTY: the shot is committed and the keeper has not decided yet (the
+   * beacon seeds only his dive); PACK: the pack is sealed until its roll lands. Nothing about the outcome
+   * exists while this runs. Instant randomness never shows it (WAIT_GRACE_MS).
+   */
+  private waiting: { kind: "penalty" | "pack"; t: number; expected: number; count: number; fired: Set<string>; nextDrum: number; nextClap: number; nextBeat: number; locked: { x: number; y: number } | null } | null = null;
+  private clapT = 9;
 
   constructor(options: Partial<Pick<Stage, "stadium" | "weather" | "keeper" | "reduced">> = {}) {
     Object.assign(this, options);
@@ -158,7 +169,54 @@ export class Stage {
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; this.waiting = null; }
+
+  // ── Waits for randomness (FD-3b) ───────────────────────────────────────────
+  /** Start a wait: `expectedMs` paces it (0 = instant: nothing shows unless it runs late). */
+  startWait(kind: "penalty" | "pack", expectedMs: number, count = 1) {
+    const locked = kind === "penalty" && this.reticle ? this.goalPoint(toScreen(this.reticle.x, this.reticle.y)) : null;
+    this.waiting = { kind, t: 0, expected: Math.max(0, expectedMs), count, fired: new Set(), nextDrum: 0, nextClap: WAIT_EVENTS.clapFrom, nextBeat: 0, locked };
+    if (kind === "penalty") { this.clock = null; this.preview = null; if (this.reticle) this.reticle = { ...this.reticle, active: false }; }
+  }
+  /** End the wait (the randomness landed, or it was cancelled). Returns the seconds it ran. */
+  endWait() {
+    const wait = this.waiting; this.waiting = null;
+    if (!wait) return 0;
+    if (wait.kind === "penalty") this.reticle = null;
+    if (wait.kind === "pack" && !this.reduced && waitCue(wait.t * 1000, wait.expected).visible) this.flash = 0.3;
+    return wait.t;
+  }
+  get waitingFor() { return this.waiting?.kind ?? null; }
+  /** The current wait's cue (Showroom/QA read-only). */
+  waitCueNow(): WaitCue | null { return this.waiting ? waitCue(this.waiting.t * 1000, this.waiting.expected) : null; }
+  private updateWait(dt: number) {
+    const wait = this.waiting; if (!wait) return;
+    wait.t += dt;
+    const cue = waitCue(wait.t * 1000, wait.expected), once = (key: string, run: () => void) => { if (!wait.fired.has(key)) { wait.fired.add(key); run(); } };
+    if (!cue.visible) return;
+    const beat = (b: WaitBeatEvent["beat"], level: number) => this.onEvent("wait", { kind: wait.kind, beat: b, level } satisfies WaitBeatEvent);
+    once("start", () => { this.crowd.react("tense"); this.sfx("heartbeat"); if (wait.kind === "pack") this.say("pack-wait"); });
+    if (cue.drumroll > 0 && wait.t >= wait.nextDrum) { wait.nextDrum = wait.t + WAIT_EVENTS.drumTickEvery; beat("drumroll", cue.drumroll); }
+    if (cue.hush) {
+      once("hush", () => { this.crowd.react("tense"); beat("hush", 1); });
+      if (wait.t >= wait.nextBeat) { wait.nextBeat = wait.t + 0.9; this.sfx("heartbeat"); }
+    }
+    if (wait.kind === "penalty" && this.kind !== "target") {
+      if (cue.deciding) once("deciding", () => this.say("keeper-deciding"));
+      if (cue.mindGames) {
+        if (wait.t >= WAIT_EVENTS.taunt) once("taunt", () => this.taunt());
+        if (wait.t >= WAIT_EVENTS.directorMoment) once("moment", () => beat("moment", cue.drumroll));
+        if (wait.t >= wait.nextClap) { wait.nextClap = wait.t + WAIT_EVENTS.clapEvery; this.gloveClap(); }
+      }
+    }
+    if (wait.kind === "pack" && cue.mindGames && wait.t >= 5) once("tease", () => this.say("pack-wait-long"));
+  }
+  /** Keeper mind-games: a glove clap (sound + a little burst between the gloves). */
+  private gloveClap() {
+    this.sfx("glove"); this.clapT = 0;
+    const at = this.goalPoint({ x: GOAL.cx + Math.sin(this.time * 2.6) * 10, y: GOAL.line - 46 });
+    if (!this.reduced) this.particles.emit("spark", at.x, at.y, 6, { color: ["#ffffff", "#ffd23f"], speed: 40, spread: Math.PI * 2, life: 0.3, gravity: 0 });
+  }
 
   // ── Moments ───────────────────────────────────────────────────────────────
   say(context: CommentaryContext) {
@@ -315,6 +373,7 @@ export class Stage {
 
   // ── Update ────────────────────────────────────────────────────────────────
   update(realDt: number) {
+    this.updateWait(realDt); this.clapT += realDt;
     if (this.camera.hitStop > 0) { this.camera.hitStop -= realDt; return; }
     // Slow-mo (skill layer only): a beat on the release, and near-misses (post, bar, just wide/over, fingertip saves).
     let slow = 1;
@@ -416,6 +475,11 @@ export class Stage {
     this.drawBubble(c);
     if (this.mode === "walkout") this.drawWalkout(c);
     if (this.replaying) this.drawReplayCaption(c);
+    if (this.waiting) {
+      const cue = waitCue(this.waiting.t * 1000, this.waiting.expected);
+      if (this.waiting.kind === "pack" && cue.visible) drawSealedPack(c, cue, this.time, this.waiting.count, this.reduced, RARITY_FX[7] ?? RARITY_FX[0]);
+      else if (this.waiting.kind === "penalty") drawPenaltyWait(c, cue, this.time, this.waiting.locked);
+    }
     if (this.reveal) this.drawReveal(c);
     if (this.flash > 0) { c.fillStyle = `rgba(255,255,255,${this.flash})`; c.fillRect(0, 0, W, H); }
     if (this.rarity === 6 && this.ballVisible && !this.reduced) { const glow = 0.25 + 0.15 * Math.sin(this.time * 6); c.strokeStyle = `rgba(255,140,0,${glow})`; c.lineWidth = 6; c.strokeRect(3, 3, W - 6, H - 6); }
@@ -436,6 +500,9 @@ export class Stage {
     const bounce = Math.abs(Math.sin(this.time * 5)) * 3;
     let lift = this.reduced ? 0 : bounce;
     if (this.tell && this.mode !== "shot") { gx += this.tell.lean * 0.15; if (this.keeper === "peacock" || this.keeper === "squirrel") mood = "taunt"; }
+    // FD-3b mind-games while the keeper decides: a bigger sway, a taunt pose on every glove clap (no lean: nothing is decided yet).
+    const deciding = this.waiting?.kind === "penalty" && this.mode === "idle" ? waitCue(this.waiting.t * 1000, this.waiting.expected) : null;
+    if (deciding?.mindGames) { gx += this.reduced ? 0 : Math.sin(this.time * 2.6) * 0.14; if (this.clapT < 0.35) mood = "taunt"; }
     if (shot && this.mode === "shot") {
       const flightT = this.modeTime - shot.strikeAt;
       if (flightT < 0) {
@@ -638,6 +705,7 @@ export class Stage {
       if (p < 1 && !this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
     }
     c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, home.y + 5 - (home.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
+    if (this.waiting?.kind === "penalty" && this.mode === "idle") spin = drawBallWarmup(c, x, y, r, waitCue(this.waiting.t * 1000, this.waiting.expected), this.time, this.reduced);
     drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
   }
 
