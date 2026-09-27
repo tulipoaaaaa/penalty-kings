@@ -9,9 +9,15 @@
 export type SkillZone = "top-bin" | "post-in" | "bar-in";
 export const SKILL_ZONE_XP: Readonly<Record<SkillZone, number>> = { "top-bin": 15, "post-in": 20, "bar-in": 25 };
 export const SKILL_ZONE_LABEL: Readonly<Record<SkillZone, string>> = { "top-bin": "top bin", "post-in": "in off the post", "bar-in": "in off the bar" };
+/**
+ * Lowest crossing height at which the ball can touch the crossbar: the engine's hitsBar band is
+ * |y − 1| < BALL_RADIUS (0.045) + FRAME (0.025). A post-in below it clipped the post, not the bar
+ * (e.g. an overhit at y 0.91 off the inside of the post is "in off the post", not "in off the bar").
+ */
+export const BAR_CONTACT_Y = 1 - (0.045 + 0.025);
 export function skillZoneOf(kick: { goal: boolean; zone: string; postIn?: boolean; y: number }): SkillZone | null {
   if (!kick.goal) return null;
-  if (kick.postIn && kick.y >= 0.9) return "bar-in";
+  if (kick.postIn && kick.y > BAR_CONTACT_Y) return "bar-in";
   if (kick.postIn) return "post-in";
   return kick.zone === "bin" ? "top-bin" : null;
 }

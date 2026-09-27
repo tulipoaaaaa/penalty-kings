@@ -61,6 +61,8 @@ jobs:
         run: npm run test:phone
       - name: Every free mode played in the real runtime (tutorial, free kicks, target, tour, daily)
         run: npm run test:modes
+      - name: D17 Skill Zones end to end, deterministic (in off the post, top bin, streak text, a plain goal)
+        run: npm run test:skillzones
       - name: 90-second first-session QA (reduced motion AND full motion, 960 + 360 px, with minimums)
         run: npm run qa:90s
       - name: Action-flow audit (every awkward interleaving, 960 + 360 px)
