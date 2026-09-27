@@ -3,21 +3,26 @@
 A Rare Friends football game. Your hardwired Rare Friend is the striker: swipe to shoot
 penalties and free kicks past 12 original keepers. In the optional Big Match you open packs of
 balls bought with $RAREFRIENDS (RF), whose rarity comes from on-chain randomness, and keep them in
-your Bag. A fixed-supply game token, **$GBOOT**, is designed to pair with RF (tokenomics v2:
-designed and tested, not deployed). Built on **FriendSDK v0.1.2** for the Rare Friends Vibeathon.
+your Bag. Built on **FriendSDK v0.1.2** for the Rare Friends Vibeathon.
 
-> **RF first.** You play with RF. Every ball is backed by RF in its stadium's prize bank and can
-> be redeemed for RF. On-chain randomness sets how much each ball pays, and the average return is
-> 90%. **$GBOOT is optional**: it is a bonus layer for skill and loyalty (drops, lacing perks for
-> style and XP, Skill Cup, Wildcards, cosmetics). You never need it to play, and it never changes a ball's RF
-> odds. See [docs/ECONOMY.md](docs/ECONOMY.md#rf-first). Nothing here is investment advice.
+> **Pilot status.** Rare Friends is adapting this game to **FriendSDK v0.2.1** as a pilot. They
+> will fork this repo and deploy their own contracts for the game's **two random rolls** (buying a
+> pack, taking a penalty). The pilot ships **without $GBOOT**, and **this repo deploys nothing**.
+> Handoff notes: [docs/HANDOFF-RF.md](docs/HANDOFF-RF.md) · the rolls:
+> [docs/RNG-INTEGRATION.md](docs/RNG-INTEGRATION.md) · the undeployed $GBOOT upgrade:
+> [docs/GBOOT-UPGRADE.md](docs/GBOOT-UPGRADE.md).
+
+> **RF first.** Every ball is backed by RF in its stadium's prize bank and can be redeemed for RF.
+> On-chain randomness sets how much each ball pays, and the average return is 90%. Skill never
+> changes a ball's odds. Nothing here is investment advice.
 
 > The public preview's economy is **simulated** and labelled as such. The wallet connection and
-> the hardwired-Friend ownership gate are real. Live contracts are an optional extra, recorded in
-> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+> the hardwired-Friend ownership gate are real.
 
 **Play:** https://tulipoaaaaa.github.io/penalty-kings/. You need a browser wallet on Robinhood
 mainnet (4663) holding a hardwired Generations NFT (generation ≥ 1).
+**No wallet?** Try the free practice mode: https://tulipoaaaaa.github.io/penalty-kings/practice/
+(a few kicks against the keepers, no wallet, no economy).
 
 ## How to play
 
@@ -47,7 +52,7 @@ mainnet (4663) holding a hardwired Generations NFT (generation ≥ 1).
 ```sh
 npm ci                 # Node.js 22+
 npm run dev            # http://localhost:4173
-npm run build:site     # static site in site/ (Park /, Pro /pro/, Champions /champions/)
+npm run build:site     # static site in site/ (Park /, Pro /pro/, Champions /champions/, practice /practice/)
 ```
 
 ## Dev mode (local only)
@@ -84,7 +89,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `verifier/` | Skill Cup referee (Cloudflare Worker). Inputs are committed before the dive exists, dives come from a weekly HMAC secret, and results are signed |
 | `contracts/` | Foundry (NOTHING deployed): `GBoot`, `EmissionVault`, `Bootroom`, `FriendsAirdrop`, `EdgeSplitter`, `LiquidityLock`, `KitShop`, `SkillCup`, `Wildcards`, `PoolSwapper`, `GBootFeeHook` (fee burn + TWAP), `GBootPriceFeed`, `RewardsDistributor`, `BallVault` (the ball-market design), `script/Launch.s.sol`, plus unit/fuzz/invariant and mainnet-fork tests |
 | `scripts/` | `verify-odds`, `economy-sim`, the pool plan and TickMath port, stadium deployer, weekly Cup/drop computation, budget guard, wallet loader, secret scan, test runners |
-| `docs/` | [ECONOMY](docs/ECONOMY.md) · [SCARCITY](docs/SCARCITY.md) · [BALL-MARKET](docs/BALL-MARKET.md) · [LEGAL](docs/LEGAL.md) · [ADDRESSES](docs/ADDRESSES.md) · [DEPLOYMENT](docs/DEPLOYMENT.md) · [TX-LOG](docs/TX-LOG.md) · [DROPS](docs/DROPS.md) · [WEEKLY](docs/WEEKLY.md) · [DIFFICULTY](docs/DIFFICULTY.md) · [FLOW-AUDIT](docs/FLOW-AUDIT.md) · [PERSISTENCE](docs/PERSISTENCE.md) · [WALLETS](docs/WALLETS.md) · [RELEASES](docs/RELEASES.md) · [HUMAN-CHECKS](docs/HUMAN-CHECKS.md) |
+| `docs/` | [HANDOFF-RF](docs/HANDOFF-RF.md) · [RNG-INTEGRATION](docs/RNG-INTEGRATION.md) · [GBOOT-UPGRADE](docs/GBOOT-UPGRADE.md) · [ECONOMY](docs/ECONOMY.md) · [SCARCITY](docs/SCARCITY.md) · [BALL-MARKET](docs/BALL-MARKET.md) · [LEGAL](docs/LEGAL.md) · [ADDRESSES](docs/ADDRESSES.md) · [DEPLOYMENT](docs/DEPLOYMENT.md) · [TX-LOG](docs/TX-LOG.md) · [DROPS](docs/DROPS.md) · [WEEKLY](docs/WEEKLY.md) · [DIFFICULTY](docs/DIFFICULTY.md) · [FLOW-AUDIT](docs/FLOW-AUDIT.md) · [PERSISTENCE](docs/PERSISTENCE.md) · [WALLETS](docs/WALLETS.md) · [RELEASES](docs/RELEASES.md) · [HUMAN-CHECKS](docs/HUMAN-CHECKS.md) |
 | `submission/` | Vibeathon submission README and PR text |
 | `vendor/` | The official FriendSDK v0.1.2 release archive (sha256 in docs/ADDRESSES.md) |
 
@@ -105,19 +110,15 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `cd contracts && forge test` | Contract unit tests. The `Fork` suites run against a mainnet fork in CI |
 | `npm run secret-scan` | No mnemonics or private keys in tracked files (also a pre-commit hook) |
 
-All of these run in GitHub Actions ([ci.yml](.github/workflows/ci.yml)). Every launch step is
-also rehearsed on a mainnet fork ([rehearsal.yml](.github/workflows/rehearsal.yml)).
+All of these run in GitHub Actions ([ci.yml](.github/workflows/ci.yml)).
 
-## Safety rules for live transactions
+## Deployments
 
-- **Rehearsal first:** every mainnet transaction is rehearsed first on an anvil fork with the
-  same code and arguments (`scripts/onchain/lib.mjs`, `forge script`).
-- **Hard caps:** spend caps are enforced in `scripts/lib/budget.mjs`: cumulative ETH ≤ funded −
-  0.003 ETH reserve, per-swap caps, and ≤ 3% slippage from a fresh quote.
-- **Logging:** each transaction is logged in [docs/TX-LOG.md](docs/TX-LOG.md) before sending and
-  completed with its receipt afterwards.
-- **Secrets:** the burner's key lives only in an environment secret (`BURNER_PRIVATE_KEY`) or an
-  encrypted Foundry keystore outside the repo. It never goes in git, CI or logs.
+None. By founder decision the pilot deploys nothing from this repo; Rare Friends deploys its own
+contracts for the two random rolls. The $GBOOT contracts in `contracts/` are a tested, **undeployed**
+upgrade package. Reviving it means an audit, a mainnet-fork rehearsal and a legal review first (see
+[docs/GBOOT-UPGRADE.md](docs/GBOOT-UPGRADE.md)). No key or secret is ever stored in git, CI or logs;
+`npm run secret-scan` enforces this.
 
 ## Licence and assets
 
