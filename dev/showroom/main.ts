@@ -296,6 +296,7 @@ const logElement = $<HTMLPreElement>("#log");
 function log(line: string) { logElement.textContent = `${(performance.now() / 1000).toFixed(1)}s  ${line}\n${logElement.textContent}`.slice(0, 3000); }
 stage.onEvent = (event, data) => {
   log(event === "sfx" ? `sfx: ${data}` : event === "wait" ? `wait: ${JSON.stringify(data)}` : `${event}${data ? `: ${data}` : ""}`);
+  if (event === "resolved") stage.streak = data === "goal" ? stage.streak + 1 : 0; // the game owns the streak; the Showroom counts its own kicks
   if (event === "resolved" && $<HTMLInputElement>("#freeze").checked) { paused = true; $("#pause").textContent = "Resume"; }
 };
 
