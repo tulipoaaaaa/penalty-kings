@@ -451,8 +451,9 @@ contract BallVaultTest is VaultFixture {
         uint256 ask = floor * 2;
 
         vm.prank(alice);
-        vm.expectRevert(BallVault.PriceBelowFloor.selector);
-        vault.list(id, 1, floor - 1);
+        // Free market: listing below the floor is allowed (the seller's choice); a zero price is not.
+        vm.expectRevert(BallVault.InvalidListing.selector);
+        vault.list(id, 1, 0);
 
         vm.prank(alice);
         uint256 listingId = vault.list(id, 3, ask);

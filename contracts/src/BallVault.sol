@@ -127,7 +127,6 @@ contract BallVault is ERC1155, ReentrancyGuard {
     error NotFriendController();
     error NoCommit();
     error NotRedeemed();
-    error PriceBelowFloor();
     error NotSeller();
     error InvalidListing();
     error EditionClosed();
@@ -266,7 +265,8 @@ contract BallVault is ERC1155, ReentrancyGuard {
         returns (uint256 listingId)
     {
         if (quantity == 0) revert InvalidQuantity();
-        if (unitPrice < floorOf(id)) revert PriceBelowFloor();
+        // Free market: any price. (Unwrapping always pays the RF floor, so selling below it is the seller's choice.)
+        if (unitPrice == 0) revert InvalidListing();
         listingId = ++listingCount;
         listings[listingId] = Listing(msg.sender, id, quantity, unitPrice);
         // Escrow without the receiver hook: this contract deliberately rejects direct transfers.

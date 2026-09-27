@@ -58,7 +58,7 @@ original friend-bound ball back, because only ChanceGame `settle` mints balls.
 
 | Call | Rules |
 |---|---|
-| `list(id, qty, unitPrice)` | `unitPrice ≥ floor`: a Vault Ball can never be listed below the RF it unwraps to. The units move into escrow in the vault. |
+| `list(id, qty, unitPrice)` | **Free market: any price > 0.** No floor or ceiling is imposed (the seller decides; unwrapping always pays the RF floor, so selling below it is simply a bad trade). The units move into escrow in the vault. |
 | `buy(listingId, qty, maxUnitPrice)` | The buyer pays `qty × unitPrice` RF directly: `fee = paid × feeBps / 10,000` goes to `feeRecipient`, and the rest goes to the seller. The units leave escrow to the buyer. `maxUnitPrice` is a UI guard. |
 | `cancel(listingId)` | Seller only. Returns unsold units. |
 
@@ -95,7 +95,7 @@ Wrap adds `qty × floor` to both sides, and unwrap takes `qty × floor` from bot
 and transfers change neither. The invariant test checks this after random sequences of all six
 actions.
 
-**Seller and buyer at a premium.** For a listing at `p` per unit (`p ≥ floor`) and fee rate `f`:
+**Seller and buyer at a premium.** For a listing at `p` per unit (any `p` the seller chooses) and fee rate `f`:
 the seller gets `p × (1 − f)`, and the buyer holds a claim worth at least `floor` RF. The buyer's
 most they can lose, in RF, is `p − floor`. The seller would rather list than unwrap only when
 `p × (1 − f) > floor`.
@@ -140,7 +140,7 @@ tier labels. Once an edition is discontinued:
 - Only the Friend's controller can commit, only the committer can wrap, and the committer must
   still control the Friend.
 - Floors come from the game's immutable outcome table, and Scuffed/invalid outcomes revert.
-- Listings are ≥ floor and escrowed. Only the seller cancels. The fee is ≤ 5% and fixed at
+- Listings are at any price the seller chooses (free market) and escrowed. Only the seller cancels. The fee is ≤ 5% and fixed at
   deployment. Buyer RF never enters the backing.
 - Reentrancy: every state-changing entry point is `nonReentrant`, and state is written before
   ERC-1155 receiver hooks run. Tests re-enter `unwrap`/`buy`/`cancel` from receiver hooks, and each
