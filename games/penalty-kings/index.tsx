@@ -152,7 +152,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
   const [selectedBall, setSelectedBall] = useState<string | null>(() => loadLastBall());
   const [carousel, setCarousel] = useState(false);
-  const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
+  /** What the packs opened since the last Big Match Results earned (that Results card lists it, then it starts again). */
+  const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0, packs: 0, balls: 0 });
   /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
   const [persistent] = useState(() => canPersist());
   /** Title screen: the cold-open showreel plays once per visit, then the shorter attract loop (owner's SHOW IT OFF). */
@@ -1119,11 +1120,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
         result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
         result.match = {
-          rf: earned.rf > 0n ? `The balls you opened this session are worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
+          rf: earned.packs > 0 ? `You opened ${earned.packs} pack${earned.packs === 1 ? "" : "s"} (${earned.balls} ball${earned.balls === 1 ? "" : "s"}) this session, worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
           gboot: `$GBOOT dropped by your packs this session: +${formatNumber(earned.gboot)}${simulated ? " (simulated)" : " (estimate, paid weekly)"}.`,
           race: `Golden Boot Cup race: +${formatNumber(earned.race)} points this session${tag}.`,
           toTop10: raceRank <= 10 ? `You are #${raceRank} in the race${tag}.` : `You need ${formatNumber(gap)} more points to reach the top 10${tag}.`,
         };
+        setEarned({ rf: 0n, gboot: 0, race: 0, packs: 0, balls: 0 }); // the next match counts its own packs
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -1218,7 +1220,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       let drops = 0, race = 0, value = 0n;
       for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight * racePointMultiplier(Date.now()); value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
-      setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race }));
+      setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race, packs: e.packs + 1, balls: e.balls + rarities.length }));
       const best = Math.max(...rarities);
       if (best >= 5) { setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`); director().noteBigPull(); } // the Director only learns "a big pull happened" (intensity), never its value
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));

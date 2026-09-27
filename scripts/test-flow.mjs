@@ -113,7 +113,10 @@ await testGame("./games/penalty-kings", {
     await waitShootable();
     const ball = (await flow()).ball;
     assert.ok(ball, "Big Match kicks with the pack's ball");
-    await playMatch();
+    // Results count the packs opened for this match (the fixture's rolls are 0 RF Scuffed Balls: still a pack).
+    const first = await playMatch();
+    assert.match(first, /You opened 1 pack \(1 ball\) this session, worth 0 RF/, "Results list the pack opened");
+    assert.doesNotMatch(first, /No packs opened/);
     await game.getByRole("button", { name: "Play again", exact: true }).click();
     await waitShootable();
     const again = await flow();
@@ -121,6 +124,10 @@ await testGame("./games/penalty-kings", {
     assert.equal(again.ball, ball, "Play again kicks with the same ball");
     assert.equal(await game.getByTestId("change-ball").textContent(), "Change ball");
     ok("Big Match Results 'Play again' reuses the ball the player kicked with");
+    const second = await playMatch();
+    assert.match(second, /No packs opened this session/, "the next match's Results start from zero");
+    assert.match(second, /\$GBOOT dropped by your packs this session: \+0 /);
+    ok("Big Match Results show the packs opened (and their RF, $GBOOT, Cup points) for that match only");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
