@@ -10,6 +10,7 @@ import { buildGame, readGameDeployment } from "@rarefriends/friendsdk/build";
 import { buildClubhouse } from "./build-clubhouse.mjs";
 import { buildPractice } from "./build-practice.mjs";
 import { stadiumNav } from "./lib/stadium-nav.mjs";
+import { stripQaHooks } from "./lib/qa-hooks.mjs";
 
 const GAME = "games/penalty-kings", WORK = ".build", SITE = "site";
 const exists = path => access(path).then(() => true, () => false);
@@ -37,6 +38,9 @@ async function buildTier(tier, outdir, deploymentFile) {
     }
     await writeFile(runtime, js);
   }
+  // BQ-P2: the public site does not expose the game's QA hooks (scripts/lib/qa-hooks.mjs). PK_QA_HOOKS=1 keeps them
+  // for a local QA build of the site; check:no-dev (CI and the Pages workflow) rejects such a build.
+  if (process.env.PK_QA_HOOKS !== "1") await writeFile(`${outdir}/game.js`, stripQaHooks(await readFile(`${outdir}/game.js`, "utf8")));
   console.log(`built ${tier}${deployment ? " (LIVE)" : " (simulated)"} → ${outdir}`);
 }
 
