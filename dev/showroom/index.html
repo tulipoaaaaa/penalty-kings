@@ -31,7 +31,7 @@
 </head>
 <body>
 <div class="devbar">DEV SHOWROOM — local only, never deployed. Outcomes come from the real engine.</div>
-<div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button></div>
+<div class="tabs" style="padding: 8px 12px 0"><button data-tab="stage" class="active">Stage</button><button data-tab="cast">Cast</button><button data-tab="balls" data-testid="tab-balls">Balls</button></div>
 <div class="layout" data-panel="stage">
   <div class="screen"><canvas id="stage"></canvas><div id="meter"></div></div>
   <aside>
@@ -65,6 +65,13 @@
 <div data-panel="cast" hidden style="padding: 12px">
   <canvas id="cast"></canvas>
   <p class="muted" id="crowd-types"></p>
+</div>
+<div data-panel="balls" hidden style="padding: 12px">
+  <p class="muted">Every ball sprite: 7 rarities + the standard ball (Skill Cup), Season 1 and the Season 0 vintage print, at 24 px and 32 px, all 8 spin frames (sheen sweeps frames 1–4), the reduced-motion still, and the in-game sizes (9 px flight, 28 px reveal). Sprites are pre-rendered once into offscreen strips.</p>
+  <label><input id="balls-reduced" type="checkbox"> Reduced motion (no sheen / twinkle)</label>
+  <label>Zoom <select id="balls-zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option></select></label>
+  <div><canvas id="balls" data-testid="ball-sheet" style="image-rendering: pixelated; border: 2px solid var(--line); background: #12162b"></canvas></div>
+  <p class="muted" id="balls-info"></p>
 </div>
 <script src="app.js"></script>
 </body>

@@ -8,7 +8,7 @@ import type { ChanceGameDefinition } from "@rarefriends/friendsdk/game";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import { TIERS, formatNumber, type Tier } from "./economy.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { BallSpin } from "./ui.js";
+import { BallSpin, ballGlow } from "./ui.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
@@ -56,7 +56,8 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
   const tag = simulated ? " (sim)" : "";
   return <div className="pk-pack" role="dialog" aria-label="Pack opening" data-testid="pack">
     <p className="pk-honest">Rarity decided by {simulated ? "the preview's simulated draw (on-chain randomness when live)" : "on-chain randomness (Dice)"} when the pack was opened. Tapping order and speed change nothing.</p>
-    <div className="pk-cards">{rarities.map((rarity, index) => <button key={index} type="button" className="pk-card" data-revealed={revealed[index]} data-rarity={revealed[index] ? rarity : undefined} disabled={revealed[index]} onClick={() => onFlip(index)} aria-label={revealed[index] ? RARITY_NAMES[rarity] : `Ball ${index + 1}: tap to reveal`}>
+    <div className="pk-cards">{rarities.map((rarity, index) => <button key={index} type="button" className="pk-card" data-revealed={revealed[index]} data-rarity={revealed[index] ? rarity : undefined} disabled={revealed[index]} onClick={() => onFlip(index)} aria-label={revealed[index] ? RARITY_NAMES[rarity] : `Ball ${index + 1}: tap to reveal`}
+      style={revealed[index] ? { backgroundImage: ballGlow(rarity) } : { backgroundImage: "repeating-linear-gradient(45deg, #ffffff0d 0 4px, transparent 4px 8px), linear-gradient(135deg, #2a3160, #151a33)" }}>
       {revealed[index] ? <><BallSpin rarity={rarity} size={36} /><strong>{RARITY_NAMES[rarity].replace(" Ball", "")}</strong><small>{rf(rewardOf(rarity))}</small></> : <span className="pk-cardback">?</span>}
     </button>)}</div>
     {!done && <button type="button" className="pk-primary" onClick={onRevealAll} data-testid="reveal-all">Reveal all</button>}
