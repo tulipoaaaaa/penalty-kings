@@ -4,7 +4,7 @@ The root preview (https://tulipoaaaaa.github.io/penalty-kings/) is the judged bu
 
 | Tag | Commit | Date (UTC) | Evidence |
 |---|---|---|---|
-| `judging-stable-1` | `18b4bc8` | 2026-09-27 15:26 UTC | **GitHub CI run 100 fully green** (all jobs), deployed to Pages. Includes the freeze fix, free practice `/practice/`, phone layouts, the 0–15 s randomness waits, next goal, odds on every pack, Skill Zones, the daily check-in. The session's git proxy refuses tag pushes (`send-pack: unexpected disconnect`; branch pushes work), so create it on GitHub: Releases → Draft a new release → tag `judging-stable-1` → target `18b4bc8`. |
+| `judging-stable-1` | `135c2db` | 2026-09-27 16:09 UTC | **GitHub CI runs 100–102 fully green** (all jobs; 135c2db = run 102), deployed to Pages. Includes the phone-landscape tutorial banner, the deterministic Skill Zones test, the pot price tag, the celebration fix, the freeze fix, free practice `/practice/`, phone layouts, the 0–15 s randomness waits, next goal, odds on every pack, Skill Zones, the daily check-in. The session's git proxy refuses tag pushes (`send-pack: unexpected disconnect`; branch pushes work), so create it on GitHub: Releases → Draft a new release → tag `judging-stable-1` → target `135c2db`. |
 | (previous baseline) | `8a895fe` | 2026-09-27 | The earlier judged baseline (local full run green; CI's real-gate step was then failing on a stale assertion, fixed in `74d7fad`). Revert target of last resort. |
 
 **Freeze plan:**

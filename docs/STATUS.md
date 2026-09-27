@@ -42,4 +42,4 @@ That is the only transaction. **No game contract, $GBOOT token, pool or vault is
 
 - Every push runs the full CI ([ci.yml](../.github/workflows/ci.yml)).
 - The public preview redeploys only after a fully green run.
-- The stable baseline is commit `18b4bc8` (CI run 100 green, deployed); the `judging-stable-1` tag has to be created on GitHub ([RELEASES](RELEASES.md)).
+- The stable baseline is commit `135c2db` (CI run 102 green, deployed); the `judging-stable-1` tag has to be created on GitHub ([RELEASES](RELEASES.md)).
