@@ -80,6 +80,7 @@ site/ (built)                   the public static preview: Park /, Pro /pro/, Ch
 - **Other Friends' sprites:** the SDK harness answers only its sample Friend. A crowd of *other* Friends would need a sprite source the harness allows.
 - **Keeper tells with the beacon:** in the beacon modes the pre-kick tell is hidden (the dive doesn't exist before the shot is committed); see [RNG-INTEGRATION.md](RNG-INTEGRATION.md). This is a design decision to confirm.
 - **Phones:** text drawn on the pitch canvas scales with the pitch and is small in portrait (the page suggests landscape). A custom host that ignores `host.css` keeps the 3:2 frame.
+- **SDK toolbar text on phones:** below 520 px wide the SDK's own `runtime.css` sets the frame toolbar ("Public preview · simulated", "Friend #…", "Friend wallet") and the mode label to 9 px (`@media (max-width:520px) { .rf-frame-toolbar { font-size: 9px } .rf-frame-mode { font-size: 9px } }`). That is the SDK harness chrome, not our `host.css` (which only sets the frame-size variables), so we leave it; our ≥ 11 px rule (`test:phone`, `test:practice`) covers the game frame and our own pages. Ask for ≥ 11 px in the v0.2.1 host chrome.
 - **Keepers faced in the first 90 s:** 3–5, depending on skill. Keepers *seen*, counting the cold open, is 7–9.
 - **Real-device playtest:** the browser tests use the SDK's mocked wallet. A human playthrough on a phone is still needed.
 - **Legal:** paid chance with a redeemable prize needs legal review before live promotion ([LEGAL.md](LEGAL.md)).
