@@ -26,25 +26,33 @@ export type Cut = Readonly<{
   caption?: string;
   /** Camera push-in during the cut. */
   push?: boolean;
+  /** Net-cam push: from the strike, the camera pushes in on where the ball goes in (full motion only). */
+  netcam?: boolean;
+  /** Seconds into the cut before the title slams in (full motion): the TOP BIN! title lands with the ball. */
+  titleAt?: number;
   /** Rarity for the example reveal cut (0–6). */
   rarity?: number;
 }>;
 
 /**
- * The cold open (first view, ~26 s): floodlight thunk + roar → logo slam; keeper signature moves;
- * the three stadiums with a weather change; a Golden Boot reveal flash (labelled example);
+ * The cold open (first view, ~23 s), goal first (B8): a short logo slam; a top-bin goal with the
+ * net-cam push (the ball is in the net by ~2.4 s); then the keeper signature moves; the three
+ * stadiums with a weather change; the Final Wall; a Golden Boot reveal flash (labelled example);
  * the commentator; the player's Friend walks out → TAP TO PLAY.
+ * Decluttered: at most two text elements at once in the first cuts (the logo plate + one caption,
+ * then the TOP BIN! title + the commentator line). The logo plays in the Park, which has no
+ * jumbotron, so the Champions jumbotron's own "PENALTY KINGS" never stacks on the logo.
  */
 export const MONTAGE: readonly Cut[] = [
-  { beats: 3, kind: "logo", stadium: "champions", weather: "sun", keeper: "finalwall", title: "PENALTY KINGS", caption: "*floodlights thunk on* · the crowd roars", push: true },
+  { beats: 2, kind: "logo", stadium: "park", weather: "sunset", keeper: "mouse", title: "PENALTY KINGS", caption: "swipe · curl · score" },
+  { beats: 4, kind: "top-bin", stadium: "pro", weather: "rain", keeper: "peacock", title: "TOP BIN!", titleAt: 0.85, netcam: true },
   { beats: 2, kind: "signature", stadium: "park", weather: "sun", keeper: "octopus", title: "OCTAVIA", caption: "ink puff!" },
   { beats: 2, kind: "signature", stadium: "park", weather: "fog", keeper: "ghost", title: "BOO", caption: "blink… where did he go?" },
   { beats: 2, kind: "signature", stadium: "pro", weather: "sun", keeper: "sumo", title: "BIG BENTO", caption: "STOMP!", push: true },
   { beats: 2, kind: "signature", stadium: "pro", weather: "rain", keeper: "chameleon", title: "CHROMA", caption: "now you see her…" },
+  { beats: 2, kind: "stadium", stadium: "park", weather: "sunset", keeper: "mime", title: "PARK", caption: "where it all starts" },
+  { beats: 2, kind: "goal", stadium: "champions", weather: "snow", keeper: "robot", title: "CHAMPIONS", caption: "fireworks night", push: true },
   { beats: 3, kind: "signature", stadium: "champions", weather: "sun", keeper: "finalwall", title: "THE FINAL WALL", caption: "the boss awaits", push: true },
-  { beats: 2, kind: "stadium", stadium: "park", weather: "sunset", keeper: "mouse", title: "PARK", caption: "where it all starts" },
-  { beats: 2, kind: "top-bin", stadium: "pro", weather: "rain", keeper: "peacock", title: "PRO", caption: "floodlights and flares", push: true },
-  { beats: 2, kind: "goal", stadium: "champions", weather: "snow", keeper: "robot", title: "CHAMPIONS", caption: "fireworks night" },
   { beats: 3, kind: "reveal", stadium: "champions", weather: "sun", keeper: "disco", rarity: 6, title: "example reveal", caption: "Golden Boot ball (example: rarity is decided on-chain)" },
   { beats: 3, kind: "commentator", stadium: "pro", weather: "sun", keeper: "squirrel", caption: "\"What a strike!\"", push: true },
   { beats: 5, kind: "friend", stadium: "park", weather: "sun", keeper: "mouse", title: "TAP TO PLAY", caption: "your Friend walks out" },
