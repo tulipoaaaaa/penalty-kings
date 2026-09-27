@@ -127,11 +127,17 @@ await testGame("./games/penalty-kings", {
     await game.locator(".pk-banner").waitFor({ timeout: 8000 });
     const banner = await game.locator(".pk-banner strong").textContent();
     await game.getByTestId("round").and(game.locator('[data-kicks="1"]')).waitFor({ timeout: 8000 });
-    await game.getByTestId("carousel").waitFor({ timeout: 12_000 });
+    // Round 6 C12: the same ball comes back for the next kick (no carousel); the HUD reads "Bag N · Unopened M".
+    await waitShootable();
+    assert.equal(await game.getByTestId("carousel").count(), 0, "no carousel between kicks: the last-used ball is remembered");
+    assert.match(await game.locator(".pk-hud-left .pk-stat").textContent(), /Bag 2 · Unopened 0/);
+    await game.getByTestId("change-ball").click();
+    await game.getByTestId("carousel").waitFor({ timeout: 5000 });
     assert.match(await game.getByTestId("carousel").textContent(), /1 kicks|0 goals in 1 kicks|1 goals in 1 kicks/, "the ball's career counts the kick");
     console.log(`big match kick: ${banner}`);
     // The ball stays in the Bag after kicking; redeem one with RF value (if both were Scuffed, there is nothing to redeem).
     await game.getByRole("button", { name: "Close", exact: true }).click();
+    await waitShootable(); // closing the carousel goes back to aiming with the same ball
     await game.getByTestId("menu").click();
     await button("My Bag").click();
     assert.equal(await game.getByTestId("ball").count(), 2, "kicking did not consume a ball");

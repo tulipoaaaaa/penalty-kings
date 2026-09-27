@@ -98,7 +98,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // The Bag (records layered over the on-chain inventory), the open pack, the chosen ball.
   const [bag, setBag] = useState<BallRecord[]>(() => { const stored = loadBag(); return simulated ? [...stored.filter(record => !record.sample), ...sampleDiscontinued(Date.now())] : stored.filter(record => !record.sample); });
   const [pack, setPack] = useState<{ rarities: number[]; revealed: boolean[]; gboot: number } | null>(null);
-  const [selectedBall, setSelectedBall] = useState<string | null>(null);
+  /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
+  const [selectedBall, setSelectedBall] = useState<string | null>(() => loadLastBall());
   const [carousel, setCarousel] = useState(false);
   const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
   /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
@@ -428,7 +429,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "daily") { setMenu("daily"); return; }
     if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
     if (mode === "skill") { enterSkillCup(); return; }
-    if (mode === "match") { if (bag.some(ball => !ball.sample)) { setScreen("play"); beginSession(newSession("match")); setSelectedBall(selectedBall ?? bag.find(ball => !ball.sample)!.id); setCarousel(true); } else setMenu("balls"); return; }
+    // Big Match (round 6 C12): kick straight away with the last-used ball (or the best one); "Change ball" opens the carousel.
+    if (mode === "match") { const id = lastUsedBall(); if (id) kickWith(id); else setMenu("balls"); return; }
     beginSession(newSession(mode));
   }
 
@@ -560,7 +562,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // Big Match: 5 kicks, then sudden death at ×2 if 3+ goals (unchanged rule).
     if (current.mode === "match") {
       const regular = kicks.length <= 5 && !current.suddenDeath;
-      if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · SUDDEN DEATH: ×2 until you miss"; scene?.say("sudden-death"); }
+      if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
+      if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
     const text = timedOut ? "TIME!" : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > 0.9 ? "OFF THE BAR!" : LABELS[result];
@@ -587,7 +590,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (current.mode === "match") {
       const done = current.suddenDeath ? current.kicks[current.kicks.length - 1]?.result !== "goal" : current.kicks.length >= 5 && !current.suddenDeath;
       if (done) { endSession(current); return; }
-      setPhaseNow("idle"); setCarousel(true); return;
+      // The same ball again (round 6 C12): the carousel only opens on "Change ball".
+      const ball = current.ball, held = ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample);
+      if (held) { startAim(current); return; }
+      setPhaseNow("idle"); return;
     }
     if (current.kicks.length >= current.total) { endSession(current); return; }
     // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
@@ -647,7 +653,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "match") {
         const top10 = raceTable[Math.min(9, raceTable.length - 1)].points, gap = Math.max(0, top10 - race + 1);
-        result.match = { rf: `${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())}) pulled in balls this session${tag}`, gboot: `+${formatNumber(earned.gboot)} $GBOOT${simulated ? " (sim)" : " (est., paid weekly)"}`, race: `+${formatNumber(earned.race)} pts${tag}`, toTop10: raceRank <= 10 ? `you are #${raceRank}` : `${formatNumber(gap)} points to reach the top 10${tag}` };
+        // Results in plain words (round 6 C12), with the true numbers.
+        result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
+        result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
+        result.match = {
+          rf: earned.rf > 0n ? `The balls you opened this session are worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
+          gboot: `$GBOOT dropped by your packs this session: +${formatNumber(earned.gboot)}${simulated ? " (simulated)" : " (estimate, paid weekly)"}.`,
+          race: `Golden Boot Cup race: +${formatNumber(earned.race)} points this session${tag}.`,
+          toTop10: raceRank <= 10 ? `You are #${raceRank} in the race${tag}.` : `You need ${formatNumber(gap)} more points to reach the top 10${tag}.`,
+        };
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -728,8 +742,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current.session;
       if (current?.mode === "match" && current.ball?.recordId === record.id) {
         setSession({ ...current, ball: undefined }); if (live.current.phase === "aim") setPhaseNow("idle");
-        if (selectedBall === record.id) setSelectedBall(null);
-      } setMessage(`Redeemed a ${RARITY_NAMES[record.rarity]} for ${rf(definition.outcomes[record.rarity].reward)}.`); });
+      }
+      if (selectedBall === record.id) { setSelectedBall(null); saveLastBall(null); } setMessage(`Redeemed a ${RARITY_NAMES[record.rarity]} for ${rf(definition.outcomes[record.rarity].reward)}.`); });
   }
 
   /** BAG / CAROUSEL → kick with this ball (Big Match). Choice changes only skill-layer fields. */
@@ -741,11 +755,29 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.rarity = style.fx; scene.lucky = style.luckyTrail; scene.season = record.season; scene.crowd.react(style.crowd);
     }
   }
+  /** The last ball kicked with, if still in the Bag; otherwise the most valuable ball held. */
+  function lastUsedBall() {
+    const held = bagRef.current.filter(ball => !ball.sample);
+    return held.find(ball => ball.id === selectedBall)?.id ?? [...held].sort((a, b) => b.rarity - a.rarity)[0]?.id ?? null;
+  }
+  /** "Change ball": leave the aim (never mid-kick) and open the carousel, under the open-carousel guard. */
+  function changeBall() {
+    const state = flow();
+    if (state.phase === "shooting" || state.inFlight > 0 || !allowed({ ...state, phase: "idle" }, "open-carousel")) return;
+    if (state.phase === "aim") { swipe.current = null; pointer.current = null; keyAim.current.charging = false; setPhaseNow("idle"); }
+    live.current = { ...live.current, carousel: true }; setCarousel(true);
+  }
+  /** Closing the carousel goes back to aiming with the current ball (if one is still held). */
+  function closeCarousel() {
+    live.current = { ...live.current, carousel: false }; setCarousel(false);
+    const current = live.current.session, ball = current?.ball;
+    if (current?.mode === "match" && ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample) && !inFlight.current) startAim(current);
+  }
   function kickWith(id: string | null) {
     const record = bagRef.current.find(ball => ball.id === id && !ball.sample);
     if (!record) { setMenu("balls"); return; }
     if (!may("kick-with")) return;
-    chooseBall(record.id);
+    chooseBall(record.id); saveLastBall(record.id);
     const current = live.current.session;
     const session = current && current.mode === "match" ? { ...current, ball: { recordId: record.id, rarity: record.rarity } } : { ...newSession("match"), ball: { recordId: record.id, rarity: record.rarity } };
     if (!current || current.mode !== "match") beginSession(session); else setSession(session);
@@ -867,7 +899,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {screen === "play" && s && <>
         <header className="pk-hud pk-hud-left">
           <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : `${modeName.toUpperCase()} · ${rungName(s.rung).toUpperCase()}`}</span>
-          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Balls <b data-testid="balls">{balls.toString()}</b></span>
+          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Bag <b data-testid="bag-count">{bag.filter(ball => !ball.sample).length}</b> · Unopened <b data-testid="unopened">{balls.toString()}</b></span>
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
@@ -879,10 +911,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {artStatus && screen === "play" && <p className="pk-art-status" role="status">{artStatus}</p>}
 
       {pack && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={flipCard} onRevealAll={revealAll} onDone={() => { setPack(null); setMenu("bag"); }} />}
-      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={() => setCarousel(false)} />}
+      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={closeCarousel} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
-        {inMatch && phase === "idle" && !carousel && <button type="button" className="pk-primary" disabled={busy || paused} onClick={() => { if (may("open-carousel")) setCarousel(true); }} data-testid="choose-ball">Choose ball</button>}
+        {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}
         {phase === "aim" && s && !pack && !carousel && <button type="button" onClick={() => (s.kind === "freekick" && s.setup ? shootFreeKick(keyFreeKick({ ...keyAim.current, power: 0.55, curl: keyAim.current.curl || 0.6, top: 0.5 }, s.setup)) : shootPenalty({ aimX: keyAim.current.aimX, aimY: keyAim.current.aimY, power: 0.7, curl: keyAim.current.curl }))} data-testid="quick">Quick shot</button>}
         <button type="button" onClick={() => { if (may("open-menu")) setMenu("hub"); }} disabled={phase === "shooting"} data-testid="menu">Menu</button>
       </nav>}
@@ -1043,6 +1075,9 @@ function menuTitle(menu: Exclude<Menu, null>) {
 /** Bag records persist on this device when the browser allows (the sandboxed preview may not). */
 const BAG_KEY = "penalty-kings/bag/v1";
 function loadBag(): BallRecord[] { try { const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(BAG_KEY); return raw ? (JSON.parse(raw) as BallRecord[]) : []; } catch { return []; } }
+const LAST_BALL_KEY = "penalty-kings/last-ball/v1";
+function loadLastBall(): string | null { try { return typeof localStorage === "undefined" ? null : localStorage.getItem(LAST_BALL_KEY); } catch { return null; } }
+function saveLastBall(id: string | null) { try { if (id) localStorage.setItem(LAST_BALL_KEY, id); else localStorage.removeItem(LAST_BALL_KEY); } catch { /* not persisted */ } }
 function saveBag(records: readonly BallRecord[]) { try { localStorage.setItem(BAG_KEY, JSON.stringify(records.filter(record => !record.sample))); } catch { /* not persisted */ } }
 /** Stable 32-bit hash of a ball id (kick seeds for the skill layer). */
 function hashId(id: string) { let h = 2166136261; for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }

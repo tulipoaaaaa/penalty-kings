@@ -179,15 +179,17 @@ function KeeperCard({ id, stamped }: { id: KeeperId; stamped: boolean }) {
 }
 
 export type SessionSummary = { title: string; kicks: number; goals: number; points: number; xp: number; stars?: number; stamp?: string; unlocked?: string[];
+  /** A plain final-score line (Big Match). */
+  final?: string;
   match?: { rf: string; gboot: string; race: string; toTop10: string } };
 export function Results({ summary, onAgain, onModes }: { summary: SessionSummary; onAgain: () => void; onModes: () => void }) {
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
-    <p><b>{summary.goals}</b> goals from {summary.kicks} kicks · <b>{formatNumber(summary.points)}</b> points · +{summary.xp} XP</p>
+    <p>{summary.final ?? <>You scored <b>{summary.goals}</b> of {summary.kicks} kick{summary.kicks === 1 ? "" : "s"} for <b>{formatNumber(summary.points)}</b> points.</>}{summary.xp > 0 ? ` You earned ${summary.xp} XP.` : ""}</p>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
     {summary.stamp && <p>Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item}>Unlocked: <b>{item}</b></p>)}
-    {summary.match && <p>This session: {summary.match.rf} · {summary.match.gboot} · race {summary.match.race} · {summary.match.toTop10}</p>}
+    {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     <div className="pk-buyrow"><button type="button" className="pk-primary" onClick={onAgain} autoFocus>Play again</button><button type="button" onClick={onModes}>Modes</button></div>
   </div>;
 }

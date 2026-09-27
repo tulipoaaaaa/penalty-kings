@@ -119,6 +119,8 @@
 .pk-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid #0006; vertical-align: middle; }
 .pk-note { font-size: 0.85em; opacity: 0.85; }
 .pk-roundcard { text-align: center; }
+.pk-plain { list-style: none; padding: 0; margin: 0.4em 0; }
+.pk-plain li { margin: 0.2em 0; }
 .pk-stars { color: #d9a400; letter-spacing: 0.1em; font-size: 1.2em; }
 
 /* Display case (kit bag, Ball Collection). */
