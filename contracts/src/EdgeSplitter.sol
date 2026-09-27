@@ -18,6 +18,8 @@ interface IBurn {
 /// 40% RF burned, 30% RF swapped for $GBOOT in the RF/$GBOOT pool and that $GBOOT burned
 /// (buy-and-burn), 30% RF to the Golden Boot Cup pot. Only the operator can trigger a split,
 /// because it sets the swap's minimum output from a fresh quote (3% slippage). No owner.
+/// Dust: under 4 wei the 30% buyback share rounds to 0, so the swap is skipped (a zero-amount
+/// v4 swap reverts) and the split still burns 40% and sends the rest to the Cup.
 contract EdgeSplitter {
     using SafeERC20 for IERC20;
 
@@ -48,9 +50,12 @@ contract EdgeSplitter {
         uint256 swapRf = (total * BUYBACK_BPS) / 10_000;
         uint256 toCup = total - burnRf - swapRf;
         IBurn(address(rf)).burn(burnRf);
-        rf.forceApprove(address(swapper), swapRf);
-        uint256 bought = swapper.swapExactIn(key, key.currency0 == address(rf), uint128(swapRf), uint128(minGbootOut));
-        IBurn(address(gboot)).burn(bought);
+        uint256 bought;
+        if (swapRf != 0) { // total >= 4 wei; below that the buyback share is 0 and the swap is skipped
+            rf.forceApprove(address(swapper), swapRf);
+            bought = swapper.swapExactIn(key, key.currency0 == address(rf), uint128(swapRf), uint128(minGbootOut));
+            IBurn(address(gboot)).burn(bought);
+        }
         rf.safeTransfer(cup, toCup);
         emit Split(burnRf, swapRf, bought, toCup);
     }

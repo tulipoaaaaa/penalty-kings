@@ -24,12 +24,17 @@ contract SplitterMockSwapper is ISplitterSwapper {
     uint128 public lastAmountIn;
     uint128 public lastMinOut;
     address public lastCurrency0;
+    uint256 public calls;
     error TooLittleReceived(uint256 received, uint256 minimum);
+    /// Uniswap v4 PoolManager.swap reverts on a zero amountSpecified; mirror that.
+    error SwapAmountCannotBeZero();
 
     constructor(IERC20 rf_, IERC20 gboot_) { rf = rf_; gboot = gboot_; }
     function setRate(uint256 r) external { ratePerRf = r; }
 
     function swapExactIn(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minOut) external returns (uint256 out) {
+        if (amountIn == 0) revert SwapAmountCannotBeZero();
+        calls++;
         lastZeroForOne = zeroForOne; lastAmountIn = amountIn; lastMinOut = minOut; lastCurrency0 = key.currency0;
         out = uint256(amountIn) * ratePerRf;
         if (out < minOut) revert TooLittleReceived(out, minOut);
@@ -150,6 +155,31 @@ contract EdgeSplitterTest is Test {
         vm.prank(operator);
         splitter.split(0);
         assertEq(rf.balanceOf(cup), 5);
+    }
+
+    /// BQ-P2: under 4 wei the 30% buyback rounds to 0, so the swap is skipped (a zero-amount v4
+    /// swap reverts) and the split still succeeds: burn share burned, the rest to the Cup.
+    function testDustUnder4WeiSkipsSwap() public {
+        for (uint256 total = 1; total < 4; total++) {
+            rf.transfer(address(splitter), total);
+            uint256 cupBefore = rf.balanceOf(cup);
+            uint256 rfSupply = rf.totalSupply();
+            uint256 burn = total * 4_000 / 10_000;
+            vm.expectEmit(false, false, false, true, address(splitter));
+            emit Split(burn, 0, 0, total - burn);
+            vm.prank(operator);
+            splitter.split(123);
+            assertEq(rfSupply - rf.totalSupply(), burn);
+            assertEq(rf.balanceOf(cup) - cupBefore, total - burn);
+            assertEq(rf.balanceOf(address(splitter)), 0);
+        }
+        assertEq(swapper.calls(), 0, "swapper never called for dust");
+        // 4 wei is the first balance whose buyback share is non-zero: the swap runs.
+        rf.transfer(address(splitter), 4);
+        vm.prank(operator);
+        splitter.split(0);
+        assertEq(swapper.calls(), 1);
+        assertEq(swapper.lastAmountIn(), 1);
     }
 
     function testFuzzSplitConservation(uint256 total, uint256 rate) public {

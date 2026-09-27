@@ -117,6 +117,23 @@ contract SkillCupTest is Test {
         assertEq(cup.weeklyEntries(2, 7730), 1);
         vm.stopPrank();
     }
+
+    /// BQ-P2: week() must not underflow before `start`; pre-start entries count toward week 1
+    /// (0-based ledger week 0), matching KitShop/Wildcards which clamp to week 0.
+    function testWeekBeforeStartDoesNotUnderflow() public {
+        SkillCup later = new SkillCup(ISkillGenerations(address(gens)), ISkillToken(address(token)), IGBootPriceFeed(address(feed)), pot, block.timestamp + 3 days);
+        assertEq(later.week(), 1);
+        vm.startPrank(player);
+        token.approve(address(later), type(uint256).max);
+        later.enter(7730, type(uint256).max);
+        vm.stopPrank();
+        assertEq(later.weeklyEntries(1, 7730), 1);
+        assertEq(later.burnedInWeek(0), 50e18);
+        vm.warp(later.start());
+        assertEq(later.week(), 1);
+        vm.warp(later.start() + 1 weeks);
+        assertEq(later.week(), 2);
+    }
 }
 
 contract WildcardsTest is Test {

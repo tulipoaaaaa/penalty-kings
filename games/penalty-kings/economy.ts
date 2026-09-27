@@ -15,7 +15,8 @@ export type Tier = Readonly<{ id: TierId; name: string; priceRF: number; path: s
  * multiply drops (the Bootroom gives perk tiers: cosmetics, XP, seeding), so the drop value is ≤ 2%
  * of the ball price and total value per ball ≤ 92% (90% RF return + 2%). Park: 0.93 × 2.15 = 2
  * $GBOOT ≈ 0.2 RF = 2% of a 10 RF ball.
- * Live rate each week: min(this schedule, 3% × volume ÷ TWAP, the drop vault's season cap) — docs/DROPS.md.
+ * Live base each week: min(this schedule, 2% × ball price ÷ TWAP ÷ 2.15); the week's total is capped by
+ * the drop vault's capOf(week) (drops scaled down when it binds) — docs/DROPS.md.
  */
 export const TIERS: readonly Tier[] = [
   { id: "park", name: "Park", priceRF: 10, path: "./", raceWeight: 1, baseDrop: 0.93 },

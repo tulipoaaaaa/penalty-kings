@@ -1,9 +1,11 @@
-// Weekly $GBOOT drops, Golden Boot Cup table and edge-split plan (tokenomics v2), computed ONLY from
-// on-chain reads: ChanceGame `Settled(playId, friendId, outcomeId)` events, Wildcards `WildcardDrawn`
+// Weekly $GBOOT drops, Golden Boot Cup table and edge-split plan (tokenomics v2), computed from
+// on-chain reads plus two OPERATOR INPUTS that are NOT read on-chain: the Cup pot (`--pot-rf`, RF;
+// default 0, the payout table is pot × the curve) and the TWAP (`--twap`, RF per $GBOOT; default the
+// launch schedule). The pot is NOT read from the pot wallet: the operator states it, and anyone re-running
+// with the same inputs gets the same result. The on-chain reads: ChanceGame `Settled(playId, friendId, outcomeId)` events, Wildcards `WildcardDrawn`
 // events, Bootroom.perkTier per Friend (reported for XP / cosmetics / Cup seeding only: it never
 // changes drops, race points or ranks), the drop vault's capOf / released[week], the EdgeSplitter's RF
-// balance and, when deployed, the RewardsDistributor's season budget. Anyone can re-run it and get the
-// same result.
+// balance and, when deployed, the RewardsDistributor's season budget.
 //
 // DRY RUN ONLY. This script never signs and never sends: it holds no key, creates no wallet client and
 // has no --send flag. Payments (vault release, EdgeSplitter.split, Cup payouts) are separate, rehearsed,

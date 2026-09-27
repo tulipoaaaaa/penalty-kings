@@ -38,7 +38,7 @@ interface IVaultGenerations {
 /// Ball": an ERC-1155 claim that keeps the ball's edition (stadium game, season, tier) and rarity
 /// and is backed 1:1 by the RF floor, held here. Anyone holding a Vault Ball can unwrap it for
 /// the full floor at any time, with no fee. Holders can also list Vault Balls in a small escrow
-/// market above the floor.
+/// market at any non-zero price they choose (free-price market: no listing floor).
 ///
 /// Wrapping is three steps by the Friend's controller (owner or TBA, as in ChanceGame):
 ///   1. `commitWrap` snapshots the TBA's ChanceGame balance of that outcome;
@@ -55,8 +55,10 @@ interface IVaultGenerations {
 ///    ChanceGame `redeem` from that Friend's TBA after the commit.
 ///  • The floor is read from the ChanceGame's own immutable outcome table; a wrap of an outcome
 ///    with no reward (Scuffed Ball) reverts.
-///  • Market: listings are escrowed here, sold at or above the floor, fee capped at MAX_FEE_BPS and
-///    fixed at deployment; only the seller can cancel; buyer RF goes straight to seller and fee
+///  • Market: free price. Listings are escrowed here at any non-zero unit price the seller sets
+///    (above or below the floor; unwrapping still pays the floor, so selling below it is the
+///    seller's choice); the buyer's `maxUnitPrice` bounds what they pay; fee capped at MAX_FEE_BPS
+///    and fixed at deployment; only the seller can cancel; buyer RF goes straight to seller and fee
 ///    recipient and never touches the backing.
 /// ASSUMPTIONS (NOT enforced on-chain):
 ///  • The curator registers only genuine Penalty Kings ChanceGame deployments, with truthful
@@ -98,7 +100,7 @@ contract BallVault is ERC1155, ReentrancyGuard {
         address seller;
         uint256 id;
         uint256 quantity; // units still for sale
-        uint256 unitPrice; // RF base units per Vault Ball, ≥ floor
+        uint256 unitPrice; // RF base units per Vault Ball, any non-zero price (free market, no floor)
     }
 
     IERC20 public immutable rf;

@@ -350,6 +350,23 @@ contract BootroomTest is Test {
         assertEq(room.perkTier(4), 3);
     }
 
+    /// Exact boundaries behind docs/GBOOT-UPGRADE.md's perk-tier line: tier 2 needs x ≥ 721
+    /// $GBOOT-weeks (√520,001 − 1 ≈ 720.1), tier 3 needs x ≥ 72,211 (520,001^0.85 − 1 ≈ 72,210.03).
+    function testDocumentedPerkTierExamples() public {
+        _lace(owner, 1, 72e18, 10); // 720: tier 1 (just under 50%)
+        _lace(owner, 2, 103e18, 7); // 721: tier 2
+        _lace(owner, 3, 7_221e18, 10); // 72,210: tier 2 (just under 85%)
+        _lace(owner, 4, 1_400e18, 52); // 72,800: tier 3
+        assertEq(room.perkTier(1), 1);
+        assertEq(room.perkTier(2), 2);
+        assertEq(room.perkTier(3), 2);
+        assertEq(room.perkTier(4), 3);
+        assertLt(room.progressBps(1), 5_000);
+        assertGe(room.progressBps(2), 5_000);
+        assertLt(room.progressBps(3), 8_500);
+        assertGe(room.progressBps(4), 8_500);
+    }
+
     /// Lacing is not yield: the Bootroom exposes no payout multiplier any more (the old boostBps and
     /// dropBps selectors do not exist), so nothing can read a lace into race points or drops.
     function testNoPayoutMultiplierExposed() public {

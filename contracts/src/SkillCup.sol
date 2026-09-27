@@ -61,9 +61,10 @@ contract SkillCup is ISinkLedger {
         start = start_;
     }
 
-    /// @notice 1-based Cup week (the referee's week number).
+    /// @notice 1-based Cup week (the referee's week number). Before `start` it is week 1 (no
+    /// underflow), like KitShop/Wildcards which clamp to their 0-based week 0.
     function week() public view returns (uint256) {
-        return (block.timestamp - start) / 1 weeks + 1;
+        return block.timestamp < start ? 1 : (block.timestamp - start) / 1 weeks + 1;
     }
 
     /// @notice Current entry cost in $GBOOT (ENTRY_RF at the TWAP, rounded up).
