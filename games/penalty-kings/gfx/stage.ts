@@ -65,7 +65,7 @@ export function penaltyBallArt(target: { x: number; y: number }, curl: number, p
 export const freeKickFlight = (outcome: FreeKickOutcome) => Math.max(0.3, outcome.path[outcome.path.length - 1].t);
 /** A free kick as the Stage plays it (a wall block plays as a save). */
 export const freeKickShot = (outcome: FreeKickOutcome): ShotOutcome =>
-  ({ result: outcome.result === "wall" ? "save" : outcome.result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false, touch: outcome.touch });
+  ({ result: outcome.result === "wall" ? "save" : outcome.result, target: outcome.target, plan: outcome.keeper, zone: outcome.zone, postIn: false, touch: outcome.touch, hitPost: outcome.hitPost, hitBar: outcome.hitBar });
 /**
  * The free-kick keeper the Stage draws `flightT` s after the strike (negative: his run-up shuffle): the engine's
  * own freeKickKeeperFrame, on the engine's clock (the flight plays 1:1), so at the crossing it is exactly the frame
@@ -392,8 +392,8 @@ export class Stage {
       if (result === "goal") { this.net.impulse(art.x, art.y, 160); this.particles.emit("confetti", end.x, end.y - 10, 30, { color: THEMES[this.stadium].confetti, speed: 120, spread: Math.PI * 1.2, gravity: 70, life: 2 }); this.sfx("net"); }
       return;
     }
-    // Woodwork near the top is the crossbar, not the post (round 6 C13).
-    const said = this.cue ?? this.feelLine(shot.outcome), bar = result === "post" && shot.outcome.target.y > 0.9;
+    // Woodwork: the crossbar when the engine says the ball touched it (round 6 C13; BQ-P2-8: its flag, not the height).
+    const said = this.cue ?? this.feelLine(shot.outcome), bar = result === "post" && Boolean(shot.outcome.hitBar);
     this.say(bar && (said === "post" || said === "near-miss") ? "crossbar" : said); this.cue = null;
     if (result === "goal") this.stats.goals++; else if (result === "save") this.stats.saves++; else if (result === "post") this.stats.woodwork++;
     this.onEvent("resolved", result);

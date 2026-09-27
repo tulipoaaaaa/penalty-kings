@@ -236,6 +236,12 @@ export type ShotOutcome = Readonly<{
   zone: Zone;
   /** Clipped the inside of the post and went in. */
   postIn: boolean;
+  /**
+   * BQ-P2-8: the woodwork the ball touched (result "post", or an in-off goal): the post, the crossbar, or both in
+   * the corner. The engine's own contact test, so labels never guess from the height. Absent = false.
+   */
+  hitPost?: boolean;
+  hitBar?: boolean;
   /** Which part of the keeper the ball hit (saves only). */
   touch?: KeeperPart;
 }>;
@@ -291,7 +297,7 @@ export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: numbe
   if (hitsPost || hitsBar) {
     // Clipping the inside of the frame deflects in half the time: "in off the post".
     const postIn = ax < 1 - FRAME && target.y < 1 - FRAME && postRoll < 0.5;
-    return { result: postIn ? "goal" : "post", target, plan, zone, postIn };
+    return { result: postIn ? "goal" : "post", target, plan, zone, postIn, hitPost: hitsPost, hitBar: hitsBar };
   }
   if (ax > 1) return { result: "wide", target, plan, zone, postIn: false };
   if (target.y > 1) return { result: "over", target, plan, zone, postIn: false };

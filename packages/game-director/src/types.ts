@@ -24,6 +24,8 @@ export type KickFacts = Readonly<{
   /** Crossing point in goal units (x: -1 … 1 between the posts, y: 0 … 1 up to the bar). */
   x: number; y: number;
   postIn?: boolean; spin?: number; knuckle?: boolean;
+  /** The engine's woodwork flag (ShotOutcome.hitBar): the ball touched the crossbar (a "post" result, or in off the bar). */
+  hitBar?: boolean;
   /** Free kicks: a goal from 28 m or further (long range). */
   screamer?: boolean;
   /** Seconds (any monotonic clock) for the commentary no-repeat window. Defaults to 12 s per kick. */

@@ -2,18 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ALL_COSMETICS } from "../../games/penalty-kings/economy.ts";
-import { BALL_RADIUS } from "@penalty-kings/engine";
-import { skillZoneOf, BAR_CONTACT_Y, streakAfter, checkIn, challengeStreak, canClaim, nextClaimIn, CLAIM_EVERY_MS, LOGIN_TRACK } from "../../games/penalty-kings/game/rewards.ts";
+import { skillZoneOf, streakAfter, checkIn, challengeStreak, canClaim, nextClaimIn, CLAIM_EVERY_MS, LOGIN_TRACK } from "../../games/penalty-kings/game/rewards.ts";
 
 test("Skill Zones: top bin / post-in / bar-in, and they extend the streak by an extra step", () => {
-  assert.equal(skillZoneOf({ goal: true, zone: "bin", y: 0.8 }), "top-bin");
-  assert.equal(skillZoneOf({ goal: true, zone: "side", postIn: true, y: 0.3 }), "post-in");
-  assert.equal(skillZoneOf({ goal: true, zone: "centre", postIn: true, y: 0.95 }), "bar-in");
-  assert.equal(skillZoneOf({ goal: false, zone: "bin", y: 0.8 }), null);
-  // A post-in under the bar's contact band clipped the POST (engine hitsBar: |y - 1| < BALL_RADIUS + FRAME 0.025).
-  assert.equal(BAR_CONTACT_Y, 1 - (BALL_RADIUS + 0.025));
-  assert.equal(skillZoneOf({ goal: true, zone: "bin", postIn: true, y: 0.91 }), "post-in");
-  assert.equal(skillZoneOf({ goal: true, zone: "bin", postIn: true, y: 0.94 }), "bar-in");
+  assert.equal(skillZoneOf({ goal: true, zone: "bin" }), "top-bin");
+  assert.equal(skillZoneOf({ goal: true, zone: "side", postIn: true }), "post-in");
+  assert.equal(skillZoneOf({ goal: true, zone: "centre", postIn: true, hitBar: true }), "bar-in");
+  assert.equal(skillZoneOf({ goal: false, zone: "bin" }), null);
+  // BQ-P2-8: in off the bar is the engine's hitBar flag (see tests/game/bq-p2.test.ts), never a height guess.
+  assert.equal(skillZoneOf({ goal: true, zone: "bin", postIn: true }), "post-in");
+  assert.equal(skillZoneOf({ goal: true, zone: "bin", postIn: true, hitBar: true }), "bar-in");
   assert.equal(streakAfter(1, "top-bin"), 3); assert.equal(streakAfter(1, null), 2);
 });
 

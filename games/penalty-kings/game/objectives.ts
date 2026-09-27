@@ -37,6 +37,8 @@ export type KickRecord = {
   zone: Zone;
   points: number;
   postIn?: boolean;
+  /** The engine's woodwork flag: the ball touched the crossbar (a "post" result, or in off the bar). */
+  hitBar?: boolean;
   /** The shot clock ran out: no shot was struck (x/y are placeholders, never a real crossing). */
   timedOut?: boolean;
   /** Goal-plane crossing (goal units). */

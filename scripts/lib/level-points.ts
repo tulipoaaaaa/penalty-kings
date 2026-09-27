@@ -29,7 +29,7 @@ export function kickPoints(keeper: KeeperProfile, streak: number, kick: Kick, cu
   if (!kick.goal) return 0;
   return Math.round(100 * keeper.mult * mult(curve, streak + 1) * ZONE_MULT[kick.zone] * (kick.postIn ? POST_IN_BONUS : 1));
 }
-const nextStreak = (streak: number, kick: Kick) => (kick.goal ? streakAfter(streak, skillZoneOf({ goal: true, zone: kick.zone, postIn: kick.postIn, y: kick.zone === "bin" ? 0.8 : 0.3 })) : 0);
+const nextStreak = (streak: number, kick: Kick) => (kick.goal ? streakAfter(streak, skillZoneOf({ goal: true, zone: kick.zone, postIn: kick.postIn })) : 0);
 
 /** Score of a fixed kick sequence. */
 export function sessionPoints(keeperId: Parameters<typeof keeperById>[0], kicks: readonly Kick[], curve: Curve) {

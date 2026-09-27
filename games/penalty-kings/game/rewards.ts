@@ -10,17 +10,21 @@ export type SkillZone = "top-bin" | "post-in" | "bar-in";
 export const SKILL_ZONE_XP: Readonly<Record<SkillZone, number>> = { "top-bin": 15, "post-in": 20, "bar-in": 25 };
 export const SKILL_ZONE_LABEL: Readonly<Record<SkillZone, string>> = { "top-bin": "top bin", "post-in": "in off the post", "bar-in": "in off the bar" };
 /**
- * Lowest crossing height at which the ball can touch the crossbar: the engine's hitsBar band is
- * |y − 1| < BALL_RADIUS (0.045) + FRAME (0.025). A post-in below it clipped the post, not the bar
- * (e.g. an overhit at y 0.91 off the inside of the post is "in off the post", not "in off the bar").
+ * BQ-P2-8: in off the BAR comes from the engine's own contact flag (ShotOutcome.hitBar, kept on the kick record),
+ * never inferred from the crossing height.
  */
-export const BAR_CONTACT_Y = 1 - (0.045 + 0.025);
-export function skillZoneOf(kick: { goal: boolean; zone: string; postIn?: boolean; y: number }): SkillZone | null {
+export function skillZoneOf(kick: { goal: boolean; zone: string; postIn?: boolean; hitBar?: boolean }): SkillZone | null {
   if (!kick.goal) return null;
-  if (kick.postIn && kick.y > BAR_CONTACT_Y) return "bar-in";
+  if (kick.postIn && kick.hitBar) return "bar-in";
   if (kick.postIn) return "post-in";
   return kick.zone === "bin" ? "top-bin" : null;
 }
+/**
+ * The "in off the post / bar" words on the result line. Said once: when the goal is a Skill Zone its own label
+ * ("SKILL ZONE: in off the bar") already says it, so the inline words are left out (no "in off the post · … in off the bar").
+ */
+export const inOffLabel = (kick: { postIn?: boolean; hitBar?: boolean }, skillZone: SkillZone | null) =>
+  kick.postIn && !skillZone ? ` · in off the ${kick.hitBar ? "bar" : "post"}` : "";
 /** A Skill Zone goal extends the streak by one extra step (the Flick Kick hook); the score multiplier stays capped by streakMultiplier. */
 export const streakAfter = (streak: number, zone: SkillZone | null) => Math.min(zone ? streak + 2 : streak + 1, 10);
 

@@ -126,3 +126,17 @@ test("a long-range free-kick goal is a SCREAMER line (first time, then the screa
   assert.equal(next.lines[0].context, "goal:screamer");
   assert.ok(LINE_BANK["goal:screamer"].length >= 4);
 });
+
+test("BQ-P2-8: crossbar and in-off-the-bar lines come from the engine's hitBar flag, never the crossing height", () => {
+  const start = () => { const d = newDirector(3); d.startSession({ mode: "penalties", stadium: "pro", keeper: "sloth" }); d.beforeKick(); return d; };
+  const miss = (hitBar?: boolean) => start().afterKick({ kind: "penalty", result: "post", zone: "corner", x: 1.05, y: 0.95, hitBar }).lines[0].context;
+  assert.equal(miss(), "post"); // high up, outside the end of the bar: the post
+  assert.equal(miss(true), "crossbar");
+  const goal = (hitBar?: boolean) => {
+    const d = start(); d.afterKick({ kind: "penalty", result: "goal", zone: "side", x: 0.5, y: 0.5 }); d.beforeKick();
+    return d.afterKick({ kind: "penalty", result: "goal", zone: "centre", x: 0.3, y: 0.95, postIn: true, hitBar, now: 100 }).lines[0].context;
+  };
+  assert.equal(goal(true), "first:bar-in");
+  assert.equal(goal(), "first:post-in");
+  assert.ok(LINE_BANK["goal:bar-in"].length >= 3 && LINE_BANK["first:bar-in"].length >= 1);
+});

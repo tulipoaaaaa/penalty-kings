@@ -1,7 +1,7 @@
 /**
  * The Director's line bank: original one-liners for the commentator, tagged by context.
  * A context is a colon path, most specific first when picked (see commentator.ts):
- *   goal:<zone | post-in | panenka | curler | knuckle | screamer>, goal:vs:<keeper>, save:by:<keeper>, tell:<keeper>,
+ *   goal:<zone | post-in | bar-in | panenka | curler | knuckle | screamer>, goal:vs:<keeper>, save:by:<keeper>, tell:<keeper>,
  *   save / post / crossbar / over / wide / wall / near-miss, streak:<2|3|5>, cold,
  *   glow:<high|top>, first:<event>, time:<of day>, stadium:<id>, buildup, banter, moment:<moment id>.
  * Placeholders: {friend}, {keeper}, {number} (the Friend's token number).
@@ -17,6 +17,7 @@ export const LINE_BANK: Readonly<Record<string, readonly string[]>> = {
   "goal:side": ["Side-footed home with no fuss.", "Placed, not blasted. In it goes.", "Just inside the post and that's all it needed."],
   "goal:centre": ["Straight down the middle and it still goes in!", "Right through the middle. Bold.", "Hit it where the keeper was standing. Keeper wasn't there any more."],
   "goal:post-in": ["Off the upright and IN! The woodwork was on our side!", "Pinged the post and nestled in. Heart attack stuff.", "Post and in! Ask the post, it's still humming.", "Kissed the inside of the post. What a way to score."],
+  "goal:bar-in": ["Off the underside of the bar and IN! The crossbar is on our side!", "Bar and in! That one rang round the stadium.", "Clattered the crossbar and dropped over the line. Magnificent!"],
   "goal:panenka": ["A chip down the middle! {friend} has ice for blood!", "The Panenka! Pure theatre!", "Floated in while {keeper} lay in the grass. Outrageous.", "The softest, cheekiest goal you'll see today."],
   "goal:curler": ["Whipped round the wall like a boomerang!", "The bend on that! It went round a corner!", "Curled it in with the outside of the boot. Show-off.", "That swung in like a pendulum!"],
   "goal:knuckle": ["That ball was dancing! Nobody could read it!", "No spin, all wobble, all goal!", "A knuckler! It changed its mind three times in the air!"],
@@ -70,6 +71,7 @@ export const LINE_BANK: Readonly<Record<string, readonly string[]>> = {
   "first:bin": ["First top bin for {friend}! Stick it on the fridge!", "A maiden top-corner finish! The owls are evicted!"],
   "first:panenka": ["First ever Panenka from {friend}! The nerve!"],
   "first:post-in": ["First goal in off the post! Lucky? Talented? Both."],
+  "first:bar-in": ["First goal in off the bar! The crossbar has picked a side."],
   "first:knuckle": ["{friend}'s first knuckleball! It had a mind of its own!"],
   "first:curler": ["First curler round the wall! Bend it, {friend}!"],
   "first:screamer": ["{friend}'s first SCREAMER! From that far out? Outrageous!"],

@@ -3,8 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { recordsDifficulty } from "../../games/penalty-kings/game/progress.ts";
+import { skillZoneOf, inOffLabel } from "../../games/penalty-kings/game/rewards.ts";
 import { keeperHistory } from "../../games/penalty-kings/game/shots.ts";
-import { keeperPlan, keeperById, type ShotResult } from "@penalty-kings/engine";
+import { keeperPlan, keeperById, resolveShot, kickSeed, type ShotResult } from "@penalty-kings/engine";
 
 const index = () => readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
 
@@ -34,4 +35,35 @@ test("BQ-P2-6: a shot-clock timeout never enters the robot keeper's kick history
   assert.match(source, /record: \{ result: "wide", zone: "centre", points: 0, x: 0, y: 0, timedOut: true \}/);
   assert.equal((source.match(/history: keeperHistory\(current\.kicks\)/g) ?? []).length, 2);
   assert.doesNotMatch(source, /history: current\.kicks\.map\(kick => kick\.x\)/);
+});
+
+test("BQ-P2-8: in off the bar / OFF THE BAR / crossbar lines come from the engine's hitBar flag, and the result line says it once", () => {
+  // XP / Skill Zone: the flag decides, whatever the height.
+  assert.equal(skillZoneOf({ goal: true, zone: "centre", postIn: true, hitBar: true }), "bar-in");
+  assert.equal(skillZoneOf({ goal: true, zone: "corner", postIn: true, hitBar: false }), "post-in");
+  // The engine's real in-off goals label as the engine says.
+  const sloth = keeperById("sloth");
+  let barIns = 0, postIns = 0;
+  for (let k = 0; k < 20000; k++) {
+    const o = resolveShot({ aimX: (k % 2 ? 1 : -1) * (0.9 + (k % 9) * 0.01), aimY: 0.85 + (k % 13) * 0.01, power: 0.6, curl: 0 }, sloth, kickSeed(3, k, "sloth"));
+    if (!o.postIn) continue;
+    const zone = skillZoneOf({ goal: true, zone: o.zone, postIn: o.postIn, hitBar: o.hitBar });
+    assert.equal(zone, o.hitBar ? "bar-in" : "post-in");
+    if (o.hitBar) barIns++; else postIns++;
+  }
+  assert.ok(barIns > 0 && postIns > 0, `${barIns} bar-in, ${postIns} post-in`);
+  // The double label: a free-mode bar-in goal read "centre · in off the post · SKILL ZONE: in off the bar". Now the
+  // Skill Zone label says it alone; without a Skill Zone (Big Match, Skill Cup) the inline words name the right woodwork.
+  assert.equal(inOffLabel({ postIn: true, hitBar: true }, "bar-in"), "");
+  assert.equal(inOffLabel({ postIn: true }, "post-in"), "");
+  assert.equal(inOffLabel({ postIn: true, hitBar: true }, null), " · in off the bar");
+  assert.equal(inOffLabel({ postIn: true }, null), " · in off the post");
+  assert.equal(inOffLabel({}, null), "");
+  // The shell and the Stage never guess the bar from the height.
+  const source = index(), stage = readFileSync(new URL("../../games/penalty-kings/gfx/stage.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /BAR_CONTACT_Y|" · in off the post"/);
+  assert.match(source, /result === "post" && record\.hitBar \? "OFF THE BAR!"/);
+  assert.match(source, /skillZoneOf\(\{ goal, zone: record\.zone, postIn: record\.postIn, hitBar: record\.hitBar \}\)/);
+  assert.match(source, /hitBar: record\.hitBar/); // the Director's facts
+  assert.match(stage, /bar = result === "post" && Boolean\(shot\.outcome\.hitBar\)/);
 });

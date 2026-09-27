@@ -61,7 +61,7 @@ PLAN.forEach((kick, kickIndex) => {
   for (let power = 0.35; power <= 1.0001; power += 0.01) for (const slack of [-0.03, 0, 0.03]) {
     const shot = E.aimedShot({ aimX: kick.aimX + slack, aimY: kick.aimY, power, curl: 0 }, 0, assist);
     const outcome = E.resolveShot(shot, keeper, E.kickSeed(seed, kickIndex, keeper.id), { kickIndex, history }, difficulty);
-    seen.add(`${outcome.result}:${E.skillZoneOf({ goal: outcome.result === "goal", zone: outcome.zone, postIn: outcome.postIn, y: outcome.target.y })}`);
+    seen.add(`${outcome.result}:${E.skillZoneOf({ goal: outcome.result === "goal", zone: outcome.zone, postIn: outcome.postIn, hitBar: outcome.hitBar })}`);
   }
   assert.deepEqual([...seen], [`goal:${kick.zone}`], `engine pre-pass, kick ${kickIndex + 1} (${kick.name}): ${[...seen].join(", ")}`);
   history.push(kick.aimX); // the kick history the game passes (only the robot keeper reads it)

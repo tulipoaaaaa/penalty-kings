@@ -75,6 +75,9 @@ export type FreeKickOutcome = Readonly<{
   touch?: KeeperPart;
   /** A save on a ball heading over or just under the bar: the keeper tipped it over. */
   tipOver?: boolean;
+  /** BQ-P2-8: result "post": which woodwork it hit (the post, the crossbar, or both in the corner). */
+  hitPost?: boolean;
+  hitBar?: boolean;
   /** The kick was taken from SCREAMER_DISTANCE or further. */
   longRange: boolean;
   /** 30 Hz samples for rendering. */
@@ -187,7 +190,7 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
   const ax = Math.abs(target.x);
   const hitsPost = Math.abs(ax - 1) < 0.045 && target.y < 1.03;
   const hitsBar = Math.abs(target.y - 1) < 0.045 && ax < 1.03;
-  if (hitsPost || hitsBar) return { ...base, result: "post" };
+  if (hitsPost || hitsBar) return { ...base, result: "post", hitPost: hitsPost, hitBar: hitsBar };
   if (ax > 1) return { ...base, result: "wide" };
   if (target.y > 1) return { ...base, result: "over" };
   return { ...base, result: "goal" };
