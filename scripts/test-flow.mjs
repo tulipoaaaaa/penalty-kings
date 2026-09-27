@@ -358,6 +358,77 @@ await testGame("./games/penalty-kings", {
     assert.ok(timing.length >= 4, "enough penalty kicks timed");
     for (const entry of timing) { assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`); }
     ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after");
+
+    // 14. BQ-P1-7: no $GBOOT is spent without a confirmation: Kit shop "try on" is a free preview (buying is a
+    //     separate, confirmed step), and the Skill Cup entry (Cups) and its Results "Play again" both ask first.
+    const menuItem = name => game.getByRole("button", { name, exact: true });
+    const kitBalance = async () => { // the Kit shop's "Balance: N" line (simulated $GBOOT)
+      await menuItem("Kit shop").click();
+      const value = Number((await game.locator("body").textContent()).match(/Balance:\s*([\d,.]+)/)[1].replace(/,/g, ""));
+      await game.getByRole("button", { name: "Close" }).first().click();
+      return value;
+    };
+    const chip = () => game.getByTestId("mode-chip").textContent();
+    const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 0.011, `${message}: ${actual} vs ${expected}`); // 2-decimal display
+    await game.getByTestId("menu").click();
+    const g0 = await kitBalance();
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    const volt = game.getByRole("button", { name: /^Volt net/ });
+    await volt.click(); // try on
+    assert.equal(await volt.getAttribute("aria-pressed"), "true", "the tried-on net shows");
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    assert.equal(await kitBalance(), g0, "trying on spends nothing");
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    await game.getByTestId("kit-buy").click();
+    await game.getByTestId("kit-confirm").waitFor();
+    await game.getByTestId("kit-confirm").getByRole("button", { name: "Cancel" }).click();
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    assert.equal(await kitBalance(), g0, "a cancelled buy spends nothing");
+    await game.getByTestId("menu").click();
+    await menuItem("Kit shop").click();
+    await game.getByTestId("kit-buy").click();
+    await game.getByTestId("kit-yes").click();
+    assert.match(await volt.textContent(), /equipped/, "bought and equipped");
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    const g1 = await kitBalance();
+    near(g1, g0 - 4, "the confirmed buy spends the Volt net's 4 $GBOOT");
+    ok("BQ-P1-7: Kit shop try-on is free; buying needs a confirmation (cancel spends nothing)");
+
+    // The Skill Cup entry is open when no kick is being aimed: from the modes screen's Cups.
+    const confirmBalance = async () => Number((await game.getByTestId("skill-confirm").textContent()).match(/You have ([\d,.]+) \$GBOOT/)[1].replace(/,/g, ""));
+    await game.getByTestId("menu").click();
+    await menuItem("Change mode").click();
+    await menuItem("Cups").click();
+    await game.getByRole("button", { name: /^Enter ·/ }).click();
+    await game.getByTestId("skill-confirm").waitFor({ timeout: 2000 });
+    assert.equal((await flow()).session, false, "no Skill Cup session before confirming");
+    near(await confirmBalance(), g1, "nothing spent on Enter");
+    await game.getByTestId("skill-confirm").getByRole("button", { name: "Cancel" }).click();
+    await game.getByRole("button", { name: /^Enter ·/ }).click();
+    near(await confirmBalance(), g1, "a cancelled Skill Cup entry spent nothing");
+    await game.getByTestId("skill-yes").click();
+    await waitShootable();
+    assert.match(await chip(), /SKILL CUP/, "the confirmed entry starts the Skill Cup");
+    await game.getByTestId("menu").click();
+    const g2 = await kitBalance();
+    near(g2, g1 - 100, "the confirmed entry spends 100 $GBOOT");
+    for (let kick = 0; kick < 5; kick++) { await waitShootable(); await game.getByTestId("quick").click(); await waitIdleKick(); }
+    await game.getByTestId("results").waitFor({ timeout: 10_000 });
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await game.getByTestId("skill-confirm").waitFor({ timeout: 2000 });
+    assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "5", "no new Skill Cup session before confirming");
+    assert.match(await game.getByTestId("skill-confirm").textContent(), new RegExp(`You have ${g2} \\$GBOOT`), "nothing spent yet");
+    await game.getByTestId("skill-yes").click();
+    await waitShootable();
+    assert.equal(await kicks(), 0, "a new Skill Cup session");
+    await game.getByTestId("menu").click();
+    near(await kitBalance(), g2 - 100, "the confirmed Play again spends 100 $GBOOT");
+    ok("BQ-P1-7: Skill Cup entry (Cups) and Results 'Play again' spend only after a confirmation");
   },
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
 import { GameMenu } from "@rarefriends/friendsdk/frame";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
@@ -112,7 +112,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [race, setRace] = useState(0), [wildcards, setWildcards] = useState(0);
   /** A Wildcard spend waits for this confirmation (round 6 C11). */
   const [confirmWildcard, setConfirmWildcard] = useState(false);
-  useEffect(() => { setConfirmWildcard(false); }, [menu]);
+  /** BQ-P1-7: a Skill Cup entry or a Kit shop buy waits for its confirmation too (kept only on the menu it was asked from). */
+  const [confirmSpend, setConfirmSpend] = useState<{ kind: "skill" | "kit"; menu: Menu; item?: Cosmetic } | null>(null);
+  useEffect(() => { setConfirmWildcard(false); setConfirmSpend(current => (current && current.menu === menu ? current : null)); }, [menu]);
   const [lastBigPull, setLastBigPull] = useState<string | null>(null);
   const [owned, setOwned] = useState<Set<string>>(() => new Set(ALL_COSMETICS.filter(item => item.price === 0 && !item.name.includes("★")).map(item => item.id)));
   const [equipped, setEquipped] = useState<Record<Cosmetic["kind"], string>>({ boots: "boots-classic", kit: "kit-white", net: "net-white", celebration: "cele-knee-slide" });
@@ -609,7 +611,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
     if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
-    if (mode === "skill") { enterSkillCup(); return; }
+    if (mode === "skill") { setMenu("cups"); setConfirmSpend({ kind: "skill", menu: "cups" }); return; } // a paid entry: confirm first (BQ-P1-7)
     // Big Match (round 6 C12): kick straight away with the last-used ball (or the best one); "Change ball" opens the carousel.
     if (mode === "match") { const id = lastUsedBall(); if (id) kickWith(id); else setMenu("balls"); return; }
     beginSession(newSession(mode));
@@ -1183,6 +1185,22 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // Paid skill contest: everyone kicks the same standard ball (no pay-to-win).
     if (stage.current) { stage.current.rarity = 7; stage.current.lucky = false; stage.current.season = "S1"; }
   }
+  /** Kit shop (simulated): buy a cosmetic after its confirmation; its $GBOOT is burned. */
+  function buyCosmetic(item: Cosmetic) {
+    if (owned.has(item.id) || gboot < item.price) return;
+    setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase");
+  }
+  /** BQ-P1-7: the Wildcard-style confirmation for any other $GBOOT spend (Skill Cup entry, Kit shop buy). */
+  function spendConfirm(kind: "skill" | "kit", what: ReactNode, price: number, onYes: () => void) {
+    return <div className="pk-confirm" role="alertdialog" aria-label={kind === "skill" ? "Confirm Skill Cup entry" : "Confirm purchase"} data-testid={`${kind}-confirm`}>
+      <p>{what} You have {formatNumber(gboot)} $GBOOT{tag}.</p>
+      <div className="pk-buyrow">
+        <button type="button" className="pk-primary" disabled={gboot < price || busy} data-testid={`${kind}-yes`} onClick={() => { setConfirmSpend(null); if (gboot >= price) onYes(); }}>Yes, spend {price} $GBOOT</button>
+        <button type="button" autoFocus onClick={() => setConfirmSpend(null)}>Cancel</button>
+      </div>
+    </div>;
+  }
+  const skillConfirm = () => spendConfirm("skill", <>Spend <b>{SKILL_CUP_ENTRY} $GBOOT</b>{tag} on a Skill Cup entry? Half ({SKILL_CUP_ENTRY / 2}) is burned and gone forever; half goes to the Skill Cup pot.</>, SKILL_CUP_ENTRY, enterSkillCup);
 
   // ── Input ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1409,7 +1427,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <h3>Skill Cup: 5 kicks vs THE FINAL WALL</h3>
         <p>Pot: {formatNumber(cupGboot)} $GBOOT{tag} · entry {SKILL_CUP_ENTRY} $GBOOT (50% burned, 50% to the pot). Scores use placement (corners ×3, top bins ×5).</p>
         {simulated ? <><ol className="pk-table">{skillTable.slice(0, 5).map((row, index) => <li key={row.id} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.score)}</b></li>)}</ol>
-          <button type="button" className="pk-primary" disabled={gboot < SKILL_CUP_ENTRY || Boolean(s && phase !== "idle")} onClick={enterSkillCup}>Enter · {SKILL_CUP_ENTRY} $GBOOT{tag}</button>
+          {confirmSpend?.kind === "skill" && confirmSpend.menu === "cups" ? skillConfirm()
+            : <button type="button" className="pk-primary" disabled={gboot < SKILL_CUP_ENTRY || Boolean(s && phase !== "idle")} onClick={() => setConfirmSpend({ kind: "skill", menu: "cups" })} data-testid="skill-enter">Enter · {SKILL_CUP_ENTRY} $GBOOT{tag}</button>}
           <p className="pk-note">SIMULATED locally. Live entries are replayed by a referee server: your kicks are committed before the keeper's dive exists, and every kick is re-simulated.</p></>
           : <p className="pk-note">Live Skill Cup entries are made in the Clubhouse (link above the game).</p>}
       </>}
@@ -1420,11 +1439,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         {(["boots", "kit", "net", "celebration"] as const).map(kind => <div key={kind} className="pk-shopgroup"><h3>{kind === "kit" ? "Kits (halo colour)" : kind === "net" ? "Net colours" : kind === "celebration" ? "Celebrations (try on: plays on your next goal)" : "Boots"}</h3>
           {ALL_COSMETICS.filter(item => item.kind === kind).map(item => {
             const has = owned.has(item.id), on = equipped[kind] === item.id, starOnly = item.name.includes("★");
-            return <button key={item.id} type="button" aria-pressed={on} disabled={starOnly ? !has : simulated ? !has && gboot < item.price : !has} onClick={() => {
-              if (!has && simulated && !starOnly) { setGboot(value => value - item.price); setBurned(value => value + item.price); setOwned(set => new Set(set).add(item.id)); sound.current?.play("purchase"); }
+            // BQ-P1-7: an item you don't own is a free try-on (shown for this session, never owned); buying is its own confirmed step.
+            const tryOn = !has && simulated && !starOnly;
+            return <Fragment key={item.id}><button type="button" aria-pressed={on} disabled={tryOn ? false : !has} onClick={() => {
               setEquipped(value => ({ ...value, [kind]: item.id }));
               if (kind === "celebration") stage.current?.startCelebration(celebrationOf(item.id) as CelebrationId);
-            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : starOnly ? "earn with stars" : simulated ? `${item.price} $GBOOT` : "unlock in Clubhouse"}</button>;
+            }}>{item.color && <i className="pk-swatch" style={{ background: item.color }} />}{item.name} · {has ? on ? "equipped" : "equip" : starOnly ? "earn with stars" : simulated ? `${on ? "trying on" : "try on"} · ${item.price} $GBOOT` : "unlock in Clubhouse"}</button>
+              {tryOn && on && (confirmSpend?.kind === "kit" && confirmSpend.item?.id === item.id
+                ? spendConfirm("kit", <>Buy <b>{item.name}</b> for <b>{item.price} $GBOOT</b>{tag}? The $GBOOT is burned.</>, item.price, () => buyCosmetic(item))
+                : <button type="button" className="pk-primary" disabled={gboot < item.price || busy} onClick={() => setConfirmSpend({ kind: "kit", menu: "shop", item })} data-testid="kit-buy">Buy for {item.price} $GBOOT{tag}</button>)}
+            </Fragment>;
           })}</div>)}
       </>}
 
@@ -1463,9 +1487,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         </div>
       </div>}
 
+      {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
       {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
-        onAgain={() => { const last = session; setMenu(null); if (!last) { setScreen("modes"); return; }
-          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "skill") enterSkillCup(); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+        onAgain={() => { const last = session;
+          if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
+          setMenu(null); if (!last) { setScreen("modes"); return; }
+          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
   </section>;
 
