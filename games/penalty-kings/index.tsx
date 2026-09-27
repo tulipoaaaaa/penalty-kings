@@ -1314,7 +1314,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {pack && !pack.sealed && <PackOpening rarities={pack.rarities} revealed={pack.revealed} definition={definition} simulated={simulated} gboot={pack.gboot} onFlip={index => flipCard(index)} onRevealAll={revealAll} onDone={() => { clearPackTimers(); setPack(null); setMenu("bag"); }} />}
       {pack?.sealed && <p className="pk-wait" role="status" aria-live="polite" data-testid="pack-sealed">{pack.sealed.count} ball{pack.sealed.count === 1 ? "" : "s"} sealed: the rarity roll is on its way{simulated ? " (the preview's simulated draw)" : " (on-chain randomness)"}. Nothing is decided by waiting or tapping.</p>}
       {waitNote && !pack && <p className="pk-wait pk-wait-sr" role="status" aria-live="polite" data-testid="randomness-wait">{waitNote}</p>}
-      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={() => kickWith(selectedBall)} onClose={closeCarousel} />}
+      {carousel && inMatch && phase === "idle" && <BallCarousel records={bag} selected={selectedBall} onSelect={chooseBall} onKick={kickWith} onClose={closeCarousel} />}
 
       {screen === "play" && <nav className="pk-actions" aria-label="Game actions">
         {inMatch && phase !== "shooting" && !carousel && !pack && <button type="button" className={phase === "idle" ? "pk-primary" : undefined} disabled={busy || paused} onClick={changeBall} data-testid="change-ball">{s?.ball ? "Change ball" : "Choose ball"}</button>}

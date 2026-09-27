@@ -271,6 +271,9 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("buy-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByText("2 balls bought.").waitFor();
+    // The SDK test fixture pins every preview roll to 1500 (a Scuffed Ball, 0 RF). Let the first roll of this pack
+    // land on 5000 (a Match Ball, 10 RF) so the Bag holds a redeemable ball for 12b; the rest stay pinned.
+    await page.evaluate(() => { const pinned = crypto.getRandomValues.bind(crypto); let once = true; crypto.getRandomValues = array => (once && array instanceof Uint32Array && array.length === 1 ? (once = false, array[0] = 5000, array) : pinned(array)); });
     await setDelay(3000); // FD-3b: the pack stays sealed while its (simulated) roll is on the way
     await game.getByTestId("open-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
@@ -319,6 +322,34 @@ await testGame("./games/penalty-kings", {
     await page.waitForTimeout(200);
     assert.equal((await flow()).shootable, false, "menu open: not shootable");
     ok("Big Match aim with menu open is not shootable");
+
+    // 12b. BQ-P1-6: redeem the SELECTED ball, then "Kick with this ball" in the carousel kicks with the ball it
+    //      shows (it used to pass the cleared selection, null, and open the Ball shop instead). Step 11's pack
+    //      holds one Match Ball (redeemable) and one Scuffed Ball (0 RF: no Redeem).
+    await game.getByRole("button", { name: "My Bag", exact: true }).click();
+    const redeemableCard = cards.filter({ has: game.locator("[data-testid=redeem-ball]:not([disabled])") }).first();
+    assert.ok(await cards.count() >= 2, "two balls in the Bag");
+    assert.equal(await redeemableCard.count(), 1, "a redeemable ball in the Bag");
+    {
+      await redeemableCard.getByTestId("shoot-ball").click(); // select it: the Big Match aims with it
+      await waitShootable();
+      await game.getByTestId("menu").click();
+      await game.getByRole("button", { name: "My Bag", exact: true }).click();
+      const ballsBefore = await cards.count();
+      await game.locator("[data-testid=ball][data-selected=true] [data-testid=redeem-ball]").click();
+      await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+      await game.getByText(/^Redeemed a /).first().waitFor({ timeout: 10_000 });
+      assert.equal(await cards.count(), ballsBefore - 1, "the redeemed ball left the Bag");
+      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("change-ball").click();
+      await game.getByTestId("carousel").waitFor({ timeout: 3000 });
+      await game.getByTestId("kick-with-ball").click();
+      await page.waitForTimeout(300);
+      assert.equal(await game.getByTestId("buy-pack").count(), 0, "the Ball shop did not open");
+      await waitShootable();
+      assert.equal((await flow()).match, true, "Big Match aims with the ball the carousel showed");
+      ok("BQ-P1-6: redeem the selected ball → carousel 'Kick with this ball' kicks with the shown ball");
+    }
 
     // 13. Speed (round 6 B3): penalties go release → result ≤ 1.2 s and result → next kick ready ≤ 1.5 s.
     // Instant randomness (the judged default): the waited kick of 8c is excluded, every other one must meet the targets.
