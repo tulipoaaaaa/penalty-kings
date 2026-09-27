@@ -37,6 +37,7 @@
     "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src",
     "test:verifier": "node --experimental-strip-types --test verifier/test/*.test.ts",
     "build:verifier": "esbuild verifier/src/index.ts --bundle --format=esm --platform=browser --conditions=worker,browser --outfile=.build/referee.js --log-level=warning",
-    "local:playwright": "npm install --no-save --legacy-peer-deps playwright@1.56.1"
+    "local:playwright": "npm install --no-save --legacy-peer-deps playwright@1.56.1",
+    "test:real-gate": "node scripts/test-real-gate.mjs"
   }
 }
