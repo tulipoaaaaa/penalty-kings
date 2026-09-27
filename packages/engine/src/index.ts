@@ -263,19 +263,37 @@ export type SwipePoint = Readonly<{ x: number; y: number; t: number }>;
 /** Release window: the last ~100 ms before lift-off are averaged for the aim (80–120 ms allowed). */
 export const RELEASE_BUFFER_MS = 100;
 export type InputKind = "touch" | "mouse" | "trackpad";
-/** Speed calibration per input, CSS px per second: [slow → power 0.35, fast → power 1]. */
-export const SPEED_CALIBRATION: Readonly<Record<InputKind, readonly [number, number]>> = {
-  touch: [250, 2600], mouse: [500, 4200], trackpad: [300, 3600],
+/**
+ * Speed calibration per input, CSS px per second: [slow → power 0.35, fast → power OVERHIT, huge → power 1].
+ * Every normal flick (150–300 CSS px in ≥ 100 ms) stays at or under `fast`, so only a truly huge
+ * overhit (power > OVERHIT) can rise over the bar. Pace eases in (square root) so a relaxed flick still has zip.
+ */
+export const SPEED_CALIBRATION: Readonly<Record<InputKind, readonly [number, number, number]>> = {
+  touch: [250, 3800, 6000], mouse: [500, 4200, 7000], trackpad: [300, 3800, 6500],
 };
 /** Curl needs intent: a path bend under this fraction of its length is ignored (natural thumb arcs). */
 export const CURL_DEAD_ZONE = 0.12;
+/**
+ * Height from the swipe's upward travel in CSS px (the same on every display): up to AIM_LIFT_CSS[0]
+ * stays on the grass, AIM_LIFT_CSS[1] reaches AIM_CEILING, and any extra length adds only pace.
+ * AIM_CEILING sits under the bar (ball radius + frame), so no swipe aim alone can clear it.
+ */
+export const AIM_LIFT_CSS = [60, 280] as const;
+export const AIM_CEILING = 0.9;
+/** Swipe angle from vertical (degrees) that aims at a post: 0° is the middle of the goal. */
+export const AIM_POST_DEG = 45;
+/** Shorter upward travel than this (CSS px) is a tap, not a kick. */
+export const MIN_SWIPE_CSS = 12;
 
 export type SwipeOptions = {
   width: number; height: number;
-  /** CSS px per logical unit (display scale), so speed is measured in physical-ish px, not canvas units. */
+  /**
+   * CSS px per canvas unit (display scale). Pointer coordinates are CSS px, so devicePixelRatio does
+   * not enter; lengths and speeds are measured in CSS px and mean the same on a phone and a desktop.
+   */
   pxPerUnit?: number;
   input?: InputKind;
-  /** Screen geometry of the goal face and the ball, in the same units as the points. */
+  /** Screen geometry of the goal face and the ball, in the same units as the points (sets which direction is "at the goal"). */
   goal?: { cx: number; line: number; unitX: number; unitY: number };
   ball?: { x: number; y: number };
   bufferMs?: number;
@@ -298,32 +316,46 @@ export function releasePoint(points: readonly SwipePoint[], window = RELEASE_BUF
   return { x: 0.5 * fit.x + 0.5 * last.x, y: 0.5 * fit.y + 0.5 * last.y };
 }
 
-/** The aim point on the goal face for a swipe so far (the reticle follows the finger: WYSIWYG). */
+/**
+ * The aim point on the goal face for a swipe so far, the same on every display:
+ *  - HEIGHT from the upward travel in CSS px: AIM_LIFT_CSS[0] or less stays on the grass,
+ *    AIM_LIFT_CSS[1] reaches AIM_CEILING (under the bar); extra length only adds pace.
+ *  - ACROSS from the swipe's DIRECTION alone: towards the goal's centre on screen (straight up for a
+ *    penalty) is the middle of the goal, AIM_POST_DEG either side of that is the post. Length never moves the aim sideways, so a long flick cannot drift wide.
+ * The reticle shows the result live (WYSIWYG), so the player steers by what they see.
+ */
 export function swipeAim(points: readonly SwipePoint[], options: SwipeOptions) {
-  const goal = options.goal ?? DEFAULT_GOAL, ball = options.ball ?? DEFAULT_BALL;
-  const first = points[0], last = points[points.length - 1];
+  const goal = options.goal ?? DEFAULT_GOAL, ball = options.ball ?? DEFAULT_BALL, px = options.pxPerUnit ?? 1;
+  const first = points[0];
   const window = clamp(options.bufferMs ?? RELEASE_BUFFER_MS, 80, 120);
   const release = releasePoint(points, window);
-  const screen = { x: ball.x + (release.x - first.x), y: ball.y + (release.y - first.y) };
-  return { aimX: (screen.x - goal.cx) / goal.unitX, aimY: (goal.line - screen.y) / goal.unitY };
+  const dx = (release.x - first.x) * px, up = (first.y - release.y) * px; // CSS px
+  const [lo, hi] = AIM_LIFT_CSS;
+  const aimY = AIM_CEILING * clamp((up - lo) / (hi - lo), 0, 1);
+  const centre = Math.atan2(goal.cx - ball.x, Math.max(1, ball.y - goal.line));
+  const angle = (Math.atan2(dx, Math.max(up, MIN_SWIPE_CSS)) - centre) * (180 / Math.PI);
+  return { aimX: angle / AIM_POST_DEG, aimY };
 }
 
 /**
- * Turns a swipe (points in canvas units, t in ms) into a shot. WHERE the (smoothed) release point is
- * on the goal face sets the aim; swipe SPEED in CSS px/s sets pace, calibrated per input; a
+ * Turns a swipe (points in canvas units, t in ms) into a shot. The swipe's direction and upward
+ * travel in CSS px set the aim (swipeAim); swipe SPEED in CSS px/s sets pace, calibrated per input; a
  * deliberate bend (beyond the dead-zone) sets curl. Returns null for a tap or a downward swipe.
  */
 export function swipeToShot(points: readonly SwipePoint[], options: SwipeOptions): ShotInput | null {
   if (points.length < 2) return null;
+  const px = options.pxPerUnit ?? 1;
   const first = points[0], last = points[points.length - 1];
-  if (first.y - last.y < options.height * 0.05) return null;
+  if ((first.y - last.y) * px < MIN_SWIPE_CSS) return null;
   const { aimX, aimY } = swipeAim(points, options);
   // Pace: path length in CSS px over the swipe's duration.
   let length = 0;
   for (let i = 1; i < points.length; i++) length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  const css = length * (options.pxPerUnit ?? 1), seconds = Math.max(0.03, (last.t - first.t) / 1000);
-  const [slow, fast] = SPEED_CALIBRATION[options.input ?? "touch"];
-  const power = 0.35 + 0.65 * clamp((css / seconds - slow) / (fast - slow), 0, 1);
+  const speed = (length * px) / Math.max(0.03, (last.t - first.t) / 1000);
+  const [slow, fast, huge] = SPEED_CALIBRATION[options.input ?? "touch"];
+  const power = speed <= fast
+    ? 0.35 + (OVERHIT - 0.35) * Math.sqrt(clamp((speed - slow) / (fast - slow), 0, 1))
+    : OVERHIT + (1 - OVERHIT) * clamp((speed - fast) / (huge - fast), 0, 1);
   // Curl: the largest signed deviation of the path from its chord (start → smoothed release), as a fraction of the chord.
   const end = releasePoint(points, options.bufferMs ?? RELEASE_BUFFER_MS);
   const dx = end.x - first.x, dy = end.y - first.y, chord = Math.hypot(dx, dy) || 1;
@@ -352,6 +384,16 @@ export function assistShot(shot: ShotInput, strength: number): ShotInput {
 export function aimWobble(t: number, amplitude: number) {
   return amplitude * (0.6 * Math.sin(t * 2.1) + 0.4 * Math.sin(t * 3.7 + 1));
 }
+/**
+ * The shot that is actually taken: the raw gesture, shifted by the wobble at that instant, then aim
+ * assist. The reticle (while aiming) and the kick (at release) BOTH use this, so what you see is
+ * where it goes.
+ */
+export function aimedShot(raw: ShotInput, wobble: number, assist: number): ShotInput {
+  return assistShot({ ...raw, aimX: raw.aimX + wobble }, assist);
+}
+/** Where the reticle is drawn: the landing point of aimedShot (curl drift and any overhit rise included). */
+export const reticleTarget = (raw: ShotInput, wobble: number, assist: number) => shotTarget(aimedShot(raw, wobble, assist));
 /** Pressure: wobble grows with the streak (capped). */
 export const wobbleFor = (difficulty: Difficulty, streak: number) => difficulty.wobble * (1 + 0.2 * Math.min(5, Math.max(0, streak)));
 

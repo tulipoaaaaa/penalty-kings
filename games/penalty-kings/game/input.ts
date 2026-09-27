@@ -1,6 +1,7 @@
 /**
- * One gesture for every mode. The release point on the goal face is the aim (WYSIWYG: the reticle
- * follows the finger), swipe speed in CSS px/s is pace (calibrated per input), a deliberate bend is
+ * One gesture for every mode. The swipe's direction (across) and upward travel in CSS px (height,
+ * capped under the bar) are the aim, the same on every display (WYSIWYG: the reticle shows the
+ * landing point live), swipe speed in CSS px/s is pace (calibrated per input), a deliberate bend is
  * curl. Free kicks add a flick-at-the-end topspin and SOLVE the lift so an unspun, windless shot
  * crosses at the aimed height. Keyboard and mouse produce the same inputs.
  */

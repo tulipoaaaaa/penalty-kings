@@ -9,7 +9,7 @@ import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefr
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
   KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, streakMultiplier, shotTarget, clamp,
-  swipeToShot, assistShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
+  swipeToShot, aimedShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult,
 } from "@penalty-kings/engine";
 import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
@@ -317,6 +317,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return DIFFICULTY_LADDER[current.rung];
   }
   const clockFor = (current: Session) => (current.mode === "tutorial" || current.kind === "target" ? 0 : difficultyFor(current).clock);
+  /** Aim assist strength for a penalty/target kick: the reticle and the kick both use it (WYSIWYG). */
+  const kickAssist = (current: Session) => Math.max(difficultyFor(current).assist, current.mode === "skill" ? 0 : assist * 0.5);
 
   // ── Aiming (keyboard, clock, live previews) ─────────────────────────────
   function tickAim(dt: number) {
@@ -345,9 +347,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     } else {
       const partial = swipe.current && swipe.current.length > 2 ? swipeToShot(swipe.current, swipeOptions(s)) : null;
       const shot = partial ?? keyShot({ ...am, power: am.charging ? am.power : 0.7 });
-      const target = shotTarget({ ...shot, aimX: shot.aimX + wobble });
-      // WYSIWYG: the reticle is the landing point (curl drift included) for the WHOLE drag; full for the first 5 kicks, then faint.
-      scene.reticle = { x: target.x, y: target.y, power: shot.power, curl: shot.curl, active: Boolean(partial) || am.charging, alpha: kicksTaken.current < 5 ? 1 : Math.max(0.35, assist) };
+      const aimed = aimedShot(shot, wobble, kickAssist(s)), target = shotTarget(aimed);
+      // WYSIWYG: the reticle is the landing point (wobble, assist and curl drift included, as shootPenalty applies them) for the WHOLE drag; full for the first 5 kicks, then faint.
+      scene.reticle = { x: target.x, y: target.y, power: aimed.power, curl: aimed.curl, active: Boolean(partial) || am.charging, alpha: kicksTaken.current < 5 ? 1 : Math.max(0.35, assist) };
     }
     if (s.kind === "target" && s.target) {
       const t = (clockNow() - s.target.startedAt) / 1000;
@@ -398,7 +400,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     void unlockAudio(); setError("");
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
-    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe from the ball to where you want it to go, and the target follows your finger. Faster means more pace; only a huge overhit can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
+    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
     if (mode === "skill") { enterSkillCup(); return; }
     if (mode === "match") { if (bag.some(ball => !ball.sample)) { setScreen("play"); beginSession(newSession("match")); setSelectedBall(selectedBall ?? bag.find(ball => !ball.sample)!.id); setCarousel(true); } else setMenu("balls"); return; }
     beginSession(newSession(mode));
@@ -443,7 +445,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now();
     const difficulty = difficultyFor(current);
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak));
-    const shot = assistShot({ ...raw, aimX: raw.aimX + wobble }, Math.max(difficulty.assist, current.mode === "skill" ? 0 : assist * 0.5));
+    const shot = aimedShot(raw, wobble, kickAssist(current));
     const index = current.kicks.length;
     if (current.kind === "target" && current.target) {
       const t = (clockNow() - current.target.startedAt) / 1000;
