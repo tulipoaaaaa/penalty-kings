@@ -149,6 +149,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const dir = useRef<GameDirector | null>(null);
   /** Moments this player had seen before (a new one shows the "NEW: …!" toast once). */
   const knownMoments = useRef(new Set<string>());
+  /** QA (read-only): moments played and keepers faced, with seconds since load. */
+  const qaLog = useRef<{ moments: { id: string; name: string; tier: string; at: number }[]; keepers: { id: string; at: number }[] }>({ moments: [], keepers: [] });
   /** Bumped on every session start/leave: queued Director lines from an old session never play. */
   const sessionEpoch = useRef(0);
   /** Director lines are said one after another from this time (ms), so each can be read. */
@@ -434,8 +436,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (played.jumbotron) jumboHold.current = Date.now() + JUMBOTRON_HOLD_MS;
     moments.filter(moment => moment.slot === "before").forEach(noteMoment);
   }
-  /** Discovery: toast a moment the first time this player ever sees it. */
+  /** Discovery: log the moment for QA, and toast it the first time this player ever sees it. */
   function noteMoment(moment: Moment) {
+    qaLog.current.moments.push({ id: moment.id, name: moment.name, tier: moment.tier, at: Math.round(performance.now() / 100) / 10 });
     if (knownMoments.current.has(moment.id)) return;
     knownMoments.current.add(moment.id);
     if (discoverQueue.current.length >= DISCOVER_QUEUE) return; // the Scouting Book still lists it
@@ -631,6 +634,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.kind !== "target") {
         scene.tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
         syncDiscovery({ keeper: current.keeper });
+        qaLog.current.keepers.push({ id: current.keeper, at: Math.round(performance.now() / 100) / 10 });
       }
     }
     setPhaseNow("aim"); setMenu(null);
@@ -1051,6 +1055,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
   (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log }; };
+  // QA hook (read-only): the Director's seen moments, the moments played and keepers faced (seconds since load), the Discovery meter.
+  (window as unknown as { __pkDirector?: () => unknown }).__pkDirector = () => ({ seen: dir.current?.seenIds() ?? [], discovery: dir.current?.discovery().label ?? "", played: qaLog.current.moments, keepers: qaLog.current.keepers, debug: dir.current?.debugState() ?? null });
   latest.current = { tickAim, tickTargets, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */

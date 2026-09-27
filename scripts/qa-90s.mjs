@@ -1,6 +1,9 @@
 // 90-second first-session QA in the real sandboxed runtime: watch the showreel, take the
 // tutorial, play Penalties, Free Kicks and Target Practice until 90 s are up, then count what the
-// viewer actually saw (Stage stats) and check minimums. Usage: node scripts/qa-90s.mjs [--width 960]
+// viewer actually saw (Stage stats + the Match Director QA hook) and check minimums.
+// Owner's targets for the first 90 s of a fresh session (desktop 960 and phone 360):
+//   >= 5 keepers, >= 8 distinct Director moments, >= 15 unique commentary lines, 0 lines repeated within 60 s.
+// Usage: node scripts/qa-90s.mjs [--width 960|360] [--motion]
 import assert from "node:assert/strict";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
@@ -9,12 +12,22 @@ installPriceFixture(); // answers the live RF/USD pool reads with recorded value
 
 const args = process.argv.slice(2);
 const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
-const MINIMUMS = { uniqueLines: 25, contexts: 12, keepers: 4, celebrations: 2, waves: 1, taunts: 3, shots: 14, walkouts: 1 };
-let report;
+/** --motion: play with full motion (the SDK harness forces prefers-reduced-motion: reduce by default). */
+const motion = args.includes("--motion");
+// keepers: distinct keepers on screen in the 90 s (Stage stats: cold open, walk-ons and kicks). keepersFaced
+// (keepers actually kicked against) is reported next to it: Park free play rotates within the Director's
+// easy pool (the ladder keeper ± one rung), so it is lower on a fresh profile.
+const MINIMUMS = { uniqueLines: 25, contexts: 12, keepers: 5, celebrations: 2, waves: 1, taunts: 3, shots: 14, walkouts: 1,
+  // Owner's first-90-s targets (Match Director): distinct moments played, unique lines said after Kick off.
+  moments: 8, playLines: 15 };
+/** 0 repeated commentary lines within 60 s (the whole 90 s, cold open included). */
+const MAXIMUMS = { repeatsWithin60s: 0 };
+let report, repeatList = [];
 
 await testGame("./games/penalty-kings", {
   width, timeout: 60_000,
   check: async ({ page, game }) => {
+    if (motion) await page.emulateMedia({ reducedMotion: "no-preference" });
     const started = Date.now(), elapsed = () => (Date.now() - started) / 1000;
     const button = name => game.getByRole("button", { name, exact: true });
     const canvas = game.locator("canvas.pk-canvas");
@@ -35,6 +48,7 @@ await testGame("./games/penalty-kings", {
 
     await page.waitForTimeout(12_000); // the showreel plays behind the title
     await page.locator(".rf-game-frame").screenshot({ path: `artifacts/qa-showreel-${width}.png` });
+    const kickoffAt = await game.locator("body").evaluate(() => performance.now() / 1000);
     await button("Kick off").click(); // first session: straight into the coached tutorial
     for (let i = 0; i < 3; i++) await kick(aims[i]);
     await game.getByTestId("results").waitFor(); await button("Modes").click();
@@ -47,7 +61,18 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("mode-target").click();
     for (let i = 0; elapsed() < 88; i++) await kick(aims[i % aims.length] * 0.8);
     const stats = await game.locator("body").evaluate(() => window.__pkStats());
+    const director = await game.locator("body").evaluate(() => window.__pkDirector());
+    // Every line on screen with its time (Stage stats.lineLog): none may come back within 60 s.
+    const log = stats.lineLog, repeats = [];
+    for (let i = 0; i < log.length; i++) for (let j = i + 1; j < log.length; j++) if (log[j].text === log[i].text && log[j].at - log[i].at < 60) repeats.push(`${log[i].text} (${(log[j].at - log[i].at).toFixed(1)} s apart)`);
+    repeatList = repeats;
+    const inPlay = log.filter(entry => entry.at >= kickoffAt);
+    const moments = [...new Set(director.played.map(m => m.id))];
+    const faced = [...new Set(director.keepers.map(k => k.id))];
     report = {
+      moments: moments.length, playLines: new Set(inPlay.map(entry => entry.text)).size, repeatsWithin60s: repeats.length, linesShown: log.length,
+      keepersFaced: faced.length, walkOns: stats.walkOns, replays: stats.replays,
+      momentList: director.played.map(m => `${m.id}@${Math.round(m.at - kickoffAt)}s`).join(", "), facedList: faced.join(", "), discovery: director.discovery,
       seconds: Math.round(elapsed()), shots: stats.shots, goals: stats.goals, saves: stats.saves, woodwork: stats.woodwork,
       uniqueLines: stats.lines.length, contexts: stats.contexts.length, keepers: stats.keepers.length, celebrations: stats.celebrations.length,
       waves: stats.waves, taunts: stats.taunts, walkouts: stats.walkouts, sfx: stats.sfx, reveals: stats.reveals,
@@ -55,7 +80,8 @@ await testGame("./games/penalty-kings", {
     };
   },
 });
-console.log(`90-second QA at ${width}px:`);
-for (const [key, value] of Object.entries(report)) console.log(`  ${key.padEnd(15)} ${value}${MINIMUMS[key] !== undefined ? `   (min ${MINIMUMS[key]})` : ""}`);
+console.log(`90-second QA at ${width}px (${motion ? "full motion" : "reduced motion, the SDK harness default"}):`);
+for (const [key, value] of Object.entries(report)) console.log(`  ${key.padEnd(17)} ${value}${MINIMUMS[key] !== undefined ? `   (min ${MINIMUMS[key]})` : MAXIMUMS[key] !== undefined ? `   (max ${MAXIMUMS[key]})` : ""}`);
 for (const [key, min] of Object.entries(MINIMUMS)) assert.ok(report[key] >= min, `${key} ${report[key]} < ${min}`);
+for (const [key, max] of Object.entries(MAXIMUMS)) assert.ok(report[key] <= max, `${key} ${report[key]} > ${max}: ${repeatList.join(" | ")}`);
 console.log("PASS 90-second QA");
