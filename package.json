@@ -50,6 +50,7 @@
     "sim:difficulty": "node --experimental-strip-types scripts/difficulty-sim.ts",
     "test:game-logic": "node scripts/test-game-logic.mjs",
     "test:modes": "node scripts/test-modes.mjs --out ./artifacts/modes",
+    "record:judge": "node scripts/record-judge-path.mjs",
     "qa:90s": "node scripts/qa-90s.mjs && node scripts/qa-90s.mjs --width 360 && node scripts/qa-90s.mjs --motion && node scripts/qa-90s.mjs --width 360 --motion",
     "test:flow": "node scripts/test-flow.mjs && node scripts/test-flow.mjs --width 360",
     "test:practice": "node scripts/test-practice.mjs"

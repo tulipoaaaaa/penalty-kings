@@ -41,6 +41,29 @@ Short waits skip straight to the payoff, so instant randomness stays as fast as 
 
 ## Play
 
+### Judge path (60 s)
+
+**Video (59 s):** [docs/media/judge-path.webm](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/judge-path.webm).
+It was recorded in the SDK's own test harness (mock wallet, SDK sample Friend #7730, full motion),
+so the economy in it is **SIMULATED**, the same as in the preview.
+
+1. **Title:** watch the cold-open showreel for a few seconds, then **Skip intro ▸** → **Kick off**.
+2. **Tutorial:** 3 swipes up from the ball. Your first goal gets the big celebration and a crowd wave.
+3. **Modes:** the **NEXT GOAL** line always points at a free unlock (here, today's Daily Challenge).
+4. **Free Kicks:** 2 kicks over the wall (curl the swipe to bend it). Then **Menu → Change mode**.
+5. **Big Match:** **Ball shop** (odds printed on the pack) → buy a 2-ball pack → **Open** →
+   **Reveal all** (true totals: spent, pulled, net) → **Go to my Bag** → choose a ball.
+6. **Kick** with your chosen ball; the HUD shows your Bag (balls are not used up by kicking).
+
+| | |
+|---|---|
+| ![Tutorial: the first goal, with the big celebration](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-goal.png) | ![Modes screen with the NEXT GOAL line](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-modes.png) |
+| ![Free Kicks: aiming over the wall](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-freekick.png) | ![Big Match: pack summary after Reveal all (simulated)](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-pack.png) |
+
+No wallet? The [free practice page](https://tulipoaaaaa.github.io/penalty-kings/practice/) plays
+without one ([screenshot](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/practice-844x390-kick.png)).
+The video and the `judge-*.png` frames are regenerated only by `npm run record:judge`, not by CI.
+
 **Playable preview (simulated economy):** https://tulipoaaaaa.github.io/penalty-kings/
 (Pro stadium: `/pro/` · Champions: `/champions/`)
 
