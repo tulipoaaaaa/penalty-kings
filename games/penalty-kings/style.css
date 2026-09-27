@@ -246,3 +246,280 @@
 .pk-save { display: grid; gap: 6px; margin-top: 8px; }
 .pk-save textarea { width: 100%; font: 11px/1.3 ui-monospace, monospace; word-break: break-all; resize: vertical; }
 .pk-save label { display: grid; gap: 4px; }
+
+/* ── In-frame menus (round 6 E25): the SDK GameMenu (.rf-frame-scrim / .rf-frame-menu) in the pixel HUD's clothes ──
+   Scoped to .pk, so the SDK's own toolbar and wallet dialogs outside the game viewport keep their look.
+   Chunky 2px borders, hard drop shadows, Pixelify, stadium-tinted headers, 10×10 pixel icons (inline SVG rects above).
+   Text never goes below 11 CSS px, at any frame size. */
+.pk, [data-stadium="park"] { --pk-head: #2e7d32; --pk-head2: #37903b; --pk-accent: var(--pk-volt); }
+.pk-stadium-pro, [data-stadium="pro"] { --pk-head: #1d3557; --pk-head2: #22406a; --pk-accent: var(--pk-sky); }
+.pk-stadium-champions, [data-stadium="champions"] { --pk-head: #3a1a6a; --pk-head2: #45207d; --pk-accent: var(--pk-gold); }
+.pk { --pk-card: #0b0d1a; --pk-muted: #b4bbdc; --pk-row: #11152b; }
+
+.pk .rf-frame-scrim { background: #0b0d1ab3; color: var(--pk-paper); font: 13px/1.4 PixelifySans, ui-monospace, Menlo, Consolas, monospace; padding: 12px 12px max(40px, 12cqh); }
+.pk .rf-frame-menu { width: min(620px, 100%); height: auto; max-width: 100%; max-height: 100%; background: var(--pk-panel); color: var(--pk-paper);
+  border: 2px solid var(--pk-paper); border-radius: 0; box-shadow: 4px 4px 0 #000; outline: none; animation: pk-menu-in 0.2s steps(5, end) both; }
+/* Pixel-snapped entry: 10px in five 2px steps. */
+@keyframes pk-menu-in { from { transform: translateY(10px); opacity: 0; } }
+
+/* Header: stadium turf stripes (Park green, Pro night blue, Champions purple), an accent rule, a pixel icon badge. */
+.pk .rf-frame-menu-heading { display: flex; align-items: center; gap: 8px; height: auto; min-height: 44px; padding: 4px 4px 4px 6px; border-bottom: 2px solid var(--pk-ink);
+  background: repeating-linear-gradient(90deg, var(--pk-head) 0 16px, var(--pk-head2) 16px 32px); box-shadow: inset 0 -2px 0 var(--pk-accent); }
+.pk .rf-frame-menu-heading::before { content: ""; flex: none; width: 28px; height: 28px; border: 2px solid var(--pk-paper); box-shadow: 2px 2px 0 #000;
+  background: var(--pk-ink) var(--pk-icon, var(--pk-i-ball)) center / 20px 20px no-repeat; image-rendering: pixelated; }
+.pk .rf-frame-menu-heading h2 { flex: 1; min-width: 0; margin: 0; font: 700 17px/1.1 PixelifySans, ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--pk-paper); text-shadow: 2px 2px 0 #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk .rf-frame-menu-heading button { flex: none; width: 36px; height: 36px; min-height: 0; padding: 0 0 2px; border: 2px solid var(--pk-paper); border-radius: 0; background: var(--pk-ink);
+  color: var(--pk-paper); font: 700 20px/1 PixelifySans, ui-monospace, monospace; box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-heading button:hover { background: var(--pk-red); }
+.pk .rf-frame-menu-heading button:active { transform: translate(2px, 2px); box-shadow: none; }
+/* One icon per screen (picked by what the menu holds). */
+.pk .rf-frame-menu:has(.pk-hub) { --pk-icon: var(--pk-i-menu); }
+.pk .rf-frame-menu:has([data-testid="results"]) { --pk-icon: var(--pk-i-star); }
+.pk .rf-frame-menu:has(.pk-shop) { --pk-icon: var(--pk-i-ball); }
+.pk .rf-frame-menu:has(.pk-bag) { --pk-icon: var(--pk-i-bag); }
+.pk .rf-frame-menu:has(.pk-oddstable) { --pk-icon: var(--pk-i-dice); }
+.pk .rf-frame-menu:has(.pk-market) { --pk-icon: var(--pk-i-tag); }
+.pk .rf-frame-menu:has(.pk-rules) { --pk-icon: var(--pk-i-rules); }
+.pk .rf-frame-menu:has(.pk-settings) { --pk-icon: var(--pk-i-gear); }
+.pk .rf-frame-menu:has(.pk-book) { --pk-icon: var(--pk-i-book); }
+.pk .rf-frame-menu:has(.pk-tour), .pk .rf-frame-menu:has(.pk-brief) { --pk-icon: var(--pk-i-flag); }
+.pk .rf-frame-menu:has(.pk-daily) { --pk-icon: var(--pk-i-calendar); }
+.pk .rf-frame-menu:has(.pk-shopgroup) { --pk-icon: var(--pk-i-shirt); }
+.pk .rf-frame-menu:has(> .rf-frame-menu-body > .pk-explain) { --pk-icon: var(--pk-i-trophy); }
+
+/* Body: short headings, cards, 13px text (never under 11px). */
+.pk .rf-frame-menu-body { padding: 12px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pk-line) var(--pk-ink); }
+.pk .rf-frame-menu-body::-webkit-scrollbar { width: 8px; }
+.pk .rf-frame-menu-body::-webkit-scrollbar-track { background: var(--pk-ink); }
+.pk .rf-frame-menu-body::-webkit-scrollbar-thumb { background: var(--pk-line); border: 2px solid var(--pk-ink); }
+.pk .rf-frame-menu-body p { margin: 0 0 8px; }
+.pk .rf-frame-menu-body b { color: var(--pk-volt); }
+.pk .rf-frame-menu-body h3 { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font: 700 14px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 0.05em; text-transform: uppercase; }
+.pk .rf-frame-menu-body h3::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--pk-accent); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body > h3:first-child, .pk .rf-frame-menu-body > * > h3:first-child { margin-top: 0; }
+.pk .rf-frame-menu-body h3 small { font-size: 12px; font-weight: 400; color: var(--pk-muted); text-transform: none; letter-spacing: 0; opacity: 1; }
+.pk .rf-frame-menu-body small { font-size: 12px; }
+.pk .rf-frame-menu-body .pk-note, .pk .rf-frame-menu-body .pk-rule { font-size: 12px; font-style: normal; color: var(--pk-muted); opacity: 1; }
+.pk .rf-frame-menu-body .pk-note small { font-size: 11px; }
+.pk .rf-frame-menu-body .pk-rule { color: var(--pk-sky); }
+.pk .rf-frame-menu-body .pk-warn { padding: 6px 10px; border: 2px solid var(--pk-gold); background: #3d2600; color: var(--pk-gold); box-shadow: 2px 2px 0 #000; }
+
+/* Buttons: ink blocks, paper border, a 2px hard shadow; they press down 2px. */
+.pk .rf-frame-menu-body button:not(.pk-link) { min-height: 40px; padding: 6px 12px; border: 2px solid var(--pk-paper); border-radius: 0; background: var(--pk-ink); color: var(--pk-paper);
+  font: 700 13px/1.2 PixelifySans, ui-monospace, monospace; box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body button:not(.pk-link):hover:not(:disabled) { background: var(--pk-line); }
+.pk .rf-frame-menu-body button:not(.pk-link):active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.pk .rf-frame-menu-body button:not(.pk-link)[aria-pressed="true"], .pk .rf-frame-menu-body button:not(.pk-link)[aria-checked="true"] { border-color: var(--pk-gold); background: #3d2600; color: var(--pk-gold); outline: none; }
+.pk .rf-frame-menu-body button:disabled { opacity: 0.45; cursor: default; }
+.pk .rf-frame-menu-body .pk-primary:hover:not(:disabled) { background: #e0ff4d !important; }
+.pk .rf-frame-scrim button:focus-visible { outline: 2px solid var(--pk-gold); outline-offset: 2px; }
+.pk .rf-frame-menu-body .pk-link { font-weight: 700; color: var(--pk-sky) !important; }
+.pk .rf-frame-menu-body .pk-buyrow { gap: 8px; align-items: center; margin: 8px 0; }
+.pk .rf-frame-menu-body select, .pk .rf-frame-menu-body textarea { border: 2px solid var(--pk-line); border-radius: 0; background: var(--pk-ink); color: var(--pk-paper); }
+.pk .rf-frame-menu-body select { min-height: 32px; margin-left: 4px; font: 13px PixelifySans, ui-monospace, monospace; }
+.pk .rf-frame-menu-body input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--pk-volt); margin: 0; flex: none; }
+
+/* Cards and stat tiles. */
+.pk-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin: 8px 0 10px; }
+.pk-tile { display: grid; justify-items: center; align-content: center; gap: 2px; padding: 8px 6px; background: var(--pk-card); border: 2px solid var(--tone, var(--pk-line)); box-shadow: 2px 2px 0 #000; text-align: center; }
+.pk-tile[data-tone="gold"] { --tone: var(--pk-gold); }
+.pk-tile[data-tone="volt"] { --tone: var(--pk-volt); }
+.pk-tile[data-tone="sky"] { --tone: var(--pk-sky); }
+.pk .rf-frame-menu-body .pk-tile b { font: 700 24px/1 PixelifySans, ui-monospace, monospace; color: var(--tone, var(--pk-paper)); text-shadow: 2px 2px 0 #000; white-space: nowrap; }
+.pk .rf-frame-menu-body .pk-tile b small { font-size: 14px; opacity: 0.85; }
+.pk-tile span { font-size: 11px; line-height: 1.2; color: var(--pk-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.pk-callout { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
+.pk-callout .pk-tile { flex: none; min-width: 96px; }
+.pk .rf-frame-menu-body .pk-callout p { margin: 0; }
+.pk .rf-frame-menu-body .pk-explain, .pk .rf-frame-menu-body .pk-confirm, .pk .rf-frame-menu-body .pk-daily, .pk .rf-frame-menu-body .pk-save, .pk .rf-frame-menu-body .pk-market > p:first-child {
+  padding: 8px 10px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; margin: 0 0 10px; }
+.pk .rf-frame-menu-body .pk-explain { border-color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-confirm { border-color: var(--pk-red); }
+.pk .rf-frame-menu-body .pk-market > p:first-child { border-color: var(--pk-gold); }
+
+/* Token lines: one mini card each, the term as a chip. */
+.pk .rf-frame-menu-body .pk-tokens { list-style: none; padding: 0; margin: 6px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px; }
+.pk .rf-frame-menu-body .pk-tokens li { margin: 0; padding: 5px 8px; background: var(--pk-panel); border: 2px solid var(--pk-line); line-height: 1.3; }
+.pk .rf-frame-menu-body .pk-tokens b { display: inline-block; margin-right: 4px; padding: 0 4px; background: var(--pk-gold); color: var(--pk-ink); }
+
+/* Tables (odds, stadium prices, market, collection): a clean ledger with a header bar and zebra rows. */
+.pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) { width: 100%; border-collapse: separate; border-spacing: 0; margin: 6px 0 10px; font-size: 13px; background: var(--pk-card);
+  border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) th { padding: 5px 8px; background: var(--pk-line); color: var(--pk-gold); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; text-align: left; border: 0; }
+.pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) td { padding: 5px 8px; border: 0; border-top: 2px solid var(--pk-panel); vertical-align: middle; }
+.pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) tbody tr:nth-child(even) td { background: var(--pk-row); }
+.pk .rf-frame-menu-body .pk-odds :is(th, td):not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.pk .rf-frame-menu-body .pk-odds td small { font-size: 11px; color: var(--pk-muted); }
+.pk .rf-frame-menu-body .pk-collection :is(th, td) { text-align: center; font-size: 12px; }
+.pk .rf-frame-menu-body .pk-collection td:first-child { text-align: left; }
+.pk .rf-frame-menu-body .pk-collection small { font-size: 11px; color: var(--pk-muted); }
+.pk-rname { display: inline-flex; align-items: center; gap: 6px; }
+.pk-rchip { flex: none; width: 16px; height: 16px; image-rendering: pixelated; }
+.pk-oddstable tbody td:first-child { box-shadow: inset 4px 0 0 var(--rc, var(--pk-line)); padding-left: 12px !important; }
+[data-rarity="0"] { --rc: #c9b99a; } [data-rarity="1"] { --rc: #f7a24a; } [data-rarity="2"] { --rc: #7fd3ff; } [data-rarity="3"] { --rc: #3ddc84; }
+[data-rarity="4"] { --rc: #d7dde5; } [data-rarity="5"] { --rc: #ffd23f; } [data-rarity="6"] { --rc: #ff8c00; }
+.pk-stadiumdot { flex: none; width: 10px; height: 10px; background: var(--pk-head); border: 2px solid var(--pk-accent); }
+
+/* Results. */
+.pk .rf-frame-menu-body .pk-roundcard h3 { justify-content: center; font-size: 16px; color: var(--pk-gold); text-transform: none; letter-spacing: 0.02em; text-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-roundcard h3::before { display: none; }
+.pk .rf-frame-menu-body .pk-stars { margin: 0 0 4px; font-size: 24px; line-height: 1; color: var(--pk-gold); text-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-final { font-size: 15px; font-weight: 700; }
+.pk .rf-frame-menu-body .pk-badge { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding: 5px 8px; text-align: left; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk-badge::before { content: ""; flex: none; width: 20px; height: 20px; background: var(--pk-i-star) center / 20px 20px no-repeat; image-rendering: pixelated; }
+.pk-badge[data-icon="book"]::before { background-image: var(--pk-i-book); }
+.pk-badge[data-icon="key"]::before { background-image: var(--pk-i-key); }
+.pk .rf-frame-menu-body .pk-roundcard .pk-plain { display: grid; gap: 4px; text-align: left; }
+.pk .rf-frame-menu-body .pk-roundcard .pk-plain li { margin: 0; padding: 4px 8px; background: var(--pk-card); border: 2px solid var(--pk-line); }
+.pk .rf-frame-menu-body .pk-roundcard .pk-buyrow { justify-content: center; }
+
+/* Hub: a grid of big icon buttons. */
+.pk .rf-frame-menu-body .pk-hub { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.pk .rf-frame-menu-body .pk-hub > button { display: flex; align-items: center; gap: 8px; }
+.pk-hub > button::before { content: ""; flex: none; width: 20px; height: 20px; background: var(--pk-hub-icon, var(--pk-i-flag)) center / 20px 20px no-repeat; image-rendering: pixelated; }
+.pk-hub > button:nth-child(1) { --pk-hub-icon: var(--pk-i-ball); }
+.pk-hub > button:nth-child(2) { --pk-hub-icon: var(--pk-i-bag); }
+.pk-hub > button:nth-child(3) { --pk-hub-icon: var(--pk-i-trophy); }
+.pk-hub > button:nth-child(4) { --pk-hub-icon: var(--pk-i-book); }
+.pk-hub > button:nth-child(5) { --pk-hub-icon: var(--pk-i-shirt); }
+.pk-hub > button:nth-child(6) { --pk-hub-icon: var(--pk-i-rules); }
+.pk-hub > button:nth-child(7) { --pk-hub-icon: var(--pk-i-gear); }
+
+/* Ball shop. */
+.pk .rf-frame-menu-body .pk-tiers { gap: 8px; margin-bottom: 10px; }
+.pk .rf-frame-menu-body .pk-tiercard { gap: 2px; padding: 0 0 8px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; font-weight: 400; }
+.pk .rf-frame-menu-body .pk-tiercard[data-current="true"] { border-color: var(--pk-accent); }
+.pk .rf-frame-menu-body .pk-tiercard > * { padding: 0 8px; }
+.pk .rf-frame-menu-body .pk-tiercard strong { padding: 3px 8px; margin-bottom: 4px; background: repeating-linear-gradient(90deg, var(--pk-head) 0 12px, var(--pk-head2) 12px 24px);
+  border-bottom: 2px solid var(--pk-accent); text-transform: uppercase; letter-spacing: 0.06em; text-shadow: 2px 2px 0 #000; }
+.pk-tierprice { color: var(--pk-muted); font-size: 12px; }
+.pk .rf-frame-menu-body .pk-tierprice b { font-size: 17px; color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-tiercard small { font-size: 11px; color: var(--pk-muted); opacity: 1; }
+.pk .rf-frame-menu-body .pk-tiercard[data-current="true"] .pk-tierwhere { justify-self: start; margin: 2px 8px 0; padding: 0 4px; background: var(--pk-accent); color: var(--pk-ink); font-weight: 700; }
+.pk .rf-frame-menu-body .pk-packs { gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.pk .rf-frame-menu-body .pk-packs button { min-width: 76px; }
+.pk .rf-frame-menu-body .pk-cost { align-items: stretch; }
+.pk .rf-frame-menu-body .pk-cost .pk-tile b { font-size: 20px; }
+.pk .rf-frame-menu-body .pk-cost .pk-link { justify-self: center; align-self: center; }
+.pk .rf-frame-menu-body .pk-case { gap: 8px; }
+.pk .rf-frame-menu-body .pk-pedestal { background-color: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; padding: 6px 4px 8px; }
+.pk .rf-frame-menu-body .pk-pedestal strong { font-size: 12px; line-height: 1.2; }
+.pk .rf-frame-menu-body .pk-pedestal small { font-size: 11px; color: var(--pk-muted); opacity: 1; }
+
+/* Bag. */
+.pk .rf-frame-menu-body .pk-counts { gap: 6px; }
+.pk .rf-frame-menu-body .pk-counts span { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: var(--pk-card); border: 2px solid var(--rc, var(--pk-line)); font-size: 12px; }
+.pk .rf-frame-menu-body .pk-bagrid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+.pk .rf-frame-menu-body .pk-ballcard { padding: 8px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000, inset 4px 0 0 var(--rc, var(--pk-line)); padding-left: 12px; }
+.pk .rf-frame-menu-body .pk-ballcard[data-selected="true"] { border-color: var(--pk-gold); outline: none; }
+.pk .rf-frame-menu-body .pk-ballcard small { font-size: 11px; color: var(--pk-muted); }
+.pk .rf-frame-menu-body .pk-ballcard .pk-stamp { color: var(--pk-sky); }
+.pk .rf-frame-menu-body .pk-ballactions { gap: 6px; margin-top: 4px; }
+.pk .rf-frame-menu-body .pk-ballactions button { min-height: 34px; padding: 4px 8px; font-size: 12px; }
+.pk .rf-frame-menu-body .pk-bag > .pk-buyrow label { display: inline-flex; align-items: center; font-size: 12px; }
+
+/* Rules and Scouting Book: numbered / titled cards instead of one long list. */
+.pk .rf-frame-menu-body .pk-rules > p:first-child { padding: 8px 10px; background: #3d2600; border: 2px solid var(--pk-gold); box-shadow: 2px 2px 0 #000; color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-rules > p:first-child b { color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-rules ol, .pk .rf-frame-menu-body .pk-scoring { list-style: none; counter-reset: pk-rule; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin: 0 0 10px; padding: 0; }
+.pk .rf-frame-menu-body .pk-rules li, .pk .rf-frame-menu-body .pk-scoring li { position: relative; margin: 0; padding: 7px 10px 7px 38px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; line-height: 1.35; }
+.pk .rf-frame-menu-body .pk-rules li::before { counter-increment: pk-rule; content: counter(pk-rule); position: absolute; left: 6px; top: 7px; width: 22px; height: 22px; display: grid; place-items: center;
+  background: var(--pk-accent); color: var(--pk-ink); font-weight: 700; font-size: 13px; box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-scoring li { padding-left: 10px; }
+.pk .rf-frame-menu-body .pk-scoring li > b:first-child { display: block; color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-book-grid { gap: 8px; }
+.pk .rf-frame-menu-body .pk-keepercard { padding: 8px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-keepercard[data-stamped="true"] { border-color: #3ddc84; }
+.pk .rf-frame-menu-body .pk-keepercard small { font-size: 11px; color: var(--pk-muted); opacity: 1; }
+
+/* World Tour, Daily. */
+.pk .rf-frame-menu-body .pk-city { padding: 8px 10px; margin-bottom: 10px; background: var(--pk-card); border: 2px solid var(--pk-line); border-left: 6px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-city[data-open="true"] { border-left-color: var(--pk-accent); }
+.pk .rf-frame-menu-body .pk-levels { gap: 8px; }
+.pk .rf-frame-menu-body .pk-levels button { min-height: 44px; padding: 6px 8px; font-weight: 400; text-align: left; }
+.pk .rf-frame-menu-body .pk-levels button b { color: var(--pk-paper); }
+.pk .rf-frame-menu-body .pk-levels small { font-size: 11px; color: var(--pk-muted); opacity: 1; }
+.pk .rf-frame-menu-body .pk-levelpath button[data-next] { outline: 2px solid var(--pk-gold); outline-offset: 2px; border-color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-brief { padding-left: 0; list-style: none; display: grid; gap: 6px; }
+.pk .rf-frame-menu-body .pk-brief li { padding: 6px 10px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-calendar { gap: 4px; margin: 0 0 8px; }
+.pk .rf-frame-menu-body .pk-calendar i { font-size: 11px; border: 2px solid var(--pk-line); background: var(--pk-ink); }
+.pk .rf-frame-menu-body .pk-calendar i[data-played="true"] { background: #2e7d32; border-color: #3ddc84; }
+.pk .rf-frame-menu-body .pk-daily > button { margin: 0 8px 0 0; }
+
+/* Cups, Kit shop, Settings. */
+.pk .rf-frame-menu-body .pk-table { display: grid; gap: 2px; margin: 6px 0 10px; }
+.pk .rf-frame-menu-body .pk-table li { padding: 4px 8px; background: var(--pk-card); border: 2px solid var(--pk-line); }
+.pk .rf-frame-menu-body .pk-table li:nth-child(-n + 3) b { color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-table li[data-mine="true"] { border-color: var(--pk-volt); outline: none; }
+.pk .rf-frame-menu-body .pk-shopgroup { gap: 8px; margin-bottom: 10px; }
+.pk .rf-frame-menu-body .pk-shopgroup h3 { margin-top: 8px; }
+.pk .rf-frame-menu-body .pk-swatch { width: 12px; height: 12px; border: 2px solid var(--pk-ink); box-shadow: 0 0 0 1px var(--pk-paper); }
+.pk .rf-frame-menu-body .pk-settings { display: grid; gap: 8px; }
+.pk .rf-frame-menu-body .pk-settings > button { justify-self: start; }
+.pk .rf-frame-menu-body .pk-settings > label { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 10px; background: var(--pk-card); border: 2px solid var(--pk-line); box-shadow: 2px 2px 0 #000; }
+.pk .rf-frame-menu-body .pk-settings > p { margin: 0; padding: 4px 10px; border-left: 4px solid var(--pk-accent); background: var(--pk-row); }
+.pk .rf-frame-menu-body .pk-save { gap: 8px; }
+.pk .rf-frame-menu-body .pk-save textarea { font: 12px/1.3 ui-monospace, Menlo, Consolas, monospace; padding: 4px 6px; }
+
+/* Phone-sized frames (≈360 × 240): tighter, still ≥ 11px text and ≥ 32px targets. */
+@container (max-width: 560px) {
+  .pk .rf-frame-scrim { font-size: 12px; padding: 4px 6px 40px; }
+  .pk .rf-frame-menu { box-shadow: 3px 3px 0 #000; }
+  .pk .rf-frame-menu-heading { min-height: 36px; padding: 2px 3px 2px 4px; gap: 6px; }
+  .pk .rf-frame-menu-heading::before { width: 24px; height: 24px; background-size: 16px 16px; }
+  .pk .rf-frame-menu-heading h2 { font-size: 14px; }
+  .pk .rf-frame-menu-heading button { width: 32px; height: 32px; font-size: 18px; }
+  .pk .rf-frame-menu-body { padding: 8px; }
+  .pk .rf-frame-menu-body h3 { font-size: 13px; margin: 10px 0 4px; }
+  .pk .rf-frame-menu-body small, .pk .rf-frame-menu-body .pk-note, .pk .rf-frame-menu-body .pk-rule, .pk .rf-frame-menu-body h3 small,
+  .pk .rf-frame-menu-body .pk-counts span, .pk .rf-frame-menu-body .pk-tierprice, .pk .rf-frame-menu-body .pk-collection :is(th, td), .pk .rf-frame-menu-body .pk-pedestal strong { font-size: 11px; }
+  .pk .rf-frame-menu-body button:not(.pk-link) { min-height: 34px; padding: 4px 10px; font-size: 12px; }
+  .pk .rf-frame-menu-body .pk-ballactions button { min-height: 32px; padding: 2px 6px; font-size: 11px; }
+  .pk-tiles { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; margin: 6px 0 8px; }
+  .pk-tile { padding: 5px 4px; }
+  .pk .rf-frame-menu-body .pk-tile b { font-size: 18px; }
+  .pk .rf-frame-menu-body .pk-cost .pk-tile b { font-size: 15px; }
+  .pk .rf-frame-menu-body .pk-tile b small { font-size: 11px; }
+  .pk-callout { gap: 8px; }
+  .pk-callout .pk-tile { min-width: 84px; }
+  .pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) { font-size: 12px; }
+  .pk .rf-frame-menu-body :is(.pk-odds, .pk-collection) :is(th, td) { padding: 4px 5px; }
+  .pk .rf-frame-menu-body .pk-oddstable tbody td:first-child { padding-left: 9px !important; }
+  .pk .rf-frame-menu-body .pk-odds td small { font-size: 11px; }
+  .pk-rchip { width: 12px; height: 12px; }
+  .pk .rf-frame-menu-body .pk-tiercard strong { font-size: 12px; }
+  .pk .rf-frame-menu-body .pk-tierprice b { font-size: 14px; }
+  .pk .rf-frame-menu-body .pk-tokens, .pk .rf-frame-menu-body .pk-rules ol, .pk .rf-frame-menu-body .pk-scoring { grid-template-columns: 1fr; }
+  .pk .rf-frame-menu-body .pk-rules li { padding-left: 34px; }
+  .pk .rf-frame-menu-body .pk-rules li::before { width: 20px; height: 20px; font-size: 12px; left: 5px; top: 6px; }
+  .pk .rf-frame-menu-body .pk-stars { font-size: 20px; }
+  .pk .rf-frame-menu-body .pk-roundcard h3 { font-size: 13px; margin-bottom: 4px; }
+  .pk .rf-frame-menu-body .pk-roundcard .pk-tile b { font-size: 16px; }
+  .pk .rf-frame-menu-body .pk-badge { padding: 2px 6px; margin-bottom: 4px; box-shadow: none; }
+  .pk .rf-frame-menu-body .pk-roundcard .pk-buyrow { margin: 6px 0 2px; }
+  .pk-badge::before { width: 16px; height: 16px; background-size: 16px 16px; }
+}
+
+/* Motion: the OS setting and the game's own Reduce motion toggle (.pk-reduce-motion on the root) both switch it off. */
+.pk-reduce-motion .rf-frame-menu { animation: none; }
+@media (prefers-reduced-motion: reduce) { .pk .rf-frame-menu { animation: none; } }
+
+/* Pixel icons: 10x10 maps drawn as SVG rects (original art, generated from ASCII maps; no icon fonts). */
+.pk {
+  --pk-i-ball: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M2 0h6v1H2zM1 1h3v1H1zM6 1h3v1H6zM0 2h3v1H0zM7 2h3v1H7zM0 3h1v1H0zM2 3h2v1H2zM6 3h2v1H6zM9 3h1v1H9zM0 4h1v1H0zM3 4h4v1H3zM9 4h1v1H9zM0 5h1v1H0zM2 5h6v1H2zM9 5h1v1H9zM0 6h3v1H0zM4 6h2v1H4zM7 6h3v1H7zM1 7h2v1H1zM7 7h2v1H7zM2 8h6v1H2z'/%3E%3Cpath fill='%232a3160' d='M4 1h2v1H4zM3 2h4v1H3zM1 3h1v1H1zM4 3h2v1H4zM8 3h1v1H8zM1 4h2v1H1zM7 4h2v1H7zM1 5h1v1H1zM8 5h1v1H8zM3 6h1v1H3zM6 6h1v1H6zM3 7h4v1H3z'/%3E%3C/svg%3E");
+  --pk-i-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M4 0h2v1H4zM4 1h2v1H4zM3 2h4v1H3zM0 3h4v1H0zM5 3h5v1H5zM1 4h3v1H1zM5 4h4v1H5zM2 5h6v1H2zM2 6h6v1H2zM1 7h3v1H1zM6 7h3v1H6zM1 8h2v1H1zM7 8h2v1H7z'/%3E%3Cpath fill='%23fff2b3' d='M4 3h1v1H4zM4 4h1v1H4z'/%3E%3C/svg%3E");
+  --pk-i-trophy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M0 0h10v1H0zM0 1h1v1H0zM3 1h5v1H3zM9 1h1v1H9zM0 2h1v1H0zM3 2h5v1H3zM9 2h1v1H9zM1 3h8v1H1zM2 4h6v1H2zM3 5h4v1H3zM4 6h2v1H4zM4 7h2v1H4z'/%3E%3Cpath fill='%23fff2b3' d='M2 1h1v1H2zM2 2h1v1H2z'/%3E%3Cpath fill='%23b8860b' d='M2 8h6v1H2zM2 9h6v1H2z'/%3E%3C/svg%3E");
+  --pk-i-bag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M3 0h4v1H3zM2 1h1v1H2zM7 1h1v1H7zM3 5h4v1H3z'/%3E%3Cpath fill='%237fd3ff' d='M1 2h8v1H1zM0 3h10v1H0zM0 4h1v1H0zM9 4h1v1H9zM0 5h3v1H0zM7 5h3v1H7zM0 6h10v1H0zM0 7h10v1H0zM1 8h8v1H1z'/%3E%3Cpath fill='%232a6fdb' d='M1 4h8v1H1z'/%3E%3C/svg%3E");
+  --pk-i-rules: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M3 0h4v1H3zM3 1h4v1H3z'/%3E%3Cpath fill='%238a5a2b' d='M1 1h2v1H1zM7 1h2v1H7zM1 2h1v1H1zM8 2h1v1H8zM1 3h1v1H1zM8 3h1v1H8zM1 4h1v1H1zM8 4h1v1H8zM1 5h1v1H1zM8 5h1v1H8zM1 6h1v1H1zM8 6h1v1H8zM1 7h1v1H1zM8 7h1v1H8zM1 8h1v1H1zM8 8h1v1H8zM1 9h8v1H1z'/%3E%3Cpath fill='%23f7f7f2' d='M2 2h6v1H2zM2 3h1v1H2zM7 3h1v1H7zM2 4h6v1H2zM2 5h1v1H2zM6 5h2v1H6zM2 6h6v1H2zM2 7h1v1H2zM7 7h1v1H7zM2 8h6v1H2z'/%3E%3Cpath fill='%232a3160' d='M3 3h4v1H3zM3 5h3v1H3zM3 7h4v1H3z'/%3E%3C/svg%3E");
+  --pk-i-dice: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M1 0h8v1H1zM0 1h10v1H0zM0 2h1v1H0zM3 2h4v1H3zM9 2h1v1H9zM0 3h1v1H0zM3 3h4v1H3zM9 3h1v1H9zM0 4h4v1H0zM6 4h4v1H6zM0 5h4v1H0zM6 5h4v1H6zM0 6h1v1H0zM3 6h4v1H3zM9 6h1v1H9zM0 7h1v1H0zM3 7h4v1H3zM9 7h1v1H9zM0 8h10v1H0zM1 9h8v1H1z'/%3E%3Cpath fill='%232a3160' d='M1 2h2v1H1zM7 2h2v1H7zM1 3h2v1H1zM7 3h2v1H7zM4 4h2v1H4zM4 5h2v1H4zM1 6h2v1H1zM7 6h2v1H7zM1 7h2v1H1zM7 7h2v1H7z'/%3E%3C/svg%3E");
+  --pk-i-gear: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ccff00' d='M4 0h2v1H4zM1 1h1v1H1zM3 1h4v1H3zM8 1h1v1H8zM2 2h6v1H2zM1 3h3v1H1zM6 3h3v1H6zM0 4h3v1H0zM7 4h3v1H7zM0 5h3v1H0zM7 5h3v1H7zM1 6h3v1H1zM6 6h3v1H6zM2 7h6v1H2zM1 8h1v1H1zM3 8h4v1H3zM8 8h1v1H8zM4 9h2v1H4z'/%3E%3C/svg%3E");
+  --pk-i-book: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ff5a6e' d='M1 0h8v1H1zM1 1h1v1H1zM8 1h1v1H8zM1 2h1v1H1zM8 2h1v1H8zM1 3h1v1H1zM8 3h1v1H8zM1 4h1v1H1zM8 4h1v1H8zM1 5h1v1H1zM8 5h1v1H8zM1 6h1v1H1zM8 6h1v1H8zM1 7h8v1H1zM1 8h1v1H1z'/%3E%3Cpath fill='%23f7f7f2' d='M2 1h6v1H2zM2 2h1v1H2zM7 2h1v1H7zM2 3h6v1H2zM2 4h1v1H2zM6 4h2v1H6zM2 5h6v1H2zM2 6h6v1H2zM2 8h7v1H2z'/%3E%3Cpath fill='%232a3160' d='M3 2h4v1H3zM3 4h3v1H3z'/%3E%3C/svg%3E");
+  --pk-i-flag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M1 0h1v1H1zM1 1h1v1H1zM1 2h1v1H1zM1 3h1v1H1zM1 4h1v1H1zM1 5h1v1H1zM1 6h1v1H1zM1 7h1v1H1zM0 8h3v1H0z'/%3E%3Cpath fill='%23ccff00' d='M2 0h6v1H2zM2 1h7v1H2zM2 2h6v1H2zM2 3h5v1H2z'/%3E%3C/svg%3E");
+  --pk-i-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M2 0h1v1H2zM7 0h1v1H7zM0 3h10v1H0zM0 4h1v1H0zM2 4h2v1H2zM5 4h2v1H5zM8 4h2v1H8zM0 5h10v1H0zM0 6h1v1H0zM2 6h2v1H2zM5 6h2v1H5zM8 6h2v1H8zM0 7h10v1H0zM0 8h10v1H0z'/%3E%3Cpath fill='%23ff5a6e' d='M0 1h10v1H0zM0 2h10v1H0z'/%3E%3Cpath fill='%232a3160' d='M1 4h1v1H1zM4 4h1v1H4zM7 4h1v1H7zM1 6h1v1H1zM4 6h1v1H4zM7 6h1v1H7z'/%3E%3C/svg%3E");
+  --pk-i-menu: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23f7f7f2' d='M1 1h8v1H1zM1 2h8v1H1zM1 4h8v1H1zM1 5h8v1H1zM1 7h8v1H1zM1 8h8v1H1z'/%3E%3C/svg%3E");
+  --pk-i-shirt: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ff5a6e' d='M2 0h2v1H2zM6 0h2v1H6zM0 1h10v1H0zM0 2h10v1H0zM0 3h10v1H0zM2 4h6v1H2zM2 5h6v1H2zM2 6h2v1H2zM5 6h3v1H5zM2 7h6v1H2zM2 8h6v1H2z'/%3E%3Cpath fill='%23f7f7f2' d='M4 0h2v1H4zM4 6h1v1H4z'/%3E%3C/svg%3E");
+  --pk-i-tag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h6v1H1zM1 2h1v1H1zM3 2h5v1H3zM1 3h8v1H1zM1 4h9v1H1zM1 5h8v1H1zM1 6h7v1H1zM1 7h6v1H1z'/%3E%3C/svg%3E");
+  --pk-i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffd23f' d='M1 1h3v1H1zM0 2h1v1H0zM4 2h1v1H4zM0 3h1v1H0zM4 3h6v1H4zM0 4h1v1H0zM4 4h1v1H4zM7 4h1v1H7zM9 4h1v1H9zM1 5h3v1H1zM7 5h1v1H7zM9 5h1v1H9z'/%3E%3C/svg%3E");
+}

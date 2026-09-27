@@ -1,5 +1,5 @@
 /** Screens and widgets for the game shell (all state lives in index.tsx). */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
@@ -67,14 +67,33 @@ export function BallCase({ definition, tag }: { definition: GameDefinition; tag:
   </div>;
 }
 
+/** A tiny pixel ball in a rarity's own colours (odds table, Bag counts): 8 × 8 rects, crisp at any size. */
+export function RarityChip({ rarity }: { rarity: number }) {
+  const id = BALL_IDENTITY[rarity] ?? BALL_IDENTITY[7];
+  return <svg className="pk-rchip" viewBox="0 0 8 8" width="12" height="12" shapeRendering="crispEdges" aria-hidden="true">
+    <path fill={id.outline} d="M2 0h4v1h1v1h1v4h-1v1h-1v1h-4v-1h-1v-1h-1v-4h1v-1h1z" />
+    <path fill={id.base} d="M2 1h4v1h1v4h-1v1h-4v-1h-1v-4h1z" />
+    <path fill={id.accent} d="M3 3h2v2h-2zM3 1h2v1h-2zM1 3h1v2h-1zM6 3h1v2h-1zM3 6h2v1h-2z" />
+    <path fill={id.spec} d="M2 2h1v1h-1z" />
+  </svg>;
+}
+
+/** A stat tile: a big number over a short label. */
+export function Tile({ value, label, tone }: { value: ReactNode; label: ReactNode; tone?: "gold" | "volt" | "sky" }) {
+  return <div className="pk-tile" data-tone={tone}><b>{value}</b><span>{label}</span></div>;
+}
+
 /** The exact odds table: chance and RF value of every ball, with the 90% average return. */
 export function OddsTable({ definition, tier, tag }: { definition: GameDefinition; tier: Tier; tag: string }) {
   return <>
-    <table className="pk-odds"><thead><tr><th>Ball</th><th>Chance</th><th>RF value</th><th>$GBOOT drop</th></tr></thead>
-      <tbody>{definition.outcomes.map((item, index) => <tr key={item.name}>
-        <td>{RARITY_NAMES[index]}</td><td>{item.chanceBps / 100}%</td><td>{formatGameAmount(item.reward, 18)}{tag}</td>
+    <table className="pk-odds pk-oddstable"><thead><tr><th>Ball</th><th>Chance</th><th>RF value</th><th>$GBOOT drop</th></tr></thead>
+      <tbody>{definition.outcomes.map((item, index) => <tr key={item.name} data-rarity={index}>
+        <td><span className="pk-rname"><RarityChip rarity={index} />{RARITY_NAMES[index]}</span></td><td>{item.chanceBps / 100}%</td><td>{formatGameAmount(item.reward, 18)}{tag}</td>
         <td>+{formatNumber(Math.round(tier.baseDrop * RARITIES[index].dropMult * 100) / 100)}{tag}</td></tr>)}</tbody></table>
-    <p><b>Average return: 90%</b> of the ball price in RF, over many balls. Individual results vary: most balls return less than they cost, a few return much more. The kick never changes which ball you get.</p>
+    <div className="pk-callout">
+      <Tile value="90%" label="average return" tone="volt" />
+      <p><b>Average return: 90%</b> of the ball price in RF, over many balls. Individual results vary: most balls return less than they cost, a few return much more. The kick never changes which ball you get.</p>
+    </div>
   </>;
 }
 
@@ -85,7 +104,7 @@ export function StadiumPrices({ source, now }: { source: PrizeSource; now: numbe
     <table className="pk-odds"><thead><tr><th>Stadium</th><th>Ball price</th><th>Top prize (10×)</th></tr></thead>
       <tbody>{TIERS.map(tier => {
         const line = prizeLine(source.kind === "simulated" ? { ...source, topPrizeRF: tier.priceRF * 10 } : { ...source, topPrizeRF: source.topPrizeRF === null ? null : tier.priceRF * 10 }, "topPrizeRF", now);
-        return <tr key={tier.id}><td>{tier.name}</td><td>{tier.priceRF.toLocaleString("en-US")} RF <small>{usdForRf(tier.priceRF, price, now)}</small></td><td>{line.value} <small>{line.usd}</small></td></tr>;
+        return <tr key={tier.id} data-stadium={tier.id}><td><span className="pk-rname"><i className="pk-stadiumdot" aria-hidden="true" />{tier.name}</span></td><td>{tier.priceRF.toLocaleString("en-US")} RF <small>{usdForRf(tier.priceRF, price, now)}</small></td><td>{line.value} <small>{line.usd}</small></td></tr>;
       })}</tbody></table>
     <RfPriceLine price={price} now={now} />
   </>;
@@ -119,7 +138,10 @@ export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (
 export function TourMap({ levels, progress, onPick }: { levels: readonly Level[]; progress: Progress; onPick: (level: Level) => void }) {
   const stars = totalStars(progress), next = nextLevel(levels, progress);
   return <div className="pk-tour">
-    <p>★ {stars} / {levels.length * 3} · {CITIES.length} cities, {LEVELS_PER_CITY} levels each. Earn {starsToOpen()} of a city's {LEVELS_PER_CITY * 3} stars to open the next city; 3-star finals unlock cosmetics.</p>
+    <div className="pk-callout">
+      <Tile value={<>★ {stars}<small>/{levels.length * 3}</small></>} label="stars" tone="gold" />
+      <p className="pk-note">{CITIES.length} cities, {LEVELS_PER_CITY} levels each. Earn {starsToOpen()} of a city's {LEVELS_PER_CITY * 3} stars to open the next city; 3-star finals unlock cosmetics.</p>
+    </div>
     <ol className="pk-path">{CITIES.map(city => {
       const list = cityLevels(levels, city.chapter), open = cityOpen(levels, city.chapter, progress), got = cityStars(levels, city.chapter, progress);
       const before = CITIES.find(item => item.chapter === city.chapter - 1);
@@ -149,7 +171,12 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 6 + i); return d.toISOString().slice(0, 10); });
   return <div className="pk-daily">
     <h3>{today} · {scenario.title}</h3>
-    <p>The same scenario for every player today. {practice ? "Practice attempts" : "Attempts"} left: <b>{DAILY_ATTEMPTS - attempts}</b> · your best today: <b>{formatNumber(best)}</b> · streak: <b>{streak} day{streak === 1 ? "" : "s"}</b></p>
+    <p className="pk-note">The same scenario for every player today.</p>
+    <div className="pk-tiles">
+      <Tile value={DAILY_ATTEMPTS - attempts} label={<>{practice ? "Practice attempts" : "Attempts"} left:</>} tone="volt" />
+      <Tile value={formatNumber(best)} label="your best today" tone="gold" />
+      <Tile value={`${streak} day${streak === 1 ? "" : "s"}`} label="streak" tone="sky" />
+    </div>
     <p className="pk-calendar" aria-label="Last 7 days">{week.map(day => <i key={day} data-played={progress.daily.played.includes(day)} title={day}>{day.slice(8)}</i>)}</p>
     <button type="button" className="pk-primary" disabled={attempts >= DAILY_ATTEMPTS} onClick={onPlay}>{attempts >= DAILY_ATTEMPTS ? "Come back tomorrow" : "Play today's challenge"}</button>
     {best > 0 && <button type="button" onClick={onShare}>Share result card</button>}
@@ -203,10 +230,16 @@ export function Results({ summary, onAgain, onModes, next }: { summary: SessionS
   const hasNext = Boolean(next && "onNext" in next);
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
-    <p>{summary.final ?? <>You scored <b>{summary.goals}</b> of {summary.kicks} kick{summary.kicks === 1 ? "" : "s"} for <b>{formatNumber(summary.points)}</b> points.</>}{summary.xp > 0 ? ` You earned ${summary.xp} XP.` : ""}</p>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
-    {summary.stamp && <p>Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
-    {summary.unlocked?.map(item => <p key={item}>Unlocked: <b>{item}</b></p>)}
+    {summary.final ? <p className="pk-final">{summary.final}</p>
+      : <div className="pk-tiles">
+        <Tile value={<>{summary.goals}<small>/{summary.kicks}</small></>} label={`goal${summary.goals === 1 ? "" : "s"} scored`} tone="volt" />
+        <Tile value={formatNumber(summary.points)} label="points" tone="gold" />
+        {summary.xp > 0 && <Tile value={`+${summary.xp}`} label="XP earned" tone="sky" />}
+      </div>}
+    {summary.final && summary.xp > 0 && <p className="pk-note">You earned {summary.xp} XP.</p>}
+    {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
+    {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
     <div className="pk-buyrow">
