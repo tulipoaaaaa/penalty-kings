@@ -37,14 +37,14 @@ The goal is to close the gap between "good" and "great" where a judge's first 30
 | ID | Bug | Status |
 |---|---|---|
 | BQ-X1 | The pot banner hides the commentator strip | = BQ-P1-11, **fixed** in `7877c4d` (the strip drops below the banner) |
-| BQ-X2 | The pack panel (`.pk-pack`) hides the canvas reveal (spotlight, rays, rarity banner) | open, fixed by build B5 |
-| BQ-X3 | The pack summary scrolls the odds and honesty lines out of view | open, fixed by B5 |
-| BQ-X4 | About 14 of the 20 `Sfx` names are silent (whoosh, 11 keeper save voices, shot-clock beep, honks) | open, fixed by B3 |
-| BQ-X5 | Roars stack (goal + chant, Golden Boot ×2) with no limiter | open, fixed by B3 |
+| BQ-X2 | The pack panel (`.pk-pack`) hides the canvas reveal (spotlight, rays, rarity banner) | **fixed** by B5 in `f40bf76` |
+| BQ-X3 | The pack summary scrolls the odds and honesty lines out of view | **fixed** by B5 in `f40bf76` (odds strip pinned) |
+| BQ-X4 | About 14 of the 20 `Sfx` names are silent (whoosh, 11 keeper save voices, shot-clock beep, honks) | **fixed** by B3 in `2644dc8` (every name voiced; `tests/game/audio.test.ts`) |
+| BQ-X5 | Roars stack (goal + chant, Golden Boot ×2) with no limiter | **fixed** by B3 in `2644dc8` (one roar per event + master limiter) |
 | BQ-X6 | The attract title panel overlaps the pot banner | open |
 | BQ-X7 | The net-cam replay plays under the tutorial coach panel | open |
-| BQ-X8 | The canvas `GLYPHS` font has no digits (a number drawn with it is blank) | open, fixed by B4 |
-| BQ-X9 | `flipCard` / `revealAll` have side effects inside a `setPack` updater (double-fire under StrictMode) | open |
+| BQ-X8 | The canvas `GLYPHS` font has no digits (a number drawn with it is blank) | **fixed** by B4 in `47b773d` (bitmap digits) |
+| BQ-X9 | `flipCard` / `revealAll` have side effects inside a `setPack` updater (double-fire under StrictMode) | **fixed** by B5 in `f40bf76` |
 | BQ-X10 | Dev only: `dev/server.mjs` crashes on a missing Showroom file (sends a 200 header before reading) | open (P2) |
 
 ## The greatness list (ranked by impact ÷ effort)
