@@ -26,3 +26,28 @@ test("cutAt walks the montage in order and loops", () => {
   assert.equal(cutAt(MONTAGE_SECONDS + 0.01).index, 0);
   assert.ok(cutAt(1).progress > 0 && cutAt(1).progress < 1);
 });
+
+test("ReelPlayer drives the stage cut by cut, ends once (no loop), and reduced motion is a calm slideshow", async () => {
+  const { ReelPlayer, findShot, reelKeepersValid } = await import("../../games/penalty-kings/gfx/reelplayer.ts");
+  const { MONTAGE: reel } = await import("../../games/penalty-kings/gfx/showreel.ts");
+  assert.ok(reelKeepersValid(reel));
+  const calls: string[] = [];
+  const fake = (reduced: boolean) => ({
+    stadium: "park", weather: "sun", keeper: "mouse", kind: "penalty", freeKick: null, cue: null, busy: false, reduced, camera: { targetZoom: 1 },
+    setStadium(id: string) { this.stadium = id; calls.push(`stadium:${id}`); }, say(ctx: string) { calls.push(`say:${ctx}`); }, taunt() { calls.push("taunt"); },
+    play() { calls.push("play"); }, walkout() { calls.push("walkout"); }, wave() { calls.push("wave"); }, showReveal() { calls.push("reveal"); },
+    startCelebration() {}, cancel() {},
+  });
+  const stage = fake(false);
+  const cuts: number[] = [];
+  const player = new ReelPlayer(stage as never, reel, { loop: false, friendName: "Friend #1", onCut: (_c, i) => cuts.push(i) });
+  for (let t = 0; t < 40; t += 0.05) player.update(0.05);
+  assert.deepEqual(cuts, reel.map((_, i) => i), "every cut, in order, once");
+  assert.ok(player.done);
+  for (const want of ["reveal", "walkout", "play", "taunt", "stadium:pro", "stadium:champions"]) assert.ok(calls.includes(want), want);
+  calls.length = 0;
+  const calm = new ReelPlayer(fake(true) as never, reel, { loop: false, friendName: "F" });
+  for (let t = 0; t < 40; t += 0.05) calm.update(0.05);
+  assert.ok(!calls.includes("play") && !calls.includes("reveal"), "reduced motion: no shots or reveal flashes");
+  assert.ok(findShot("mouse", "goal"), "engine finds a skill goal");
+});
