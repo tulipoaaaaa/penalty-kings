@@ -101,3 +101,18 @@ button { font: inherit; }
 .pp-share-link input { min-height: 44px; padding: 4px 6px; font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--pk-paper); background: var(--pk-ink); border: 2px solid var(--pk-line); }
 .pp-btn-link { display: inline-flex; align-items: center; text-decoration: none; }
 .pp-end-card .pp-how { margin: 8px 0 0; font-size: 12px; color: #c9cde0; }
+
+/* BQ-P2: landscape phones fit one screen with no vertical scroll. The pitch's height used to be budgeted from
+   --top (one header line), but on narrow landscape phones (568-700 px wide) the header wraps to two lines and the
+   page scrolled by 3-33 px. Now the body is exactly the screen tall, the header takes what it needs, and the
+   pitch is sized from the space actually left (container query units of .pp-main). */
+@media (orientation: landscape) and (max-height: 560px) {
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-height: 0; }
+  .pp-top { flex: none; width: 100%; }
+  .pp-main { flex: 1 1 auto; min-height: 0; width: 100%; container-type: size; }
+  #pp-canvas { height: min(calc(100cqh - 2px), calc((100vw - 264px) / 1.5)); }
+}
+/* Narrow landscape phones: the "FREE" badge repeats the title, so it goes to keep the header on one line; if the
+   side panel is still taller than the pitch, it scrolls on its own instead of the page. */
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 739px) { .pp-top .pp-free { display: none; } }
+@media (orientation: landscape) and (max-height: 560px) { .pp-side { max-height: 100cqh; overflow-y: auto; } }
