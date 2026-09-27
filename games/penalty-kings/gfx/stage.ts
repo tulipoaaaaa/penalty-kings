@@ -9,7 +9,7 @@ import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHe
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, GLINT_SECONDS, type KeeperPose } from "./keepers.js";
-import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
+import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX, flightRadius, ribbonFor, drawRibbon, type RibbonPoint } from "./ball.js";
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { freshCommentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
@@ -58,6 +58,23 @@ export function penaltyBallArt(target: { x: number; y: number }, curl: number, p
   const xf = PENALTY_GOAL, home = { x: GOAL.cx + (SPOT.x - xf.x) / xf.g, y: GOAL.line + (SPOT.y - xf.y) / xf.g };
   const end = artPoint({ x: target.x, y: target.y * GOAL_ASPECT }), bow = p >= 1 ? 0 : (flightAt(target, curl, p).x - target.x * p) * GOAL.unit;
   return { x: home.x + (end.x - home.x) * p + bow, y: home.y + (end.y - home.y) * p - (p >= 1 ? 0 : Math.sin(Math.PI * p) * 12 / xf.g), r: lerp(4.5 / xf.g, BALL_RADIUS * GOAL.unit, p) };
+}
+
+/** B7: flight progress the ribbon trail spans behind the ball (half under reduced motion: a short static streak). */
+export const RIBBON_SPAN = 0.24, RIBBON_POINTS = 6;
+/**
+ * B7: the penalty ball as DRAWN on screen at flight progress p (0..1): penaltyBallArt through the goal transform,
+ * its radius boosted for readability by flightRadius, so at p = 1 it is exactly the physics disc (BALL_RADIUS).
+ */
+export function penaltyBallDrawn(target: { x: number; y: number }, curl: number, p: number, xf: { g: number; x: number; y: number } = PENALTY_GOAL) {
+  const art = penaltyBallArt(target, curl, p), at = applyGoal(xf, art);
+  return { x: at.x, y: at.y, r: flightRadius(Math.max(1.2, art.r * xf.g), p) };
+}
+/** B7: ribbon points (head → tail) behind a penalty ball at flight progress p. */
+export function penaltyRibbon(target: { x: number; y: number }, curl: number, p: number, reduced: boolean, xf: { g: number; x: number; y: number } = PENALTY_GOAL): RibbonPoint[] {
+  const out: RibbonPoint[] = [], span = reduced ? RIBBON_SPAN / 2 : RIBBON_SPAN;
+  for (let k = 0; k <= RIBBON_POINTS; k++) { const q = Math.max(0, p - (span * k) / RIBBON_POINTS); out.push(penaltyBallDrawn(target, curl, q, xf)); if (q <= 0) break; }
+  return out;
 }
 
 // ── Free-kick flight ↔ physics (round 6 B4b): same keeper rig, same contact test ─────────
@@ -774,7 +791,7 @@ export class Stage {
     if (!this.ballVisible) return;
     const fx = seasonFx(this.season, this.rarity), onFire = feverTier(this.streak) >= 2; // B6: the "on fire" trail from 5 in a row
     const home = this.ballHome();
-    let { x, y, r } = { x: home.x, y: home.y, r: "pxPerM" in home ? Math.max(2, 0.11 * home.pxPerM) : 4.5 }, spin = 0;
+    let { x, y, r } = { x: home.x, y: home.y, r: "pxPerM" in home ? Math.max(2, 0.11 * home.pxPerM) : 4.5 }, spin = 0, ribbon: RibbonPoint[] | null = null;
     const shot = this.shot;
     if (shot && this.mode === "shot" && this.modeTime >= shot.strikeAt && this.fk && this.freeKick) {
       const since = this.modeTime - shot.strikeAt, last = this.fk.path[this.fk.path.length - 1];
@@ -783,6 +800,11 @@ export class Stage {
         if (this.fk.knuckle && !this.reduced) spin = Math.sin(this.time * 9) * 0.4;
         const ground = fkProject(this.freeKick.setup, { ...pathAt(this.fk.path, since), y: 0 });
         c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(ground.x, ground.y, r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
+        // B7: bigger in-flight sprite (exact physics radius at the crossing) and a rarity ribbon behind it
+        const total = last.t || 1, span = Math.min(RIBBON_SPAN * total, 0.16) / (this.reduced ? 2 : 1), setup = this.freeKick.setup, fk = this.fk, ribbon: RibbonPoint[] = [];
+        for (let k = 0; k <= RIBBON_POINTS; k++) { const t = Math.max(0, since - (span * k) / RIBBON_POINTS), b = freeKickBall(setup, fk, t); ribbon.push({ x: b.x, y: b.y, r: flightRadius(b.r, t / total) }); if (t <= 0) break; }
+        r = flightRadius(r, since / total);
+        drawRibbon(c, ribbon, ribbonFor(fx));
         if (!this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
         drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
         return;
@@ -812,9 +834,11 @@ export class Stage {
         if (q >= 1 && result !== "goal") return;
       }
       { const at = this.goalPoint({ x, y }); x = at.x; y = at.y; r = Math.max(1.2, r * xf.g); }
+      if (p < 1) { r = flightRadius(r, p); ribbon = penaltyRibbon(target, shot.curl, p, this.reduced, xf); } // B7
       if (p < 1 && !this.reduced) { emitTrail(this.particles, fx, x, y, onFire); if (this.lucky) emitLucky(this.particles, x, y); }
     }
     c.fillStyle = "#00000040"; c.beginPath(); c.ellipse(x, Math.min(H - 2, Math.max(y + r, home.y + 5 - (home.y - y) * 0.2)), r, r * 0.35, 0, 0, Math.PI * 2); c.fill();
+    if (ribbon) drawRibbon(c, ribbon, ribbonFor(fx));
     if (this.waiting?.kind === "penalty" && this.mode === "idle") spin = drawBallWarmup(c, x, y, r, waitCue(this.waiting.t * 1000, this.waiting.expected), this.time, this.reduced);
     drawBall(c, x, y, r, fx, spin, this.ball.squash, onFire);
   }
