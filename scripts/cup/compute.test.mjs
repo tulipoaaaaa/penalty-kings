@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeWeek } from "./compute.mjs";
+import { computeWeek, baseFor, dropBudget, edgeSplit, SCHEDULE } from "./compute.mjs";
 
-const base = { park: 13, pro: 1395, champions: 13953 };
+const base = { park: 1, pro: 100, champions: 1000 };
 
 test("drops follow base × rarity multiplier per stadium", () => {
   const { rows } = computeWeek({ base, settled: [{ tier: "park", friendId: "1", outcomeId: 1 }, { tier: "park", friendId: "1", outcomeId: 7 }, { tier: "pro", friendId: "2", outcomeId: 3 }] });
-  assert.equal(rows.find(r => r.friendId === "1").drops, 13 + 13 * 15);
-  assert.equal(rows.find(r => r.friendId === "2").drops, 1395 * 2);
+  assert.equal(rows.find(r => r.friendId === "1").drops, 1 + 15);
+  assert.equal(rows.find(r => r.friendId === "2").drops, 100 * 2);
 });
 
 test("race points: Gold 1, Golden Boot 2, weighted by stadium", () => {
@@ -30,4 +30,41 @@ test("ties go to the lower friendId; top 10 paid on the curve", () => {
   assert.equal(cup[0].friendId, "9");
   assert.equal(cup.reduce((s, r) => s + r.shareBps, 0), 10000);
   assert.equal(cup[0].rf, 250);
+});
+
+test("Bootroom boost: race points × boostBps, drops × (1 + (boost − 1) / 2)", () => {
+  const settled = [{ tier: "pro", friendId: "1", outcomeId: 7 }, { tier: "pro", friendId: "2", outcomeId: 7 }];
+  const { rows, cup } = computeWeek({ base, settled, boosts: { 1: 20_000, 2: 15_000 } });
+  assert.equal(cup.find(r => r.friendId === "1").points, 400);
+  assert.equal(cup.find(r => r.friendId === "2").points, 300);
+  assert.equal(rows.find(r => r.friendId === "1").drops, 1500 * 1.5);
+  assert.equal(rows.find(r => r.friendId === "2").drops, 1500 * 1.25);
+  assert.throws(() => computeWeek({ base, settled, boosts: { 1: 25_000 } }), /boost out of range/);
+});
+
+test("drop budget scales every Friend down equally", () => {
+  const settled = [{ tier: "pro", friendId: "1", outcomeId: 1 }, { tier: "pro", friendId: "2", outcomeId: 1 }, { tier: "pro", friendId: "2", outcomeId: 1 }];
+  const { rows, scale } = computeWeek({ base, settled, budget: 150 });
+  assert.equal(scale, 0.5);
+  assert.deepEqual(rows.map(r => r.drops), [100, 50]);
+});
+
+test("halving budget mirrors EmissionVault.capOf and subtracts released[week]", () => {
+  assert.equal(dropBudget(0).left, 2_500_000);
+  assert.equal(dropBudget(3).left, 2_500_000);
+  assert.equal(dropBudget(4).left, 1_250_000);
+  assert.equal(dropBudget(24).left, 39_062.5);
+  assert.equal(dropBudget(0, 500_000n * 10n ** 18n).left, 2_000_000);
+  assert.equal(dropBudget(0, 3_000_000n * 10n ** 18n).left, 0);
+});
+
+test("edge split 40/30/30 with EdgeSplitter's integer rounding", () => {
+  const s = edgeSplit(1001n);
+  assert.deepEqual([s.burn, s.buyback, s.cup], [400n, 300n, 301n]);
+});
+
+test("drop base auto-scales with the TWAP and never exceeds the schedule", () => {
+  assert.deepEqual(baseFor(undefined), SCHEDULE);
+  assert.equal(baseFor(0.05).park, SCHEDULE.park, "below launch the schedule binds");
+  assert.ok(Math.abs(baseFor(1).park - 0.093) < 1e-4, "10× launch → one tenth of the drop");
 });

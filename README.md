@@ -5,6 +5,12 @@ $RAREFRIENDS (RF), reveal each ball's rarity, and flick it past four original ke
 fixed-supply game token, **$GBOOT**, is paired with RF. Built on **FriendSDK v0.1.2** for the
 Rare Friends Vibeathon.
 
+> **RF first.** You play with RF. Every ball is backed by RF in its stadium's prize bank and can
+> be redeemed for RF. On-chain randomness sets how much each ball pays, and the average return is
+> 90%. **$GBOOT is optional**: it is a bonus layer for skill and loyalty (drops, lacing boosts,
+> Skill Cup, Wildcards, cosmetics). You never need it to play, and it never changes a ball's RF
+> odds. See [docs/ECONOMY.md](docs/ECONOMY.md#rf-first). Nothing here is investment advice.
+
 > The public preview's economy is **simulated** and labelled as such. The wallet connection and
 > the hardwired-Friend ownership gate are real. Live contracts are an optional extra, recorded in
 > [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
@@ -66,7 +72,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `npm run check` | FriendSDK game validation (sandbox boundaries, definition) |
 | `npm run verify:odds` | Every stadium: 10,000 bps and exactly 90.00% expected return |
 | `npm run test:engine` · `npm run test:verifier` | Physics determinism; the referee's replay, signatures, anti-forgery and rate limits |
-| `node scripts/economy-sim.mjs` | Monte Carlo solvency, pool maths, farm check and the scale table (rewrites the ECONOMY.md tables) |
+| `node scripts/economy-sim.mjs` | Tokenomics v2 (100M $GBOOT): checks constants against `contracts/src`, halving supply schedule, burns per volume, lacing, airdrop sizing, solvency, pool maths, farm checks, scale table (rewrites the ECONOMY.md tables) |
 | `npm run test:smoke` · `npm run test:game` | SDK browser harness and the full buy → place → reveal → shoot → HUD flow at 960 px and 360 px |
 | `npm run test:real-gate` | The real SDK ownership gate against Robinhood mainnet: read-only, no mocks, needs network |
 | `cd contracts && forge test` | Contract unit tests. The `Fork` suites run against a mainnet fork in CI |
