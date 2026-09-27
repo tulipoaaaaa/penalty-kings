@@ -43,6 +43,10 @@ export type KickRecord = {
   /** Free kicks: sidespin used and whether it was a knuckleball. */
   spin?: number;
   knuckle?: boolean;
+  /** Free kicks: a goal from 28 m+ (SCREAMER, +50 %) and the distance it came from; a keeper's tip over the bar. */
+  screamer?: boolean;
+  distance?: number;
+  tipOver?: boolean;
 };
 
 const goals = (kicks: readonly KickRecord[]) => kicks.filter(kick => kick.result === "goal");

@@ -9,7 +9,7 @@ import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefr
 import { createFriendSoundKit, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import {
   KEEPERS, keeperById, kickSeed, keeperPlan, resolveShot, resolveFreeKick, freeKickSetup, goalPoints, shotTarget, clamp,
-  swipeToShot, aimedShot, WALL_HEIGHTS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
+  swipeToShot, aimedShot, WALL_HEIGHTS, SCREAMER_BONUS, aimWobble, wobbleFor, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL,
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult, type ShotOutcome,
 } from "@penalty-kings/engine";
 import { FREE_PLAY_MODES, type BallGlow, type TimeOfDay } from "@penalty-kings/game-director";
@@ -33,7 +33,7 @@ import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/ra
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence } from "./game/suspense.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
-import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
+import { swipeToFreeKick, keyShot, keyFreeKick, kickSetup, type KeyAim } from "./game/input.js";
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { nextGoal } from "./game/nextgoal.js";
@@ -548,7 +548,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (s.kind === "freekick" && s.setup) {
       const partial = swipe.current && swipe.current.length > 2 ? swipeToFreeKick(swipe.current, swipeOptions(s), s.setup) : null;
       const shot = partial ?? keyFreeKick({ ...am, power: am.charging ? am.power : 0.6 }, s.setup);
-      const outcome = resolveFreeKick(s.setup, { ...shot, aimX: shot.aimX + wobble / 1.6 }, keeperById(s.keeper), difficultyFor(s));
+      // The REAL flight: this kick's seed (the knuckleball wobble) and the aim wobble, exactly as shootFreeKick strikes it.
+      const outcome = resolveFreeKick(kickSetup(s.setup, s.seed, s.kicks.length, s.keeper), { ...shot, aimX: shot.aimX + wobble / 1.6 }, keeperById(s.keeper), difficultyFor(s));
       scene.preview = { path: outcome.path, alpha: Math.max(assist, 0.25) };
     } else {
       const partial = swipe.current && swipe.current.length > 2 ? swipeToShot(swipe.current, swipeOptions(s)) : null;
@@ -788,9 +789,11 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak)) / 1.6;
     const shot = { ...raw, aimX: raw.aimX + wobble };
     const profile = keeperById(current.keeper);
-    const outcome = resolveFreeKick({ ...current.setup, seed: kickSeed(current.seed, current.kicks.length, profile.id) }, shot, profile, difficulty);
-    const points = outcome.result === "goal" ? goalPoints(profile, 1, current.streak + 1, false, outcome.zone) * (outcome.knuckle ? 2 : 1) : 0;
-    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, x: outcome.target.x, y: outcome.target.y, spin: shot.spin, knuckle: outcome.knuckle }, result: outcome.result };
+    const outcome = resolveFreeKick(kickSetup(current.setup, current.seed, current.kicks.length, profile.id), shot, profile, difficulty);
+    // Long range (28 m+): a goal is a SCREAMER, worth +50 %.
+    const screamer = outcome.result === "goal" && outcome.longRange;
+    const points = outcome.result === "goal" ? Math.round(goalPoints(profile, 1, current.streak + 1, false, outcome.zone) * (outcome.knuckle ? 2 : 1) * (screamer ? SCREAMER_BONUS : 1)) : 0;
+    pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, x: outcome.target.x, y: outcome.target.y, spin: shot.spin, knuckle: outcome.knuckle, ...(screamer ? { screamer: true, distance: current.setup.distance } : {}), ...(outcome.tipOver ? { tipOver: true } : {}) }, result: outcome.result };
     direct(current, pendingKick.current.record);
     scene.playFreeKick(outcome);
   }
@@ -802,7 +805,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
    */
   function direct(current: Session, record: KickRecord & { golden?: boolean }) {
     const scene = stage.current; if (!scene) return;
-    const beat = director().afterKick({ kind: current.kind, result: record.result, zone: record.zone, x: record.x, y: record.y, postIn: record.postIn, spin: record.spin, knuckle: record.knuckle, now: clockNow() / 1000 });
+    const beat = director().afterKick({ kind: current.kind, result: record.result, zone: record.zone, x: record.x, y: record.y, postIn: record.postIn, spin: record.spin, knuckle: record.knuckle, screamer: record.screamer, now: clockNow() / 1000 });
     afterBeat.current = beat;
     scene.cue = beat.lines[0] ? cueLine(beat.lines[0]) : null;
     if (beat.skillScoreMultiplier === 2 && (FREE_PLAY_MODES as readonly string[]).includes(current.mode) && record.points > 0) {
@@ -868,7 +871,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const scene = stage.current;
     if (scene) { scene.setScore(points); scene.streak = goalRun; } // the scoreboard's "N IN A ROW" counts real goals
     // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
-    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${goalRun >= 2 ? ` · ${goalRun} in a row` : ""}` : priorRun >= 2 ? `Your run of ${priorRun} goals ends` : "No goal this time";
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${record.screamer ? ` · SCREAMER from ${record.distance} m: +50%` : ""}${goalRun >= 2 ? ` · ${goalRun} in a row` : ""}` : priorRun >= 2 ? `Your run of ${priorRun} goals ends` : "No goal this time";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
     const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + (skillZone ? SKILL_ZONE_XP[skillZone] : XP.zoneBonus[record.zone]) : 0;
@@ -881,7 +884,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) }));
-    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > BAR_CONTACT_Y ? "OFF THE BAR!" : LABELS[result]; // the ball can only touch the bar above BAR_CONTACT_Y
+    const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.y > BAR_CONTACT_Y ? "OFF THE BAR!" : record.screamer ? "SCREAMER!" : record.tipOver ? "TIPPED OVER!" : LABELS[result]; // the ball can only touch the bar above BAR_CONTACT_Y
     setBanner({ text, sub, tone: goal || (current.kind === "target" && record.points > 0) ? "goal" : "miss" });
     setSession(next);
     pendingKick.current = null;

@@ -9,7 +9,7 @@ export type CommentaryContext =
   | "walkout" | "buildup" | "goal" | "save" | "post" | "crossbar" | "over" | "wide" | "streak2" | "streak3" | "rarity-high" | "rarity-top"
   | "keeper" | "sudden-death" | "boss" | "wall" | "freekick" | "target" | "knuckle" | "top-bin" | "post-in" | "panenka"
   | "timeout" | "level-up" | "stamp" | "tutorial-1" | "here-comes-trouble" | "tutorial-2" | "tutorial-3" | "rain" | "snow" | "fog" | "wave"
-  | "first-walkout" | "cold-streak" | "daily" | "tour" | "curler" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
+  | "first-walkout" | "cold-streak" | "daily" | "tour" | "curler" | "screamer" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
   /** FD-3b waits for randomness: the sealed pack, and the keeper deciding after your shot is locked in. */
   | "pack-wait" | "pack-wait-long" | "keeper-deciding"
   /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
@@ -37,6 +37,7 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   wall: ["Straight into the wall!", "The wall stands firm!", "Charged down!", "Somebody's going to feel that one.", "The wall jumped and it worked."],
   freekick: ["Free kick. Plenty of options here.", "Over the wall or round it?", "The wall is set. The ref steps back.", "A lovely distance for a curler.", "Check the wind, {friend}."],
   curler: ["Bent it like a banana!", "Round the wall and in!", "What a curler!", "That swerved like a shopping trolley!"],
+  screamer: ["A SCREAMER from way out! Somebody measure that!", "Long range and LETHAL!", "From distance! The keeper never saw it coming!", "That was hit from the car park and it still dipped in!"],
   knuckle: ["A knuckleball! It's moving all over the place!", "No spin, all chaos!", "The keeper didn't know where that was going. Neither did I!"],
   "top-bin": ["TOP BINS! Where the owl sleeps!", "Right in the postage stamp!", "Top corner. Take a bow.", "Cobwebs removed from the top corner!"],
   "post-in": ["IN OFF THE POST! Cheeky!", "Post and in! The luck of the brave!", "Kissed the post on the way in!"],

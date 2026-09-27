@@ -90,6 +90,75 @@ The fixed-difficulty columns show why the director is needed. At a fixed rung, r
 profile leaves it. (Before contact-only saves the keeper also saved balls it visibly missed,
 which is why the old fixed-rung rates were lower: 22–92 %.)
 
+## Free kicks (owner playtest C1)
+
+Free kicks keep their range (18–32 m) and became a learnable long-range skill. Engine:
+`packages/engine/src/freekick.ts` (flight) and `freekick-keeper.ts` (the keeper); numbers from
+`node --experimental-strip-types scripts/freekick-sim.ts` (before = the same script at
+`b517d77`).
+
+- **Pace**: launch 24–36 m/s (was 18–32). Distance adds pace by itself (`freeKickSpeed`):
+  24–28.8 m/s from 18 m, 31.2–36 m/s from 32 m, so a natural swipe from 30 m is struck harder
+  than from 18 m. Topspin is a real dip (Magnus ∝ spin × speed; every non-knuckle strike carries
+  a little), the long-range tool that lets a ball clear the wall and still drop under the bar.
+- **Swipe → shot**: the swipe's height is still the crossing height (`solveLift`, WYSIWYG), now
+  over a wider elevation range (0.03–0.53 rad), with the knuckleball solved without its wobble.
+- **Preview**: the dotted arc is the real flight with the strike's own seed (`kickSetup`: the
+  knuckleball wobble it draws is the one the ball flies) and ends in a ring where it crosses
+  the goal line.
+- **Reward**: goals from 28 m+ score +50 % and are called a SCREAMER (banner, commentary
+  context `screamer`, Director lines `goal:screamer` / `first:screamer`).
+- **Keeper**: shuffles 1–3 steps off his post as the kick is taken, reads the flight (later
+  when the wall screens it; better the longer he watches it), cross-steps if the ball is beyond
+  one dive, then ONE dive timed to the crossing: trapezoid speed profile capped at 4.2–6 m/s by
+  personality (Squeak 6, Nibbles 5.8 and early, Snooze 4.2 on long arms, Big Bento 4.4, …),
+  0.35–0.5 s in the air, gloves 2.4–2.8 m from take-off (the boss 3.4 m). A high ball close to
+  him is a backpedal and an upward tip over the bar ("TIPPED OVER!"). The Stage draws exactly
+  `freeKickKeeperFrame` (shuffle hops are drawing-only and off under reduced motion), and a ball
+  the drawn keeper touches is always a save, round the post or over the bar included.
+
+Good-swipe bot: crossing point anywhere between x = ±0.25…0.85 and y = 0.45…0.9, power 0.4–0.75,
+topspin 0.2–0.7, no sidespin, aim noise σ = 0.08; wall always there (pro height); keeper = the
+11 field keepers in turn at NEUTRAL.
+
+| Distance | No keeper, before | No keeper, after | With keeper + wall, before | With keeper + wall, after |
+|---|---|---|---|---|
+| 18–20 m | 50 % | 78 % | 29 % | 45 % |
+| 21–24 m | 72 % | 95 % | 42 % | 41 % |
+| 25–27 m | 89 % | 96 % | 51 % | 42 % |
+| 28–32 m | 88 % | 96 % | 49 % | 36 % |
+| Overall (18–32 m mix) | | | 46 % | 41 % |
+
+Long range is now the harder shot against a keeper (he watches it longer), which is what the
++50 % pays for; short range is no longer a wall lottery.
+
+Flight time, strike → goal line (s), unspun, topspin 0.3, crossing at 0.7 of the bar height.
+The Stage plays the flight 1:1 on the engine clock (release → result adds the 0.4 s run-up and a
+33 ms hit-stop; near-miss slow-mo now starts only at the line for free kicks):
+
+| Distance | Before: launch | Before: power 0.4 / 0.6 / 1.0 | After: launch | After: power 0.4 / 0.6 / 1.0 |
+|---|---|---|---|---|
+| 18 m | 18–32 m/s | 0.90 / 0.80 / 0.65 | 24.0–28.8 m/s | 0.84 / 0.80 / 0.74 |
+| 21 m | 18–32 m/s | 1.09 / 0.95 / 0.77 | 25.5–30.3 m/s | 0.94 / 0.90 / 0.84 |
+| 24 m | 18–32 m/s | 1.29 / 1.12 / 0.90 | 27.1–31.9 m/s | 1.04 / 1.00 / 0.93 |
+| 28 m | 18–32 m/s | 1.56 / 1.37 / 1.09 | 29.1–33.9 m/s | 1.17 / 1.13 / 1.05 |
+| 32 m | 18–32 m/s | 1.88 / 1.64 / 1.29 | 31.2–36.0 m/s | 1.30 / 1.25 / 1.17 |
+
+Keeper's fastest lateral body speed over every 1/240 s frame of 2,000 kicks: **83.5 m/s before**
+(the penalty dive curve: an ease-out over the keeper's penalty `diveTime`, as short as 0.1 s,
+across up to 1.3 goal units) → **6.0 m/s after**
+(the cap; `packages/engine/test/freekick.test.ts` checks every frame of 600 fuzzed kicks at
+every difficulty).
+
+Clips of the same three free kicks (18 m, 25 m, 32 m; Pro wall, Nibbles, NEUTRAL; the game's
+Stage in full motion, `node scripts/record-freekicks.mjs --out …`): `docs/media/fk-before.webm`
+and `docs/media/fk-after.webm`. Engine flight / measured on screen (strike → result): before
+0.85 / 0.89 s, 1.21 / 1.27 s, 1.56 / 1.62 s; after 0.84 / 0.90 s, 1.08 / 1.14 s, 1.28 / 1.32 s.
+
+Engine tests (`npm run test:engine`) also print the reachability table: for every distance
+18–32 m and power 0 / 0.25 / 0.5 / 0.75 / 1, a natural swipe (topspin 0.4) aimed over a pro wall
+of 5 has a non-empty band of crossing heights that scores (≥ 0.2 goal units at power ≤ 0.5).
+
 ## Input
 
 - **One forgiving swipe** (`swipeToShot`): the release decides the shot. The direction of the
