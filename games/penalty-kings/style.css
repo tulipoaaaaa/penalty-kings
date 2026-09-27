@@ -97,3 +97,8 @@
   .pk-reveal .pk-rule { font-size: 7px; margin: 0.3em 0 0; }
 }
 @media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball { animation: none; } }
+
+/* Keep SDK menus above the runtime toolbar (it overlays the frame's bottom edge). */
+.pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
+.pk-hub .pk-note { grid-column: 1 / -1; }
+.pk-hub { align-items: start; }
