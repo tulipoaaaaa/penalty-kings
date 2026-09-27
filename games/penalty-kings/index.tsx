@@ -134,6 +134,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const setPhaseNow = (next: Phase) => { live.current = { ...live.current, phase: next }; setPhase(next); };
   const pointer = useRef<number | null>(null);
   const timeoutTimer = useRef(0);
+  /** QA timing (round 6 B3): release → result and result → next kick ready, in ms. */
+  const timing = useRef<{ release: number; resolved: number; log: { kind: string; toResult: number; toReady: number }[] }>({ release: 0, resolved: 0, log: [] });
   // Long-lived callbacks (Stage loop, stage events, key listeners) call the LATEST handlers.
   const latest = useRef({ tickAim: (_dt: number) => {}, onResolved: (_r: ShotResult | "wall", _t?: boolean) => {}, onKickDone: () => {}, playSfx: (_n: string) => {}, shootPenalty: (_s: ShotInput) => {}, shootFreeKick: (_s: FreeKickShot) => {}, startAim: () => {}, haptics: true });
 
@@ -146,7 +148,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const assist = assistLevel(progress, tier.id);
   const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
   const rfNumber = (value: bigint) => Number(value / 10n ** 15n) / 1000;
-  const rfPrice = useRfPrice(); // live RF/USD (game/price.ts); "—" when the pool reads fail
+  const rfPrice = useRfPrice(!simulated); // live stadiums: pool reads every 60 s ("—" on failure); the SDK preview: labelled on-chain snapshot (the preview may only read the game contract)
 
   // Prize source: the SDK's (simulated) ledger + the simulated Cup ledger in preview; on-chain reads only when live.
   const prizeSource: PrizeSource = simulated
@@ -438,7 +440,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function shootPenalty(raw: ShotInput) {
     const current = live.current.session, scene = stage.current;
     if (!current || !scene || !may("shoot")) return;
-    inFlight.current = 1; kickId.current++; setPhaseNow("shooting");
+    inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now();
     const difficulty = difficultyFor(current);
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak));
     const shot = assistShot({ ...raw, aimX: raw.aimX + wobble }, Math.max(difficulty.assist, current.mode === "skill" ? 0 : assist * 0.5));
@@ -467,7 +469,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function shootFreeKick(raw: FreeKickShot) {
     const current = live.current.session, scene = stage.current;
     if (!current || !scene || !current.setup || !may("shoot")) return;
-    inFlight.current = 1; kickId.current++; setPhaseNow("shooting");
+    inFlight.current = 1; kickId.current++; setPhaseNow("shooting"); timing.current.release = performance.now();
     const difficulty = difficultyFor(current);
     const wobble = aimWobble(performance.now() / 1000, wobbleFor(difficulty, current.streak)) / 1.6;
     const shot = { ...raw, aimX: raw.aimX + wobble };
@@ -504,6 +506,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const current = live.current.session, kick = pendingKick.current;
     if (!current || !kick) return;
     const record = kick.record, goal = record.result === "goal";
+    timing.current.resolved = performance.now();
     if (current.mode === "match" && current.ball) { const id = current.ball.recordId; setBag(list => list.map(ball => (ball.id === id ? recordKick(ball, { goal, zone: record.zone }) : ball))); }
     if (pendingWave.current) { pendingWave.current = false; stage.current?.wave(); }
     kicksTaken.current++;
@@ -534,6 +537,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const current = live.current.session;
     if (!inFlight.current) return; // a cancelled kick, or a duplicate "done"
     inFlight.current = 0;
+    { const t = timing.current, now = performance.now(); if (t.release && t.resolved >= t.release) t.log.push({ kind: current?.kind ?? "penalty", toResult: Math.round(t.resolved - t.release), toReady: Math.round(now - t.resolved) }); t.release = 0; }
     setBanner(null);
     if (!current) return;
     if (current.kind === "target") {
@@ -758,7 +762,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, []);
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
-  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state) }; };
+  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log }; };
   latest.current = { tickAim, onResolved, onKickDone, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), haptics };
 
   /** Swipe mapping options for this session's camera: goal face + ball on screen, display scale, input kind. */
@@ -894,7 +898,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "odds" && <>
         <p>Exact odds at {tier.name} (ball price {rf(definition.price)}{tag}):</p>
         <OddsTable definition={definition} tier={tier} tag={tag} />
-        <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD uses the live RF price (a dash if the read fails)." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
+        <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD uses an on-chain RF price snapshot (live stadiums read the price every 60 s)." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
       </>}
 
       {menu === "book" && <ScoutingBook progress={progress} />}

@@ -79,3 +79,12 @@ test("PRICE: fetch reads both pools over JSON-RPC; any failure is status error w
   const offline = async () => { throw new Error("offline"); };
   assert.deepEqual(await fetchRfPrice(offline, () => 8), { usdPerRf: null, fetchedAt: 8, status: "error" });
 });
+
+test("the SDK preview uses the labelled on-chain snapshot (no network), matching the recorded pool reads", async () => {
+  const { snapshotPrice, SNAPSHOT_BLOCK } = await import("../../games/penalty-kings/game/price.ts");
+  const snap = snapshotPrice();
+  assert.equal(snap.status, "snapshot");
+  assert.ok(Math.abs(snap.usdPerRf! - 0.001557) < 0.000005, `snapshot ${snap.usdPerRf}`);
+  assert.equal(priceAgeLabel(snap, Date.now()), `on-chain snapshot · block ${SNAPSHOT_BLOCK.toLocaleString("en-US")}`);
+  assert.equal(usdForRf(500_000, snap, Date.now()), "≈ $779");
+});

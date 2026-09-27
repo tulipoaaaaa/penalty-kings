@@ -17,6 +17,8 @@ import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
+/** Seconds from release to the strike (the run-up). Round 6 B3: ≤ 0.4 s. */
+export const STRIKE_AT = 0.4;
 export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" | "walkout-done" | "reveal";
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
@@ -113,16 +115,16 @@ export class Stage {
     this.timeline.reset(); this.mode = "shot"; this.modeTime = 0; this.ballVisible = true; this.reticle = null; this.clock = null; this.preview = null;
     this.stats.shots++; if (this.kind !== "target") this.stats.keepers.add(this.keeper);
     if (flightOverride === undefined) this.fk = null;
-    const flight = flightOverride ?? Math.max(0.45, outcome.target.time * 1.6);
-    this.shot = { outcome, curl, flight, strikeAt: 1.2 };
+    // Snappy (round 6 B3): strike 0.4 s after release, flight 0.35–0.55 s by power (target.time 0.4–0.95).
+    const flight = flightOverride ?? 0.35 + 0.2 * clamp01((outcome.target.time - 0.4) / 0.55);
+    this.shot = { outcome, curl, flight, strikeAt: STRIKE_AT };
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
     this.sfx("heartbeat"); if (!this.said || this.said.t > 1.5) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
     this.timeline
-      .at(0.35, () => this.sfx("heartbeat"))
-      .at(0.6, () => this.sfx("whistle"))
-      .at(0.85, () => this.dust(STRIKER.x + 8, STRIKER.y - 10)).at(1.0, () => this.dust(STRIKER.x + 14, STRIKER.y - 20)).at(1.15, () => this.dust(STRIKER.x + 20, STRIKER.y - 28))
-      .at(1.2, () => {
+      .at(0, () => this.sfx("whistle"))
+      .at(0.12, () => this.dust(STRIKER.x + 8, STRIKER.y - 10)).at(0.22, () => this.dust(STRIKER.x + 14, STRIKER.y - 20)).at(0.32, () => this.dust(STRIKER.x + 20, STRIKER.y - 28))
+      .at(STRIKE_AT, () => {
         const ball = this.ballHome();
         this.camera.hitStop = 2 / 60; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: ball.x, y: ball.y, t: 0 };
         this.ball.squash = 0.35; this.camera.addTrauma(0.25); this.camera.targetZoom = this.reduced ? 1 : 1.12;
@@ -130,10 +132,12 @@ export class Stage {
         this.sfx("kick"); this.sfx("whoosh"); this.onEvent("strike");
         const k = KEEPER_DESIGNS[this.keeper].sfx; if (k === "stomp") { this.camera.addTrauma(0.3); this.sfx("stomp"); }
       })
-      .at(1.2 + flight, () => this.resolve())
-      .at(1.2 + flight + (outcome.result === "goal" ? 1.0 : 2.2), () => {
-        if (this.kind === "target") { this.finish(); return; }
-        if (outcome.result === "goal") this.startCelebration(this.celebration); else this.finish();
+      .at(STRIKE_AT + flight, () => this.resolve())
+      // Next kick ready fast: a goal hands back control after 1.0 s while the celebration keeps
+      // playing (the next strike cuts it); a miss after 1.3 s (the reaction beat has played).
+      .at(STRIKE_AT + flight + (outcome.result === "goal" ? 1.0 : 1.3), () => {
+        if (this.kind === "target" || outcome.result !== "goal") { this.finish(); return; }
+        this.startCelebration(this.celebration); this.onEvent("done");
       });
   }
 
@@ -218,8 +222,8 @@ export class Stage {
     if (shot && this.mode === "shot" && !this.reduced) {
       const since = this.modeTime - shot.strikeAt, t = shot.outcome.target;
       const near = shot.outcome.result === "post" || (shot.outcome.result !== "goal" && (Math.abs(Math.abs(t.x) - 1) < 0.12 || Math.abs(t.y - 1) < 0.1));
-      if (since >= 0 && since < 0.12) slow = 0.5;
-      else if (near && since > shot.flight * 0.7 && since < shot.flight + 0.4) slow = 0.35;
+      // Near-misses only (no default slow-mo), ≤ 0.5 s of real time.
+      if (near && since > shot.flight * 0.85 && since < shot.flight + 0.1) slow = 0.5;
     }
     const dt = realDt * this.camera.timeScale * slow;
     this.time += dt; this.modeTime += dt;
@@ -234,7 +238,7 @@ export class Stage {
     if (this.fanCatch) { this.fanCatch.t += dt; if (this.fanCatch.t > 2) this.fanCatch = null; }
     if (this.ballKid) { this.ballKid.t += dt; if (this.ballKid.t > 2.4) this.ballKid = null; }
     if (this.reveal) { this.reveal.t += dt; if (this.reveal.t > this.reveal.plan.duration) { this.reveal = null; this.onEvent("reveal-done"); } }
-    if (this.mode === "celebrate" && this.modeTime > 2.6) this.finish();
+    if (this.mode === "celebrate" && this.modeTime > 2.6) { this.mode = "idle"; this.shot = null; } // "done" was already sent
     if (this.mode === "react" && this.modeTime > 1.6) { this.mode = "idle"; this.onEvent("done"); }
     if (this.mode === "walkout" && this.modeTime > 3) { this.mode = "idle"; this.onEvent("walkout-done"); }
     if (this.keeper === "sloth" && Math.random() < dt * 0.6) this.particles.emit("zzz", GOAL.cx + 14, GOAL.line - 60, 1, { color: "#ffffff", speed: 8, angle: -1.2, spread: 0.3, life: 1.5, gravity: -6 });
@@ -364,10 +368,10 @@ export class Stage {
     let x = STRIKER.x + fkOffset.x, y = STRIKER.y + fkOffset.y, facing: Facing = "up", walking = false, sx = 1, sy = 1, rotate = 0, flip = false, cape = this.layers.cape, trophy = false;
     const frame = this.reduced ? 0 : Math.floor(this.time * 9) % 8;
     if (this.mode === "shot" && this.shot) {
-      const p = clamp01((this.modeTime - 0.7) / 0.5);
+      const p = clamp01(this.modeTime / STRIKE_AT);
       x = lerp(STRIKER.x, KICK_SPOT.x, ease.inOutCubic(p)) + fkOffset.x; y = lerp(STRIKER.y, KICK_SPOT.y, ease.inOutCubic(p)) + fkOffset.y; walking = p > 0 && p < 1;
       if (walking) { const step = (this.modeTime * 6) % 1; sy = 1 - Math.abs(Math.sin(step * Math.PI)) * 0.08; sx = 2 - sy; }
-      if (Math.abs(this.modeTime - 1.2) < 0.12) { sx = 1.12; sy = 0.9; rotate = -0.12; }
+      if (Math.abs(this.modeTime - STRIKE_AT) < 0.1) { sx = 1.12; sy = 0.9; rotate = -0.12; }
     }
     if (this.mode !== "idle" && this.mode !== "walkout" && !(this.mode === "shot" && this.shot && this.modeTime < this.shot.strikeAt + this.shot.flight + 0.1)) { x = KICK_SPOT.x + fkOffset.x; y = KICK_SPOT.y + fkOffset.y; }
     const beat = this.friendBeat();

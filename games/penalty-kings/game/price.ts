@@ -26,9 +26,18 @@ export const PRICE_CACHE_MS = 60_000;
 /** A price older than this is not shown (e.g. the tab slept and the refresh has not landed yet). */
 export const PRICE_STALE_MS = 2 * PRICE_CACHE_MS;
 
-export type RfPrice = { usdPerRf: number | null; fetchedAt: number | null; status: "live" | "error" };
+export type RfPrice = { usdPerRf: number | null; fetchedAt: number | null; status: "live" | "error" | "snapshot"; block?: number };
 /** Before the first read completes: no number. */
 export const NO_PRICE: RfPrice = { usdPerRf: null, fetchedAt: null, status: "error" };
+
+/**
+ * The SDK preview may only read the game's own contract (its runtime/test fixture rejects any other
+ * eth_call), so the judged PREVIEW converts USD with this recorded on-chain snapshot: the same two
+ * StateView.getSlot0 reads, taken at block 73,793,321 (docs/ADDRESSES.md), labelled as a snapshot.
+ * Live stadiums read the pools every 60 s.
+ */
+export const SNAPSHOT_BLOCK = 73_793_321;
+export const SNAPSHOT_SQRT = { rfWeth: 59977880447322165122003233n, wethUsdg: 4129642798072125940494846n } as const;
 
 // ── Pure helpers (unit-tested) ──────────────────────────────────────────────
 
@@ -63,11 +72,12 @@ export const slot0Call = (poolId: string) => ({ to: STATE_VIEW, data: `${GET_SLO
 
 /** True when the price can be shown right now. */
 export const isShowable = (price: RfPrice, now: number) =>
-  price.status === "live" && price.usdPerRf !== null && price.fetchedAt !== null && now - price.fetchedAt <= PRICE_STALE_MS;
+  price.status === "snapshot" ? price.usdPerRf !== null : price.status === "live" && price.usdPerRf !== null && price.fetchedAt !== null && now - price.fetchedAt <= PRICE_STALE_MS;
 
 /** "live · 12s ago", or "—" when there is no usable read. */
 export function priceAgeLabel(price: RfPrice, now: number) {
   if (!isShowable(price, now)) return "—";
+  if (price.status === "snapshot") return `on-chain snapshot · block ${price.block!.toLocaleString("en-US")}`;
   return `live · ${Math.max(0, Math.round((now - price.fetchedAt!) / 1000))}s ago`;
 }
 
@@ -121,17 +131,21 @@ export function getRfPrice(now = Date.now()): Promise<RfPrice> {
   return inflight;
 }
 
+/** The recorded preview price (see SNAPSHOT_BLOCK). */
+export const snapshotPrice = (): RfPrice => ({ usdPerRf: usdPerRfFromPools(SNAPSHOT_SQRT.rfWeth, SNAPSHOT_SQRT.wethUsdg), fetchedAt: null, status: "snapshot", block: SNAPSHOT_BLOCK });
+
 /** How often the hook asks for the price; the 60 s cache decides when the network is used. */
 export const PRICE_POLL_MS = 15_000;
 /** React: the live price, re-read once the cache is 60 s old (failed reads retry on the next poll). */
-export function useRfPrice(): RfPrice {
-  const [price, setPrice] = useState<RfPrice>(() => cached ?? NO_PRICE);
+export function useRfPrice(live = true): RfPrice {
+  const [price, setPrice] = useState<RfPrice>(() => (live ? cached ?? NO_PRICE : snapshotPrice()));
   useEffect(() => {
+    if (!live) return;
     let active = true;
     const refresh = () => { void getRfPrice().then(value => { if (active) setPrice(value); }); };
     refresh();
     const id = window.setInterval(refresh, PRICE_POLL_MS);
     return () => { active = false; window.clearInterval(id); };
-  }, []);
+  }, [live]);
   return price;
 }

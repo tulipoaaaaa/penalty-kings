@@ -156,6 +156,13 @@ await testGame("./games/penalty-kings", {
     await page.waitForTimeout(200);
     assert.equal((await flow()).shootable, false, "menu open: not shootable");
     ok("Big Match aim with menu open is not shootable");
+
+    // 13. Speed (round 6 B3): penalties go release → result ≤ 1.2 s and result → next kick ready ≤ 1.5 s.
+    const timing = (await flow()).timing.filter(entry => entry.kind === "penalty");
+    console.log(`  timing (ms): ${timing.map(entry => `${entry.toResult}/${entry.toReady}`).join(" ")}`);
+    assert.ok(timing.length >= 4, "enough penalty kicks timed");
+    for (const entry of timing) { assert.ok(entry.toResult <= 1200, `release → result ${entry.toResult} ms`); assert.ok(entry.toReady <= 1500, `result → ready ${entry.toReady} ms`); }
+    ok("every penalty: release → result ≤ 1.2 s, next kick ready ≤ 1.5 s after");
   },
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);
