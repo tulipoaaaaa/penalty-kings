@@ -27,6 +27,7 @@ import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
 import { MatchDirector, type KickFacts } from "./game/director.js";
+import { windLabel } from "./gfx/setpieces.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
@@ -758,7 +759,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
-          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel} · ×{streakMultiplier(s.streak)}</span>
+          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel} · ×{streakMultiplier(s.streak)}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
         </header>
       </>}
 

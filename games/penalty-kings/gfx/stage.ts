@@ -5,14 +5,14 @@
  */
 import { keeperById, keeperAt, flightAt, WALL_DISTANCE, type KeeperId, type KeeperPlan, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
-import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, type StadiumId, type Weather } from "./stadium.js";
+import { drawBackdrop, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, GOAL, SPOT, THEMES, toScreen, penaltyY, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
 import { drawKeeper, keeperArms, KEEPER_DESIGNS, KEEPER_TAUNTS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX } from "./ball.js";
 import { drawFriend, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { commentary, drawCommentator, type CommentaryContext } from "./commentary.js";
-import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawWind, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawFkMarkings } from "./setpieces.js";
+import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
 import type { RevealPlan } from "../game/reveal.js";
 
 export type Facing = "up" | "down" | "left" | "right";
@@ -21,7 +21,8 @@ export type StageEvent = "sfx" | "strike" | "resolved" | "done" | "reveal-done" 
 export type Sfx = "heartbeat" | "whistle" | "kick" | "whoosh" | "net" | "clang" | "glove" | "roar" | "groan" | "ooh" | "chant" | "reveal" | "reveal-top" | "stomp" | "boo" | "beep" | "honk" | "blub" | "squeak" | "yawn";
 
 const RARITY_NAMES = ["Scuffed Ball", "Training Ball", "Match Ball", "Pro Ball", "Silver Ball", "Gold Ball", "Golden Boot Ball", "Warm-up Ball"];
-const STRIKER = { x: 206, y: 306 }, KICK_SPOT = { x: 228, y: 274 };
+/** Run-up starts at the 18-yard line (y≈306, 16.4 m out); the kick is taken just behind-left of the spot. */
+const STRIKER = { x: 196, y: Math.round(penaltyY(16.4)) }, KICK_SPOT = { x: 206, y: Math.round(penaltyY(11.7)) };
 
 export class Stage {
   camera = new Camera();
@@ -242,13 +243,16 @@ export class Stage {
     c.fillStyle = "#0b0d1a"; c.fillRect(0, 0, W, H);
     this.camera.apply(c, this.time);
     const pan = (this.camera.x - W / 2) * 2;
-    drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash, jumbotron: this.jumbotron });
+    const wind = this.kind === "freekick" && this.freeKick ? this.freeKick.setup.wind : 0;
+    this.crowd.wind = wind;
+    drawBackdrop(c, this.stadium, this.weather, this.time, pan, { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind });
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
     drawBoards(c, this.stadium, this.time, pan);
     const fk = this.kind === "freekick" && this.freeKick ? this.freeKick : null;
-    drawPitch(c, this.stadium, this.weather, !fk);
-    if (fk) drawFkMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
+    drawPitch(c, this.stadium, this.weather);
+    if (fk) drawPitchMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
+    else drawPitchMarkings(c, PENALTY_SETUP, THEMES[this.stadium].lines, null, this.time, PENALTY_CAMERA);
     drawHeatShimmer(c, this.streak >= 2 && !this.reduced ? Math.min(1, this.streak - 1) : 0, this.time);
     this.drawReferee(c);
     const xf = this.goalXf();
@@ -269,7 +273,6 @@ export class Stage {
       drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced, this.stadium, this.time);
       if (this.preview && this.mode === "idle") drawPreview(c, setup, this.preview.path, this.preview.alpha);
       if (!beyond && !ballBehind) this.drawBallLayer(c);
-      drawWind(c, setup.wind, this.time, this.reduced);
     }
     this.drawReticle(c);
     this.crowd.drawCat(c, 1 / 60);

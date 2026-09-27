@@ -7,7 +7,26 @@ import { W, H, hash01, type Particles } from "./core.js";
 export type StadiumId = "park" | "pro" | "champions";
 export type Weather = "sun" | "rain" | "snow" | "fog" | "sunset";
 export const GOAL = { left: 150, right: 330, bar: 96, line: 176, unit: 90, cx: 240 } as const;
-export const SPOT = { x: 240, y: 254 } as const;
+/**
+ * Pitch cameras (pinhole, behind the ball on the centre line). Focal lengths: 539 px at 1 m across,
+ * 4/3 × that vertically (the goal art is 180 × 80 px for 7.32 × 2.44 m). `back` is metres behind the
+ * ball, `height` metres up, `horizon` the screen y of the vanishing line.
+ *
+ * PENALTY camera: solved so the goal art lands exactly where it is drawn (scale 1, goal line y 176)
+ * and the 18-yard line sits at y 310 at the bottom of the frame. Real proportions follow: 6-yard
+ * line (5.5 m) y≈191, spot (11 m) y≈220, box edge (16.5 m) y≈310. The D (9.15 m around the spot,
+ * beyond the box line), the box's side lines and the corners are off-screen, as in a real
+ * behind-the-kicker broadcast shot.
+ */
+export type PitchCamera = Readonly<{ back: number; height: number; horizon: number }>;
+export const CAM_FX = 539, CAM_FY = CAM_FX * (4 / 3);
+const PEN_C = (CAM_FX * 3.66) / 90;                                   // camera → goal line (m): goal art at scale 1
+const PEN_K = (310 - 176) / (1 / (PEN_C - 16.5) - 1 / PEN_C);          // FY·height, so the box edge lands on y 310
+export const PENALTY_CAMERA: PitchCamera = { back: PEN_C - 11, height: PEN_K / CAM_FY, horizon: 176 - PEN_K / PEN_C };
+/** Screen y of a pitch point `d` metres from the goal line, on the penalty camera's centre line. */
+export const penaltyY = (d: number) => PENALTY_CAMERA.horizon + (CAM_FY * PENALTY_CAMERA.height) / (PEN_C - d);
+/** The penalty spot, 11 m from the goal line (derived, not hand-placed). */
+export const SPOT = { x: 240, y: Math.round(penaltyY(11)) } as const;
 export const toScreen = (gx: number, gy: number) => ({ x: GOAL.cx + gx * GOAL.unit, y: GOAL.line - gy * GOAL.unit * 0.89 });
 
 export type StadiumTheme = { sky: [string, string]; grass: [string, string]; stands: string; standLine: string; boards: string[]; confetti: string[]; lines: string; label: string };
@@ -61,8 +80,9 @@ function marquee(c: CanvasRenderingContext2D, text: string, x: number, y: number
   c.restore();
 }
 
-export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, time: number, pan: number, events: { goalFlash: number; jumbotron?: string }) {
+export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, time: number, pan: number, events: { goalFlash: number; jumbotron?: string; wind?: number }) {
   c.drawImage(paintBackdrop(stadium, weather), -40 - pan * 0.3, 0);
+  drawRoofFlags(c, stadium, time, pan, events.wind ?? 0);
   if (stadium === "park") {
     // Clouds, kites and the sun.
     if (weather === "sun" || weather === "sunset") { c.fillStyle = weather === "sunset" ? "#ffdd8a" : "#fff7b0"; c.beginPath(); c.arc(420 - pan * 0.1, 22, 11, 0, Math.PI * 2); c.fill(); }
@@ -104,6 +124,25 @@ export function drawBackdrop(c: CanvasRenderingContext2D, stadium: StadiumId, we
   }
 }
 
+/**
+ * Flags on poles along the top of the stands (where real grounds fly them). They stream in the
+ * wind's direction and stretch out with its strength; in calm air they hang and flutter gently.
+ */
+function drawRoofFlags(c: CanvasRenderingContext2D, stadium: StadiumId, time: number, pan: number, wind: number) {
+  const base = stadium === "park" ? 60 : 10, pole = stadium === "park" ? 14 : 9;
+  const colours = THEMES[stadium].confetti, strength = Math.min(1, Math.abs(wind) / 6), dir = wind < 0 ? -1 : 1;
+  for (let i = 0; i < 6; i++) {
+    const x = Math.round(20 + i * 88 - pan * 0.3);
+    c.fillStyle = "#d7dde5"; c.fillRect(x, base - pole, 1, pole);
+    const len = 5 + Math.round(strength * 5), droop = Math.round((1 - strength) * 3);
+    for (let k = 0; k < len; k++) {
+      const ripple = Math.round(Math.sin(time * (3 + strength * 9) - k * 0.9 + i) * (0.6 + (1 - strength) * 0.6));
+      c.fillStyle = colours[i % colours.length];
+      c.fillRect(dir > 0 ? x + 1 + k : x - 1 - k, base - pole + Math.round((k / len) * droop) + ripple, 1, 4);
+    }
+  }
+}
+
 /** LED / wooden advertising boards with in-game jokes only. */
 const BOARD_TEXT = ["PENALTY KINGS", "$GBOOT", "GOLDEN BOOT CUP", "KEEPERS HATE THIS ONE TRICK", "NO REFUNDS ON SHIN PADS", "TOP BINS MONTHLY", "NUTMEG INSURANCE CO.", "HALF-TIME ORANGES"];
 export function drawBoards(c: CanvasRenderingContext2D, stadium: StadiumId, time: number, pan: number) {
@@ -121,23 +160,16 @@ export function drawBoards(c: CanvasRenderingContext2D, stadium: StadiumId, time
 }
 
 /** Grass stripes, markings and weather tint (painted once per stadium/weather). */
-/** `markings: false` paints grass only (free kicks draw their own markings in perspective). */
-export function drawPitch(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather, markings = true) {
-  c.drawImage(layer(`pitch-${stadium}-${weather}-${markings}`, p => {
+/** Grass stripes and weather tint only; line markings come from the pitch cameras (setpieces.ts). */
+export function drawPitch(c: CanvasRenderingContext2D, stadium: StadiumId, weather: Weather) {
+  c.drawImage(layer(`pitch-${stadium}-${weather}`, p => {
     const theme = THEMES[stadium];
     let y = 102, band = 0;
     while (y < H) { const h = 7 + (y - 102) * 0.13; p.fillStyle = theme.grass[band % 2]; p.fillRect(0, y, W + 80, Math.ceil(h)); y += h; band++; }
     if (weather === "snow") { p.fillStyle = "#ffffff55"; for (let i = 0; i < 400; i++) p.fillRect(Math.floor(hash01(i) * W), 102 + Math.floor(hash01(i + 999) * 218), 2, 1); }
     if (weather === "rain") { p.fillStyle = "#9fd3ff55"; for (let i = 0; i < 6; i++) { const px = 40 + hash01(i * 7) * 400, py = 200 + hash01(i * 13) * 100; p.beginPath(); p.ellipse(px, py, 16, 4, 0, 0, Math.PI * 2); p.fill(); } }
     if (stadium === "park") { p.fillStyle = "#6d8f5a"; for (let i = 0; i < 3; i++) { const px = 60 + i * 170, py = 280 + (i % 2) * 14; p.beginPath(); p.ellipse(px, py, 14, 3, 0, 0, Math.PI * 2); p.fill(); } }
-    if (!markings) return;
-    p.strokeStyle = theme.lines; p.lineWidth = 1;
-    const line = (x1: number, y1: number, x2: number, y2: number) => { p.beginPath(); p.moveTo(x1 + 0.5, y1 + 0.5); p.lineTo(x2 + 0.5, y2 + 0.5); p.stroke(); };
-    line(0, GOAL.line, W, GOAL.line);
-    line(118, GOAL.line, 104, 204); line(362, GOAL.line, 376, 204); line(104, 204, 376, 204);
-    line(40, GOAL.line, -10, 244); line(440, GOAL.line, 490, 244); line(-10, 244, 490, 244);
-    p.beginPath(); p.ellipse(240, 244, 50, 12, 0, 0, Math.PI); p.stroke();
-    p.fillStyle = theme.lines; p.fillRect(SPOT.x - 2, SPOT.y + 3, 5, 2);
+    // Markings are drawn in perspective by the Stage (drawPitchMarkings), never hand-placed here.
   }), 0, 0);
 }
 

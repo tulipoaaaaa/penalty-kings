@@ -48,6 +48,8 @@ export class Crowd {
   react(mood: CrowdMood) { this.mood = mood; this.moodTime = 0; this.since = 1; }
   update(dt: number) { this.moodTime += dt; this.tick += dt; if (this.mood !== "idle" && this.mood !== "tense" && this.moodTime > 3.2) this.mood = "idle"; if (this.wave > 0) this.wave += dt; if (this.wave > 4.5) this.wave = 0; }
   startWave() { this.wave = 0.001; }
+  /** Wind (m/s, + blows to the right): flag-wavers' flags stream with it. */
+  wind = 0;
 
   /** Draw at 15 fps into the cached layer, then blit with parallax. Emits confetti for throwers. */
   draw(c: CanvasRenderingContext2D, time: number, pan: number, particles: Particles, reduced: boolean) {
@@ -84,7 +86,12 @@ export class Crowd {
       // Type accessories and behaviours.
       switch (s.type) {
         case "drummer": b.fillStyle = "#b8860b"; b.fillRect(x + 1, y + 6, 4, 2); b.fillStyle = "#fff"; b.fillRect(x + (Math.floor(time * 8) % 2 ? 0 : 4), y + 4, 1, 2); break;
-        case "flag-waver": { b.fillStyle = "#6d4c41"; b.fillRect(x + 5, y - 6, 1, 8); b.fillStyle = s.accent; const f = Math.round(Math.sin(time * 6 + s.phase) * 1.5); b.fillRect(x + 6, y - 6 + f, 5, 3); break; }
+        case "flag-waver": {
+          b.fillStyle = "#6d4c41"; b.fillRect(x + 5, y - 6, 1, 8); b.fillStyle = s.accent;
+          const strength = Math.min(1, Math.abs(this.wind) / 5), dir = this.wind < 0 ? -1 : 1, len = 5 + Math.round(strength * 3);
+          const f = Math.round(Math.sin(time * (6 + strength * 8) + s.phase) * 1.5 * (1 - strength * 0.7));
+          b.fillRect(dir > 0 ? x + 6 : x + 5 - len, y - 6 + f, len, 3 - Math.round(strength)); break;
+        }
         case "kid on shoulders": b.fillStyle = s.skin; b.fillRect(x + 1, y - 5, 3, 3); b.fillStyle = s.accent; b.fillRect(x + 1, y - 2, 3, 2); if (mood === "cheer") { b.fillStyle = s.skin; b.fillRect(x, y - 7, 1, 2); b.fillRect(x + 4, y - 7, 1, 2); } break;
         case "grumpy pundit": b.fillStyle = "#ffffff"; b.fillRect(x + 4, y + 4, 2, 3); b.fillStyle = "#111"; b.fillRect(x + 1, y + 1, 3, 1); break;
         case "confetti-thrower": if (mood === "cheer" && t < 0.3) particles.emit("confetti", x - 40 - 0, y, 2, { color: ["#ffd23f", "#ff5a6e", "#7fd3ff", "#ccff00"], speed: 40, gravity: 60, life: 2 }); b.fillStyle = s.accent; b.fillRect(x + 5, y + 2, 2, 2); break;

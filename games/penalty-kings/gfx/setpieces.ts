@@ -9,10 +9,16 @@
  */
 import { GOAL_HALF_WIDTH, GOAL_HEIGHT, WALL_DISTANCE, JUMP_HEIGHT, JUMP_TIME, type FreeKickSetup, type FlightSample, type Zone } from "@penalty-kings/engine";
 import { sprite, clamp01, ease } from "./core.js";
-import { GOAL, toScreen } from "./stadium.js";
+import { GOAL, toScreen, CAM_FX, CAM_FY, PENALTY_CAMERA, type PitchCamera } from "./stadium.js";
 
-/** Camera: metres behind the ball, height, focal lengths (px at 1 m; vertical 4/3 × to match the goal art), horizon. */
-const BACK = 14, HEIGHT = 3.6, FX = 539, FY = FX * (4 / 3), HORIZON = 101;
+const FX = CAM_FX, FY = CAM_FY;
+/** Free-kick broadcast camera: 14 m behind the ball, 3.6 m up. */
+export const FK_CAMERA: PitchCamera = { back: 14, height: 3.6, horizon: 101 };
+export { PENALTY_CAMERA };
+/** The penalty spot as a "setup" for the shared projection: 11 m straight out from the goal. */
+export const PENALTY_SETUP: FreeKickSetup = { distance: 11, angle: 0, wallSize: 3, wallHeight: 1.8, wallJumpAt: 0, wind: 0, seed: 0 };
+/** Pitch: 68 m wide (touchlines at x = ±34 m). */
+export const HALF_PITCH_WIDTH = 34;
 
 export type Projected = { x: number; y: number; scale: number; pxPerM: number };
 
@@ -22,28 +28,51 @@ function frame(setup: FreeKickSetup) {
 }
 
 /** World point (metres on the pitch: x across the goal line, y up, z from the ball's line towards goal) → screen. */
-export function fkProject(setup: FreeKickSetup, point: { x: number; y: number; z: number }): Projected {
+export function fkProject(setup: FreeKickSetup, point: { x: number; y: number; z: number }, camera: PitchCamera = FK_CAMERA): Projected {
   const f = frame(setup), rx = point.x - f.x0, rz = point.z;
   const forward = rx * f.ux + rz * f.uz, lateral = rx * f.nx + rz * f.nz;
-  const cam = Math.max(0.5, forward + BACK);
-  return { x: GOAL.cx + (FX * lateral) / cam, y: HORIZON + (FY * (HEIGHT - point.y)) / cam, scale: (setup.distance + BACK) / cam, pxPerM: FX / cam };
+  const cam = Math.max(0.5, forward + camera.back);
+  return { x: GOAL.cx + (FX * lateral) / cam, y: camera.horizon + (FY * (camera.height - point.y)) / cam, scale: (setup.distance + camera.back) / cam, pxPerM: FX / cam };
 }
-export const fkBall = (setup: FreeKickSetup) => fkProject(setup, { x: Math.sin(setup.angle) * setup.distance, y: 0.11, z: 0 });
+export const fkBall = (setup: FreeKickSetup, camera: PitchCamera = FK_CAMERA) => fkProject(setup, { x: Math.sin(setup.angle) * setup.distance, y: 0.11, z: 0 }, camera);
+/** Metres from the goal line along the centre line for a screen y (inverse projection, for tests). */
+export function unprojectDepth(setup: FreeKickSetup, screenY: number, camera: PitchCamera) {
+  const cam = (FY * camera.height) / (screenY - camera.horizon);
+  return setup.distance + camera.back - cam;
+}
 
-/** Where the penalty-view goal art (centre-bottom at GOAL.cx, GOAL.line) lands, and its scale, for this free kick. */
-export function goalTransform(setup: FreeKickSetup) {
-  const cam = setup.distance + BACK;
-  return { g: (FX * GOAL_HALF_WIDTH) / (cam * GOAL.unit), x: GOAL.cx, y: HORIZON + (FY * HEIGHT) / cam };
+/** Where the penalty-view goal art (centre-bottom at GOAL.cx, GOAL.line) lands, and its scale, for this camera. */
+export function goalTransform(setup: FreeKickSetup, camera: PitchCamera = FK_CAMERA) {
+  const cam = setup.distance + camera.back;
+  return { g: (FX * GOAL_HALF_WIDTH) / (cam * GOAL.unit), x: GOAL.cx, y: camera.horizon + (FY * camera.height) / cam };
+}
+
+/** Corner flags exist only where the goal line meets a touchline, and are drawn only when that point is on screen. */
+export function cornerFlags(setup: FreeKickSetup, camera: PitchCamera = FK_CAMERA) {
+  const depth = Math.cos(setup.angle) * setup.distance;
+  return [-HALF_PITCH_WIDTH, HALF_PITCH_WIDTH].map(x => fkProject(setup, { x, y: 0, z: depth }, camera)).filter(p => p.x >= 0 && p.x <= 480 && p.y >= 0 && p.y <= 320);
 }
 export const applyGoal = (xf: { g: number; x: number; y: number }, p: { x: number; y: number }) => ({ x: xf.x + (p.x - GOAL.cx) * xf.g, y: xf.y + (p.y - GOAL.line) * xf.g });
 
 /** Pitch markings in perspective: goal line, 6-yard box, penalty area, spot, the D, and the ref's vanishing spray. */
-export function drawFkMarkings(c: CanvasRenderingContext2D, setup: FreeKickSetup, colour: string, wall: { x: number; halfWidth: number } | null, time: number) {
+/** Every pitch marking in WORLD metres (x across, z from the ball's line; goal line at z = depth). Pure, for tests. */
+export function pitchMarkingsWorld(setup: FreeKickSetup) {
+  const gz = Math.cos(setup.angle) * setup.distance;
+  const spot = { x: 0, z: gz - 11 };
+  const dArc: Array<{ x: number; z: number }> = [];
+  for (let a = 0; a <= 32; a++) { const t = -0.93 + (1.86 * a) / 32, x = Math.sin(t) * 9.15, z = spot.z - Math.cos(t) * 9.15; if (z < gz - 16.5) dArc.push({ x, z }); }
+  return {
+    goalLine: { z: gz }, sixYard: { z: gz - 5.5, halfWidth: 9.16 }, box: { z: gz - 16.5, halfWidth: 20.16 }, spot, dArc,
+    corners: [{ x: -HALF_PITCH_WIDTH, z: gz }, { x: HALF_PITCH_WIDTH, z: gz }],
+  };
+}
+
+export function drawPitchMarkings(c: CanvasRenderingContext2D, setup: FreeKickSetup, colour: string, wall: { x: number; halfWidth: number } | null, time: number, camera: PitchCamera = FK_CAMERA) {
   const f = frame(setup), gz = f.depth;
   const poly = (points: Array<[number, number]>, dashed = false) => {
     c.beginPath(); let started = false;
     for (const [x, z] of points) {
-      const p = fkProject(setup, { x, y: 0, z });
+      const p = fkProject(setup, { x, y: 0, z }, camera);
       if (p.scale > 2.6 || p.y > 330) { started = false; continue; }
       started ? c.lineTo(Math.round(p.x) + 0.5, Math.round(p.y) + 0.5) : c.moveTo(Math.round(p.x) + 0.5, Math.round(p.y) + 0.5); started = true;
     }
@@ -54,10 +83,11 @@ export function drawFkMarkings(c: CanvasRenderingContext2D, setup: FreeKickSetup
   line(-40, gz, 40, gz);
   line(-9.16, gz, -9.16, gz - 5.5); line(9.16, gz, 9.16, gz - 5.5); line(-9.16, gz - 5.5, 9.16, gz - 5.5);
   line(-20.16, gz, -20.16, gz - 16.5); line(20.16, gz, 20.16, gz - 16.5); line(-20.16, gz - 16.5, 20.16, gz - 16.5);
-  const arc: Array<[number, number]> = [];
-  for (let a = 0; a <= 32; a++) { const t = -0.93 + (1.86 * a) / 32, x = Math.sin(t) * 9.15, z = gz - 11 - Math.cos(t) * 9.15; if (z < gz - 16.5) arc.push([x, z]); }
-  poly(arc);
-  const spot = fkProject(setup, { x: 0, y: 0, z: gz - 11 }); c.fillStyle = colour; c.fillRect(Math.round(spot.x) - 1, Math.round(spot.y), 3, 1);
+  poly(pitchMarkingsWorld(setup).dArc.map(p => [p.x, p.z] as [number, number]));
+  const spot = fkProject(setup, { x: 0, y: 0, z: gz - 11 }, camera); c.fillStyle = colour;
+  if (spot.y < 330) { const w = Math.max(3, Math.round(spot.pxPerM * 0.22)); c.fillRect(Math.round(spot.x - w / 2), Math.round(spot.y) + 1, w, Math.max(1, Math.round(w / 3))); }
+  // Corner flags only at real corners, only when in view.
+  for (const flag of cornerFlags(setup, camera)) { c.fillStyle = "#e8e8e8"; c.fillRect(Math.round(flag.x), Math.round(flag.y) - 14, 1, 14); c.fillStyle = "#ff5a6e"; c.fillRect(Math.round(flag.x) + 1, Math.round(flag.y) - 14, 5, 3); }
   // Vanishing spray: the 9.15 m line in front of the wall, and the ball's spot.
   if (wall) {
     const z = gz * (WALL_DISTANCE / setup.distance) - 0.35;
@@ -147,18 +177,8 @@ export function drawPreview(c: CanvasRenderingContext2D, setup: FreeKickSetup, p
   for (let i = 1; i < path.length; i += 1) { const p = fkProject(setup, path[i]); c.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2); }
 }
 
-/** Wind flag: waving in the wind's direction with its strength. Outdoor stadiums only. */
-export function drawWind(c: CanvasRenderingContext2D, wind: number, time: number, reduced: boolean) {
-  if (!wind) return;
-  const x = 444, y = 132, dir = Math.sign(wind), strength = Math.min(1, Math.abs(wind) / 6);
-  c.fillStyle = "#e8e8e8"; c.fillRect(x, y, 2, 34);
-  const wave = reduced ? 0 : Math.sin(time * (4 + strength * 8));
-  c.fillStyle = "#ff5a6e";
-  for (let i = 0; i < 6; i++) { const fx = x + 1 + dir * i * (2 + strength * 2), fy = y + 1 + Math.round(wave * (1 - strength) * i * 0.6 + (1 - strength) * i * 1.2); c.fillRect(Math.min(fx, fx + dir * 3), fy, 3, 5); }
-  c.fillStyle = "#0b0d1acc"; c.fillRect(x - 22, y + 36, 46, 11);
-  c.fillStyle = "#f7f7f2"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "top";
-  c.fillText(`${dir < 0 ? "←" : ""}${Math.abs(wind).toFixed(1)} m/s${dir > 0 ? "→" : ""}`, x - 20, y + 38); c.textBaseline = "alphabetic";
-}
+/** HUD wind label (the chip in the top-right cluster; flags on the stands show it too). */
+export const windLabel = (wind: number) => (wind ? `${wind < 0 ? "←" : "→"} ${Math.abs(wind).toFixed(1)} m/s` : "no wind");
 
 const ZONE_COLOURS: Record<Zone, string> = { centre: "#9aa3ad", side: "#7fd3ff", corner: "#ccff00", bin: "#ffd23f" };
 /** Tutorial overlay: the scoring zones on the goal with their multipliers. */
