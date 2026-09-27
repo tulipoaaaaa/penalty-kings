@@ -109,7 +109,7 @@
 .pk-title h1 { margin: 0; font-size: clamp(28px, 9cqw, 86px); color: var(--pk-gold); letter-spacing: 0.06em; text-shadow: 4px 4px 0 #000, -2px -2px 0 #6b3e00; }
 .pk-title h2 { margin: 0; color: var(--pk-volt); font-size: 1.2em; }
 .pk-title > .pk-primary { font-size: 1.4em; padding: 0.4em 2em; min-height: 48px; }
-.pk-modescreen { justify-content: flex-start; overflow: auto; }
+.pk-modescreen { justify-content: flex-start; overflow: auto; padding-top: calc(12cqh + 8px); } /* clear of the pot banner at the top */
 /* Attract mode: the showreel plays behind; title at the top, action at the bottom, clear middle. */
 .pk-attract { background: none; justify-content: space-between; padding: 4cqh 4cqw 13cqh; pointer-events: none; }
 .pk-attract > div { pointer-events: auto; display: grid; justify-items: center; gap: 0.6cqh; }
