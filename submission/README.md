@@ -119,18 +119,21 @@ npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champ
 
 ## Checks, credits and limitations
 
-**Checks, all run locally on 2026-09-27 and passing:**
-- `npm run typecheck`
-- `npm run check` (FriendSDK game validation: expected reward 9 RF per 10 RF ball, max 100 RF)
-- `npm run verify:odds` (all three stadiums: 10,000 bps, EV 90.00%)
-- `npm run test:engine` (5 physics tests)
-- `node scripts/economy-sim.mjs` (solvency, pool maths and farm-check assertions)
-- `npm run test:smoke` (FriendSDK browser harness at 960 px and 360 px)
-- `npm run test:game`: buy → place → reveal → shoot → HUD update at 960 px and 360 px, with
-  zero console errors
-- `npm run secret-scan`
-
-The same checks run in GitHub Actions.
+**Checks** (all passing in GitHub Actions, e.g. [CI run 19](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36297207066), 2026-09-27):
+- typecheck; `friendsdk check` (expected reward 9 RF per 10 RF ball, max 100 RF);
+- odds verification (all three stadiums: 10,000 bps, EV 90.00%); engine tests; economy simulator;
+- FriendSDK browser harness at 960 px and 360 px;
+- interaction test: buy → place → reveal → shoot → HUD update at 960 px and 360 px, zero console
+  errors;
+- **real ownership gate on Robinhood mainnet** (no mocks, read-only wallet provider): admits the
+  owner of hardwired Friend #7730 and rejects a random address;
+- Skill Cup referee tests: exact replay match, signed results, forged goals rejected,
+  unpredictable dives, rate limits;
+- Foundry unit tests and **mainnet-fork tests**: $GBOOT launch, locked liquidity, swaps, fee
+  collection, early-withdraw revert, fee hook;
+- a full launch rehearsal on a mainnet fork, including the SDK stadium deploy
+  ([rehearsal run](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36296904970));
+- `npm audit`: 0 vulnerabilities; secret scan clean.
 
 **Known issues and limitations:**
 - Browser tests use the SDK's mocked wallet and RPC. A real-wallet playthrough as a hardwired
