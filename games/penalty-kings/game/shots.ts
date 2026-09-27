@@ -42,3 +42,10 @@ export const withBestStreak = (progress: Progress, run: number): Progress => (ru
 
 /** The shot clock the shell runs for this kind of kick (0 = off: Target Practice has its own 60 s timer). */
 export const clockSeconds = (difficulty: Difficulty, kind: "penalty" | "freekick" | "target") => (kind === "target" ? 0 : shotClockSeconds(difficulty, kind));
+
+/**
+ * BQ-P2-6: the kick history the keeper AI reads (KickContext.history: previous kicks' crossing x; the robot learns
+ * your favourite side from it). A timed-out kick struck nothing, so it is left out rather than read as a kick
+ * down the middle (its placeholder x: 0).
+ */
+export const keeperHistory = (kicks: readonly Pick<KickRecord, "x" | "timedOut">[]) => kicks.filter(kick => !kick.timedOut).map(kick => kick.x);

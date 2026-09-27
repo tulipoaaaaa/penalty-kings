@@ -52,7 +52,7 @@ import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf } fro
 import { keeperOfTheWeek, weeklyBonusXp, challengeSetup, challengeVerdict, type Challenge } from "./game/challenge.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
-import { SHOT_RULES, REPLAY_SECONDS, REPLAY_LABEL, replayReason, longestRun, withBestStreak, clockSeconds } from "./game/shots.js";
+import { SHOT_RULES, REPLAY_SECONDS, REPLAY_LABEL, replayReason, longestRun, withBestStreak, clockSeconds, keeperHistory } from "./game/shots.js";
 import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
 import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
@@ -758,7 +758,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         playBeat(beat, current.kind);
       }
       if (current.kind !== "target") {
-        const tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
+        const tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: keeperHistory(current.kicks) });
         // FD-3b: with the beacon, the keeper's dive does not exist until the shot is committed, so there is no
         // pre-kick tell to show (it would be a guess dressed up as a tell). Disco Dee's beat is fixed by the kick
         // number, so his lean stays. The true tell plays in the run-up (the Stage leans the keeper from the dive).
@@ -844,7 +844,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   function strikePenalty(current: Session, shot: ShotInput, index: number, difficulty: Difficulty, seed: number) {
     const scene = stage.current; if (!scene) return;
     const profile = keeperById(current.keeper);
-    const outcome = resolveShot(shot, profile, seed, { kickIndex: index, history: current.kicks.map(kick => kick.x) }, difficulty);
+    const outcome = resolveShot(shot, profile, seed, { kickIndex: index, history: keeperHistory(current.kicks) }, difficulty);
     // The chosen ball sets ONLY the skill-layer score multiplier (kickStyle); RF values never change.
     const ballMult = current.mode === "match" && current.ball ? kickStyle(bagRef.current.find(record => record.id === current.ball!.recordId) ?? null, RARITIES.map(r => r.dropMult)).scoreMult : 1;
     const points = outcome.result === "goal" ? goalPoints(profile, ballMult, current.streak + 1, Boolean(current.suddenDeath), outcome.zone, outcome.postIn) : 0;
@@ -903,7 +903,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     inFlight.current = 1; const id = ++kickId.current; setPhaseNow("shooting");
     swipe.current = null; pointer.current = null; keyAim.current.charging = false;
     showClock(null); if (stage.current) { stage.current.clock = null; stage.current.reticle = null; }
-    pendingKick.current = { record: { result: "wide", zone: "centre", points: 0, x: 0, y: 0 }, result: "wide" };
+    pendingKick.current = { record: { result: "wide", zone: "centre", points: 0, x: 0, y: 0, timedOut: true }, result: "wide" };
     setBanner({ text: TIME_UP, sub: "The shot clock ran out. Next kick in a moment.", tone: "miss" });
     timeoutTimer.current = window.setTimeout(() => { if (kickId.current !== id) return; latest.current.onResolved("wide", true); latest.current.onKickDone(); }, TIME_UP_PAUSE_MS);
   }
