@@ -16,3 +16,6 @@
    - the solvency figure is ≤ 8e-5, from the exact Lundberg bound (the brief's 1e-5 used the
      normal approximation).
 6. **Legal review** of token-priced random rewards before any live promotion.
+7. **Before announcing Wildcards:** one real mainnet Wildcard draw must fulfil. The Dice
+   provider delivers off-chain, and a private fork cannot prove delivery. The callback signature
+   is test-checked against the SDK's ChanceGame.

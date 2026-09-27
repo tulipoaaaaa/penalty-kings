@@ -43,7 +43,7 @@ contract ForkLaunchTest is Test {
         SkillCup cup = new SkillCup(ISkillGenerations(generations), ISkillToken(address(gboot)), address(this), block.timestamp);
         address owner = ISkillGenerations(generations).ownerOf(7730);
         vm.prank(burner);
-        gboot.transfer(owner, 1_000e18);
+        gboot.transfer(owner, 10_000e18);
         vm.startPrank(owner);
         gboot.approve(address(cup), type(uint256).max);
         assertEq(cup.enter(7730), 1);

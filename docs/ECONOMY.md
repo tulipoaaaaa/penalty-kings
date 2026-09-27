@@ -147,12 +147,20 @@ negligible next to the capacity limit.
   pot.
 - **Data source:** `scripts/cup/weekly.mjs` computes the table from on-chain `Settled` events
   only, and anyone can re-run it.
-- **Wildcards:** 100 $GBOOT buys one extra Cup draw (50% burned, 50% to the pot). A live
-  wildcard draw uses on-chain randomness with the same 3.5% Gold-or-better odds.
+- **Wildcards:** 1,000 $GBOOT buys one extra Cup draw (50% burned, 50% to the pot).
+  - The draw uses Dice randomness with the same 3.5% Gold-or-better odds, via
+    `contracts/src/Wildcards.sol`. The weekly script counts `WildcardDrawn` points at the Park
+    weight.
+  - **Why 1,000:** at launch that is ≈ 10 RF, the same gross price as a Park ball but with no RF
+    payout. Buying Wildcards is therefore a *dearer* route to race points than playing, at 1×, 10×
+    and 100× the $GBOOT price (see "Wildcard farm check" below, asserted by the simulator).
+  - 100 $GBOOT (≈ 1 RF) would have made Wildcards 10× cheaper than balls, and the race would go to
+    whoever bought the most.
 
 ## Skill Cup (weekly: skill)
 
-- **Entry:** 100 $GBOOT (50% burned, 50% to the pot) buys one 5-kick shootout against Ghost.
+- **Entry:** 1,000 $GBOOT (50% burned, 50% to the pot) buys one 5-kick shootout against Ghost.
+  Only Friends hardwired at **Gen 4 or better** can enter (on-chain check in `SkillCup.sol`).
   Best score wins; ties go to the earlier entry. Top 3 are paid weekly.
 - **Referee:** a verifier service (`verifier/`) replays every kick with the shared engine
   (`packages/engine`):
@@ -160,7 +168,15 @@ negligible next to the capacity limit.
   - the dive comes from `HMAC(weekSecret, entryId ‖ kickIndex)`;
   - `hash(weekSecret)` is published at the start of the week and the secret is revealed at
     the end, so anyone can re-check every result.
-- **Limits:** one entry per hardwired Friend per hour, and 20 per week.
+- **Limits:** one entry per Friend per hour, and 20 per week, both enforced on-chain.
+- **Attacker cost:** a Gen 4 Friend costs 100 RF to hardwire (half burned) and is only
+  unlocked while holding ≥ 100 RF. Each entry costs 1,000 $GBOOT (≈ 10 RF at launch).
+  - A farm of *k* Friends playing the full 20 entries each costs 100·k RF up front plus
+    ≈ 200·k RF of $GBOOT per week, of which half is burned.
+  - The pot only grows by the 50% of entries, and it is capped at 250,000 $GBOOT a week (≈ 2,500
+    RF at launch).
+  - Buying entries can never return more than half their cost to the entrant pool as a whole. A
+    Gen 5/6 Friend (1–10 RF) cannot enter at all.
 - **Honest limit:** this stops faked goals, but it does not stop a perfect-aim bot.
   Mitigations:
   - reticle wobble;
@@ -274,6 +290,18 @@ Assumptions: 80% of players at park × 15 balls/day, 18% of players at pro × 3 
 
 Drops are capped at 5,769,231 $GBOOT per week (1/52 of the 300,000,000 treasury), so the treasury always lasts at least a year; when the cap binds, the weekly base rate is scaled down for everyone equally.
 Treasury runway is otherwise at the launch drop rate; the auto-scaled rate falls as $GBOOT rises, so runway only lengthens. Burn and Cup figures use the realised surplus of the simulated week (luck included).
+
+### Wildcard farm check (RF cost per Golden Boot race point)
+
+A Park ball costs 10 RF but returns 9 RF on average plus a $GBOOT drop, so its net cost is 1 RF minus the drop value. A Wildcard costs 1,000 $GBOOT and returns nothing. Both give 0.045 expected race points (Park weight).
+
+| $GBOOT price | Park ball, net RF per point | Wildcard, RF per point | Cheaper route |
+|---|---:|---:|---|
+| 1× (0.01 RF) | 16.01 | 222.22 | balls |
+| 10× (0.10 RF) | 15.56 | 2,222.22 | balls |
+| 100× (1.00 RF) | 15.56 | 22,222.22 | balls |
+
+Break-even: Wildcards only become cheaper per point if $GBOOT trades below ≈ 0.097× its launch price (0.0010 RF). The RF floor position (0.1×–1×) sits right there, and the weekly report flags any week where it happens.
 <!-- SIM:END -->
 
 ## Creator commitments (manual now, automated in v1.2)

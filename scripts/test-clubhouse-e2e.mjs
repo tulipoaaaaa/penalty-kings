@@ -41,7 +41,7 @@ for (const [key, value] of Object.entries(live)) assert.ok(value, `deployed ${ke
 console.log("deployed on fork:", live);
 const gbootAbi = parseAbi(["function transfer(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)", "function totalSupply() view returns (uint256)"]);
 const deployerWallet = createWalletClient({ account: { address: DEPLOYER, type: "json-rpc" }, transport: http(ANVIL) });
-await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: live.gboot, abi: gbootAbi, functionName: "transfer", args: [owner, parseEther("1000")], chain: null }) });
+await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: live.gboot, abi: gbootAbi, functionName: "transfer", args: [owner, parseEther("5000")], chain: null }) });
 
 // 2) Referee (real Worker code) and the Clubhouse build.
 const referee = spawn("node", ["--experimental-strip-types", "--no-warnings", "verifier/dev-server.ts", "--port", "8788", "--rpc", ANVIL, "--skill-cup", live.skillCup], { stdio: ["ignore", "inherit", "inherit"] });
@@ -97,7 +97,7 @@ try {
 
   // Skill Cup: on-chain entry, then 5 flicks judged by the referee.
   await button("Skill Cup").click();
-  await button("Enter · 100 $GBOOT").click();
+  await button("Enter · 1,000 $GBOOT").click();
   await confirmTx(); await confirmTx();
   const canvas = page.locator(".pitch canvas");
   await canvas.waitFor({ timeout: 60_000 });

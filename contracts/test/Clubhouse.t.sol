@@ -33,7 +33,8 @@ contract SkillCupTest is Test {
         cup = new SkillCup(ISkillGenerations(address(gens)), ISkillToken(address(token)), pot, block.timestamp);
         gens.set(7730, player, 3);
         gens.set(1, player, 0);
-        token.transfer(player, 10_000e18);
+        gens.set(2, player, 6);
+        token.transfer(player, 100_000e18);
         vm.prank(player); token.approve(address(cup), type(uint256).max);
     }
 
@@ -41,9 +42,15 @@ contract SkillCupTest is Test {
         vm.prank(player);
         uint256 id = cup.enter(7730);
         assertEq(id, 1);
-        assertEq(token.balanceOf(pot), 50e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 50e18);
+        assertEq(token.balanceOf(pot), 500e18);
+        assertEq(token.totalSupply(), 1_000_000_000e18 - 500e18);
         assertEq(token.balanceOf(address(cup)), 0);
+    }
+
+    function testCheapGenerationsRejected() public {
+        vm.prank(player);
+        vm.expectRevert(SkillCup.GenerationTooLow.selector);
+        cup.enter(2);
     }
 
     function testOwnershipAndHardwiredEnforced() public {
@@ -84,7 +91,7 @@ contract WildcardsTest is Test {
         dice = new MockEntropy();
         wild = new Wildcards(IWildcardGenerations(address(gens)), IWildcardToken(address(token)), IWildcardEntropy(address(dice)), provider, pot);
         gens.set(7730, player, 3);
-        token.transfer(player, 1000e18);
+        token.transfer(player, 10_000e18);
         vm.deal(player, 1 ether);
         vm.prank(player); token.approve(address(wild), type(uint256).max);
     }
@@ -93,11 +100,25 @@ contract WildcardsTest is Test {
         uint256 fee = dice.FEE();
         vm.prank(player);
         uint256 id = wild.draw{ value: fee }(7730);
-        assertEq(token.balanceOf(pot), 50e18);
-        assertEq(token.totalSupply(), 1_000_000_000e18 - 50e18);
+        assertEq(token.balanceOf(pot), 500e18);
+        assertEq(token.totalSupply(), 1_000_000_000e18 - 500e18);
         dice.fulfil(wild, 1, provider, bytes32(uint256(99))); // roll 99 → Golden Boot
         (uint256 friendId, uint8 points, bool fulfilled) = wild.drawOf(id);
         assertEq(friendId, 7730); assertEq(points, 2); assertTrue(fulfilled);
+    }
+
+    function testOverpaymentRefunded() public {
+        uint256 fee = dice.FEE();
+        uint256 before = player.balance;
+        vm.prank(player);
+        wild.draw{ value: fee + 1 ether / 100 }(7730);
+        assertEq(player.balance, before - fee, "only the exact oracle fee is kept");
+        assertEq(address(wild).balance, 0);
+    }
+
+    /// The Dice callback must have exactly the SDK ChanceGame's signature.
+    function testCallbackSelectorMatchesChanceGame() public pure {
+        assertEq(Wildcards._entropyCallback.selector, bytes4(keccak256("_entropyCallback(uint64,address,bytes32)")));
     }
 
     function testOutcomeBoundaries() public {
@@ -116,7 +137,7 @@ contract WildcardsTest is Test {
         uint256 fee = dice.FEE();
         vm.prank(player);
         vm.expectRevert(Wildcards.IncorrectOracleFee.selector);
-        wild.draw{ value: 1 }(7730);
+        wild.draw{ value: fee - 1 }(7730);
         vm.prank(player);
         wild.draw{ value: fee }(7730);
         vm.expectRevert(Wildcards.UnauthorizedRandomness.selector);

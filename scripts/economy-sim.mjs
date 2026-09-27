@@ -167,6 +167,21 @@ for (const players of [50, 500, 5000]) {
 }
 out.push("", `Drops are capped at ${fmt(WEEKLY_TREASURY_BUDGET)} $GBOOT per week (1/52 of the ${fmt(TREASURY_GBOOT)} treasury), so the treasury always lasts at least a year; when the cap binds, the weekly base rate is scaled down for everyone equally.`, "Treasury runway is otherwise at the launch drop rate; the auto-scaled rate falls as $GBOOT rises, so runway only lengthens. Burn and Cup figures use the realised surplus of the simulated week (luck included).");
 
+// ── Wildcard farm check: RF cost per Golden Boot race point, balls vs Wildcards ──
+const WILDCARD_GBOOT = 1000, RACE_EV = (CHANCES[5] * 1 + CHANCES[6] * 2) / 10000; // 0.045 points per draw/ball
+out.push("", "### Wildcard farm check (RF cost per Golden Boot race point)", "",
+  "A Park ball costs 10 RF but returns 9 RF on average plus a $GBOOT drop, so its net cost is 1 RF minus the drop value. A Wildcard costs 1,000 $GBOOT and returns nothing. Both give 0.045 expected race points (Park weight).", "",
+  "| $GBOOT price | Park ball, net RF per point | Wildcard, RF per point | Cheaper route |", "|---|---:|---:|---|");
+for (const m of [1, 10, 100]) {
+  const twap = START_PRICE * m, price = 10;
+  const drop = baseDropAt(price, twap) * AVG_DROP_MULT * twap;
+  const ball = (price * EDGE - drop) / RACE_EV, wildcard = (WILDCARD_GBOOT * twap) / RACE_EV;
+  out.push(`| ${m}× (${fmt(twap, 2)} RF) | ${fmt(ball, 2)} | ${fmt(wildcard, 2)} | ${wildcard > ball ? "balls" : "**WILDCARDS**"} |`);
+  assert.ok(wildcard > ball, `Wildcards must never be the cheaper route to race points at ${m}×`);
+}
+const breakEven = (10 * EDGE) / (WILDCARD_GBOOT * START_PRICE + 13 * AVG_DROP_MULT * START_PRICE);
+out.push("", `Break-even: Wildcards only become cheaper per point if $GBOOT trades below ≈ ${breakEven.toFixed(3)}× its launch price (${fmt(START_PRICE * breakEven, 4)} RF). The RF floor position (0.1×–1×) sits right there, and the weekly report flags any week where it happens.`);
+
 if (SMOKE) { console.log(out.join("\n")); console.log("\nPASS economy-sim smoke"); process.exit(0); }
 const path = new URL("../docs/ECONOMY.md", import.meta.url);
 const doc = await readFile(path, "utf8");

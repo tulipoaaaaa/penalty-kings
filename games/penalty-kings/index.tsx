@@ -11,7 +11,7 @@ import {
   KEEPERS, keeperById, kickSeed, resolveShot, goalPoints, streakMultiplier, clamp, shotTarget,
   type KeeperId, type ShotInput, type ShotOutcome,
 } from "@penalty-kings/engine";
-import { RARITIES, TIERS, COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, tierForPrice, formatNumber, type Cosmetic } from "./economy.js";
+import { RARITIES, TIERS, COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, type Cosmetic } from "./economy.js";
 import { renderScene, ballFlightScreen, keeperPose, toScreen, drawBall, drawMask, SPOT, W, H, type SceneState } from "./scene.js";
 import { createCrowd, type Crowd } from "./audio.js";
 import liveConfig from "./live.json" with { type: "json" };
@@ -52,7 +52,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [score, setScore] = useState(0), [streak, setStreak] = useState(0), [bestRound, setBestRound] = useState(0);
   const [round, setRound] = useState<RoundState>({ kicks: [], suddenDeath: false, points: 0 });
   const [lastRound, setLastRound] = useState<RoundState | null>(null);
-  const [gboot, setGboot] = useState(0), [burned, setBurned] = useState(0);
+  const [gboot, setGboot] = useState(client.mode === "preview" ? SIM_STARTING_GBOOT : 0), [burned, setBurned] = useState(0);
   const [cupRF, setCupRF] = useState(SIM_CUP_SEED_RF), [cupGboot, setCupGboot] = useState(SIM_CUP_SEED_GBOOT);
   const [race, setRace] = useState(0), [wildcards, setWildcards] = useState(0);
   const [owned, setOwned] = useState<Set<string>>(() => new Set(COSMETICS.filter(item => item.price === 0).map(item => item.id)));
@@ -525,7 +525,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "hub" && <div className="pk-hub">
         {(["kitbag", "locker", "keeper", "cup", "shop", "stadium", "rules", "settings"] as const).map(id =>
           <button key={id} type="button" onClick={() => setMenu(id)} disabled={id === "keeper" && (inRound > 0 || Boolean(skillRun))}>{menuTitle(id)}</button>)}
-        {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT, Cup and shop resets on reload. Wallet and Friend ownership are real (SDK gate).</p>}
+        {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate).</p>}
       </div>}
 
       {menu === "kitbag" && <>

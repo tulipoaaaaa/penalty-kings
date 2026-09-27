@@ -31,6 +31,8 @@ jobs:
         run: npm run test:engine
       - name: Economy simulator smoke
         run: node scripts/economy-sim.mjs --smoke
+      - name: Weekly Cup computation tests (drops, race, wildcards)
+        run: npm run test:cup
       - name: Verifier tests (Skill Cup referee)
         run: npm run test:verifier
       - name: Verifier Worker bundles

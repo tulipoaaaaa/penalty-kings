@@ -66,10 +66,13 @@ export const COSMETICS: readonly Cosmetic[] = [
   { id: "cele-plane", kind: "celebration", name: "Aeroplane", price: 100 },
 ];
 
+/** Simulated preview only: starting $GBOOT so judges can try the shop, Wildcards and the Skill Cup. Labelled in the UI. */
+export const SIM_STARTING_GBOOT = 2500;
+
 /** Wildcard: an extra Cup race draw. 50% burned, 50% to the pot. */
-export const WILDCARD_PRICE = 100;
+export const WILDCARD_PRICE = 1000;
 
 /** Skill Cup entry: one 5-kick shootout vs Ghost. 50% burned, 50% to the Skill Cup pot. */
-export const SKILL_CUP_ENTRY = 100;
+export const SKILL_CUP_ENTRY = 1000;
 
 export const formatNumber = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 2 });
