@@ -90,6 +90,20 @@ For packs: a sealed pack that shakes and glows more as the wait goes on, then a 
 
 The Showroom has 0 / 5 / 15 s delay triggers for both flows. The preview's default is 0 s: it uses the SDK's own play and settle.
 
+**How it is built** (`game/suspense.ts`, `gfx/waits.ts`, wired in `index.tsx`):
+- **Pacing:** `waitCue(elapsed, expected)` drives the cue, and a wait that overruns its estimate moves up a tier on its own. Waits under 250 ms show nothing.
+- **Penalty:** `rollKeeper(shot, context, source, signal)` commits, waits for the beacon and returns `{ commitment, beacon, seed }`.
+  - It is used in the `penalties` and `match` modes (`BEACON_MODES`).
+  - The tutorial, World Tour, Daily (the same challenge for everyone) and the Skill Cup keep the deterministic `kickSeed`.
+  - A pause or session teardown aborts the wait. The kick is dropped unscored and the player aims it again.
+- **Pack:** `packCommitment(playIds, { friendId })` fixes the pack's commitment. `packRevealSequence(rarities, waitedMs)` orders the reveal from lowest to highest and places the sting before the best ball.
+- **Tests:** `tests/game/suspense.test.ts` covers the order commit → beacon → seed, no timer at 0 s, aborts never scoring, and the pack order. `scripts/test-flow.mjs` covers 2 s and 5 s penalty waits, a pause during a wait, and a 3 s sealed pack.
+
+**Design decision to confirm (keeper tells):** in the beacon modes the keeper's **pre-kick tell** is hidden, because the dive doesn't exist until the shot is committed; a tell shown before that would only be a guess.
+- The true tell still plays during the 0.4 s run-up once the beacon lands.
+- Disco's beat tell stays, because it depends only on the kick number.
+- This makes the Mime and the Robot harder to read. The alternative is to derive tells from something committed before the shot (for example the previous beacon round), which is fair but predictable.
+
 ## Entry points (for the fork)
 
 | Purpose | File · symbol |
@@ -99,5 +113,7 @@ The Showroom has 0 / 5 / 15 s delay triggers for both flows. The preview's defau
 | Keeper hit geometry (physics = render) | `packages/engine/src/keeper-rig.ts` |
 | Free kicks (skill modes, not paid) | `packages/engine/src/freekick.ts` · `resolveFreeKick` |
 | Commit / seed / pack draws / simulated beacon | `games/penalty-kings/game/randomness.ts` |
+| Wait orchestration (commit → beacon → seed; pack reveal order) | `games/penalty-kings/game/suspense.ts` · `rollKeeper`, `packCommitment`, `packRevealSequence`, `waitCue` |
+| Randomness source used by the shell (swap for the v0.2.1 beacon) | `games/penalty-kings/index.tsx` · `randomnessSource()` |
 | Reveal driven by the settled outcome | `games/penalty-kings/game/reveal.ts` · `revealPlan` |
 | Referee (store → seed → resolve → sign) | `verifier/src/core.ts` · `createReferee`, `diveSeed`, `replayEntry` |
