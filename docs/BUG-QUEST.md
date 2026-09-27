@@ -9,18 +9,18 @@ Four read-only review agents audited the code at `90c7e74`; their findings are t
 - CI must be green before every push.
 - Nothing is deployed on-chain.
 
-This table is updated as each fix lane merges.
+**P0 and all P1s are fixed.**
 
 | ID | Status | Commit | Test |
 |---|---|---|---|
-| BQ-P0-1 Pack soft-lock on Change mode | in progress (lane A1) | | |
+| BQ-P0-1 Pack soft-lock on Change mode | **fixed** | `5dd1d6a` | `scripts/test-flow.mjs` 11b "leaving a pack mid-reveal clears it; Penalties and Big Match start" (960 + 360); before: `__pkFlow()` stuck at pack:true, stage:true |
 | BQ-P1-1 Stage streak off by one | **fixed** | `64095db` | `tests/game/stage-streak.test.ts` (goals 1,2,3 → streak was [2,3,4], now [1,2,3]; chant from goal 2) |
 | BQ-P1-2 Ball passes through the keeper on non-goal results | **fixed** | `be16e2f` | `tests/game/keeper-sync.test.ts` "every result type" (48,000 fuzzed kicks, every keeper × NEUTRAL + L0–L8: 1,653 mismatches before, 0 after; goal rates unchanged) |
 | BQ-P1-3 The mouse's "top corners are always open" tell is false | **fixed** | `c36203c` | `packages/engine/test/engine.test.ts` "the mouse never saves a top-bin shot" (10,000/rung: 8.1% at NEUTRAL, up to 23.1% at L8 before; 0 after) |
-| BQ-P1-4 Clocks run behind the rotate overlay | in progress (lane A1) | | |
-| BQ-P1-5 Results XP omits per-kick XP and mid-session level-ups | in progress (lane A1) | | |
-| BQ-P1-6 Redeem the selected ball, then Kick → Ball shop | in progress (lane A1) | | |
-| BQ-P1-7 $GBOOT spent without confirmation (Skill Cup, Play again, Kit shop) | in progress (lane A1) | | |
+| BQ-P1-4 Clocks run behind the rotate overlay | **fixed** | `30b3056` | `scripts/test-flow.mjs` 5d "rotate card up for 6 s during a live shot clock: no timeout, no kick lost" (960) |
+| BQ-P1-5 Results XP omits per-kick XP and mid-session level-ups | **fixed** | `9ed2f6d` | `scripts/test-flow.mjs` 5a2 "Results XP == HUD XP gain; mid-session level-up listed" (was 80 vs 205) |
+| BQ-P1-6 Redeem the selected ball, then Kick → Ball shop | **fixed** | `56ff942` | `scripts/test-flow.mjs` 12b "carousel 'Kick with this ball' kicks with the shown ball" (960 + 360) |
+| BQ-P1-7 $GBOOT spent without confirmation (Skill Cup, Play again, Kit shop) | **fixed** | `cc0d90f` | `scripts/test-flow.mjs` 14 "Kit shop try-on is free; buying needs a confirmation" + "Skill Cup entry and Results 'Play again' spend only after a confirmation" (was 248.33 vs 252.33 on try-on) |
 | BQ-P1-8 Public site dead end without a wallet | **fixed** | `8cc3641` | `scripts/test-landing.mjs` (390×844, no wallet: CTA 354×56 above the fold, clip playing, tap → /practice/); timed out before the fix |
 | BQ-P1-9 Kick off button 73×24 px | **fixed** | `286e535` | `scripts/test-phone.mjs` "title CTA 960x640 / 1280x800" (was 73×24, now 104×44) |
 | BQ-P1-10 Tap targets under 44 px | **fixed** (Results/hub/Settings/Ball shop already ≥44; now covered) | `f38bb67` | `scripts/test-phone.mjs` + `scripts/test-practice.mjs` tap-target checks at 44 px (were: Skip intro 91×40, practice links 17 px, stadium bar 14 px) |
