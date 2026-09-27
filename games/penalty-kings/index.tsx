@@ -236,6 +236,20 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     ? { kind: "simulated", potRF: cupRF, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : 0, price: rfPrice }
     : { kind: "live", potRF: null, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : null, readAt: snapshot ? now : null, price: rfPrice };
   const pot = potBanner(prizeSource, now);
+  // BQ-P1-11: the commentator strip (canvas) drops below the DOM pot banner whenever they would overlap.
+  const potRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const scene = stage.current, node = canvas.current, potNode = potRef.current;
+    if (!scene || !node) return;
+    let top = 26;
+    if (potNode && potNode.offsetParent) {
+      const c = node.getBoundingClientRect(), p = potNode.getBoundingClientRect();
+      const scale = Math.min(c.width / W, c.height / H), originY = c.top + (c.height - H * scale) / 2, centre = c.left + c.width / 2;
+      if (scale > 0 && p.left < centre + 130 * scale && p.right > centre - 130 * scale) top = Math.max(26, Math.ceil((p.bottom - originY) / scale + 2));
+    }
+    scene.commentaryTop = Math.min(top, 120);
+    node.dataset.commentaryTop = String(scene.commentaryTop);
+  });
   const raceTable = [...SIM_RACE.map((points, index) => ({ name: RIVALS[index], points, mine: false })), { name: "Your Friend", points: race, mine: true }].sort((a, b) => b.points - a.points);
   const raceRank = raceTable.findIndex(row => row.mine) + 1;
 
@@ -1270,7 +1284,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onLostPointerCapture={event => { if (event.pointerId === pointer.current) { swipe.current = null; pointer.current = null; } }} />
 
       {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
-      <button type="button" className="pk-pot" data-testid="pot" data-tag={pot.tag} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
+      <button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
         <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra">{pot.priceNote} · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
       </button>
 

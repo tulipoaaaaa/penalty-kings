@@ -84,6 +84,15 @@ await testGame("./games/penalty-kings", {
     });
     assert.deepEqual(clipped, [], "pot banner is not truncated");
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");
+    // BQ-P1-11: the commentator strip (Stage.drawCommentary, 22 logical px tall at canvas[data-commentary-top]) never sits under the pot banner.
+    {
+      const canvasNode = game.locator("canvas.pk-canvas"), box = await canvasNode.boundingBox(), pot = await game.getByTestId("pot").boundingBox();
+      const logicalTop = Number(await canvasNode.getAttribute("data-commentary-top"));
+      const scale = Math.min(box.width / 480, box.height / 320), stripTop = box.y + (box.height - 320 * scale) / 2 + logicalTop * scale;
+      const centre = box.x + box.width / 2, across = pot.x < centre + 130 * scale && pot.x + pot.width > centre - 130 * scale;
+      assert.ok(Number.isFinite(logicalTop), "the shell reports the commentator strip position");
+      assert.ok(!across || pot.y + pot.height <= stripTop + 1, `pot banner (bottom ${Math.round(pot.y + pot.height)}) covers the commentator strip (top ${Math.round(stripTop)}) at ${width}px`);
+    }
     for (let kick = 1; kick <= 3; kick++) {
       await waitShootable();
       await swipe(kick === 2 ? -0.4 : 0.4);

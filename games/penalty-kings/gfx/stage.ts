@@ -135,6 +135,8 @@ export class Stage {
   private postWobble = 0; private goalFlash = 0;
   private bubble: { text: string; t: number } | null = null;
   private said: { text: string; t: number } | null = null;
+  /** Logical y of the commentator strip; the shell lowers it below the DOM pot banner when they would overlap (BQ-P1-11). */
+  commentaryTop = 26;
   private reveal: { rarity: number; t: number; plan: RevealPlan } | null = null;
   private scoreFlip = { from: 0, t: 1 };
   private reaction: "miss" | "save" | "post" = "miss";
@@ -784,7 +786,7 @@ export class Stage {
     const t = this.said.t, slide = ease.outBack(clamp01(t / 0.35)), fade = t > 2.8 ? 1 - (t - 2.8) / 0.4 : 1;
     const text = this.said.text.slice(0, Math.floor(t * 40)), width = Math.min(260, 30 + this.said.text.length * 4.6);
     c.globalAlpha = Math.max(0, fade);
-    const x = Math.round(W / 2 - width / 2), y = Math.round(lerp(-28, 26, slide));
+    const x = Math.round(W / 2 - width / 2), y = Math.round(lerp(-28, this.commentaryTop, slide));
     c.fillStyle = "#0b0d1ae6"; c.fillRect(x, y, width, 22); c.fillStyle = "#ffd23f"; c.fillRect(x, y + 21, width, 1);
     drawCommentator(c, x + 2, y + 2, text.length < this.said.text.length, this.time);
     c.fillStyle = "#f7f7f2"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillText(text, x + 25, y + 11); c.textBaseline = "alphabetic";
