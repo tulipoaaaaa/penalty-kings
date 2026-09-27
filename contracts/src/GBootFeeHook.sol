@@ -2,8 +2,10 @@
 pragma solidity ^0.8.36;
 
 // NOT DEPLOYED — requires audit and Rare Friends review.
-// Tokenomics v2 (round 6): the $GBOOT/RF launch pool uses this hook (fee 0 + a 1% hook fee burned on
-// both sides) so that the sinks can price in RF terms from an on-chain TWAP (docs/ECONOMY.md, "TWAP").
+// OFF BY DEFAULT: the launch default (owner decision "option B") is a PLAIN pool with a 1% LP fee and no
+// hook, whose fees LiquidityLock splits 50% burned / 50% to the Cup pot. This hook (fee 0 + a 1% hook fee
+// burned on both sides + an on-chain TWAP for RF-priced sinks, docs/ECONOMY.md "TWAP") is the upgrade
+// path after an audit; it needs a new pool, since the hook is part of the pool key.
 
 import { PoolKey, SwapParams } from "./interfaces/IUniswapV4.sol";
 

@@ -14,8 +14,7 @@ import { EmissionVault } from "../src/EmissionVault.sol";
 import { Bootroom, IBootroomGenerations } from "../src/Bootroom.sol";
 import { FriendsAirdrop, IBootroomLace } from "../src/FriendsAirdrop.sol";
 import { EdgeSplitter, ISplitterSwapper } from "../src/EdgeSplitter.sol";
-import { GBootFeeHook } from "../src/GBootFeeHook.sol";
-import { GBootPriceFeed } from "../src/GBootPriceFeed.sol";
+import { GBootFixedPrice } from "../src/GBootFixedPrice.sol";
 import { IGBootPriceFeed } from "../src/interfaces/IGBootPriceFeed.sol";
 import { RewardsDistributor, IRewardsGenerations, IRewardsSkillCup } from "../src/RewardsDistributor.sol";
 
@@ -23,11 +22,14 @@ import { RewardsDistributor, IRewardsGenerations, IRewardsSkillCup } from "../sr
 /// sequence: 55M single-sided pool position (locked), 20M drop vault (4-week seasons, halving), 10M
 /// Friends airdrop (pre-laced into the Bootroom), 10M Cups & events vault, 5M rewards vault (the
 /// RewardsDistributor's own halving EmissionVault: Skill Zone / streak rewards); no team allocation.
-/// The pool is $GBOOT/RF with LP fee 0 and the GBootFeeHook (1% burned on both sides inside every
-/// swap, plus the TWAP accumulator). GBootPriceFeed reads the 30-minute TWAP; KitShop, SkillCup and
-/// Wildcards are priced in RF and charge $GBOOT at that TWAP. Plus Bootroom and EdgeSplitter.
-/// The hook is deployed with CREATE2 (the deterministic deployer) at a salt mined here so that its
-/// address carries exactly the hook flags 0x10C4; `HOOK_SALT` may give a pre-mined starting salt.
+/// THE ONE DEFAULT (owner decision "option B": pool fees feed the pot): a PLAIN Uniswap v4
+/// $GBOOT/RF pool with a 1% LP fee and NO hook (GBootFeeHook stays designed but off until audited).
+/// The protocol-owned positions sit in LiquidityLock; anyone may call `collect` (weekly) and each
+/// fee side is split on-chain: 50% burned (RF.burn / GBoot.burn), 50% to the Cup pot (`CUP_POT`,
+/// default the disclosed burner, the same pot as EdgeSplitter, SkillCup and Wildcards).
+/// Without the hook there is no on-chain TWAP, so the sinks and rewards price through
+/// GBootFixedPrice (fixed 0.1 RF per $GBOOT: Skill Cup / Wildcard 100 $GBOOT, kits as listed).
+/// Plus Bootroom and EdgeSplitter (whose buy-back pays the pool's 1% fee like any swap).
 /// `REFEREE_SIGNER` is the address whose EIP-712 signatures authorise reward claims (the referee's
 /// reward key, scripts/cup/reward-signer.mjs); it falls back to the burner for rehearsals.
 ///
@@ -46,10 +48,8 @@ contract Launch is Script {
     address constant GENERATIONS = 0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D;
     address constant DICE_ENTROPY = 0xd8A0680e7699526B57140ED4EAfdCc7219Dc0A0c;
     address constant DICE_PROVIDER = 0x8741b8a825644D9Ef18Faf2DAB5e9b47B900F2b6;
-    /// CREATE2_FACTORY (forge-std Base) is the deterministic deployer 0x4e59…956C, code present on
-    /// Robinhood Chain (docs/ADDRESSES.md). HOOK_FLAGS must equal GBootFeeHook.FLAGS (checked below).
-    uint160 constant HOOK_MASK = (1 << 14) - 1;
-    uint160 constant HOOK_FLAGS = (1 << 12) | (1 << 7) | (1 << 6) | (1 << 2);
+    /// Uniswap v4 fee units (hundredths of a bip): 10,000 = 1% LP fee, all of it earned by the locked positions.
+    uint24 constant LP_FEE = 10_000;
     uint256 constant POOL_GBOOT = 55_000_000e18;
     uint256 constant DROPS_GBOOT = 20_000_000e18;
     uint256 constant AIRDROP_GBOOT = 10_000_000e18;
@@ -69,14 +69,14 @@ contract Launch is Script {
     EmissionVault internal bounty;
     FriendsAirdrop internal airdrop;
     EdgeSplitter internal splitter;
-    GBootFeeHook internal hook;
-    GBootPriceFeed internal feed;
+    GBootFixedPrice internal feed;
     RewardsDistributor internal rewards;
     uint256 internal start;
     PoolKey internal key;
     string internal prefix;
     uint256 internal firstId;
     uint256 internal positions;
+    address internal pot;
 
     function run() external {
         vm.startBroadcast();
@@ -99,8 +99,8 @@ contract Launch is Script {
         console2.log("BountyVault", address(bounty));
         console2.log("FriendsAirdrop", address(airdrop));
         console2.log("EdgeSplitter", address(splitter));
-        console2.log("GBootFeeHook", address(hook));
-        console2.log("GBootPriceFeed", address(feed));
+        console2.log("GBootFixedPrice", address(feed));
+        console2.log("CupPot", pot);
         console2.log("RewardsDistributor", address(rewards));
         console2.log("RewardsVault", address(bounty));
         console2.log("positionA", firstId);
@@ -110,47 +110,30 @@ contract Launch is Script {
     function _deploy(address burner) internal {
         start = block.timestamp;
         gboot = new GBoot();
-        hook = _deployHook();
+        pot = vm.envOr("CUP_POT", burner);
         bool gbootIs0 = address(gboot) < RF;
         prefix = gbootIs0 ? "PLAN_T0_" : "PLAN_T1_";
-        // LP fee 0: the hook takes and burns 1% of every swap instead.
-        key = gbootIs0 ? PoolKey(address(gboot), RF, 0, 200, address(hook)) : PoolKey(RF, address(gboot), 0, 200, address(hook));
-        feed = new GBootPriceFeed(key, address(gboot));
+        // Plain pool: 1% LP fee, no hook. The fee is collected by LiquidityLock and split burn / pot.
+        key = gbootIs0 ? PoolKey(address(gboot), RF, LP_FEE, 200, address(0)) : PoolKey(RF, address(gboot), LP_FEE, 200, address(0));
+        feed = new GBootFixedPrice();
         // KitShop item ids 0–14 match games/penalty-kings/economy.ts COSMETICS order. Prices are in RF:
         // the economy.ts $GBOOT price × 0.1 RF (the launch price), i.e. list[i] × 1e17 RF wei.
         uint256[15] memory list = [uint256(0), 6, 9, 0, 8, 15, 0, 4, 4, 0, 5, 7, 12, 9, 10];
         uint256[] memory pricesRf = new uint256[](15);
         for (uint256 i; i < 15; ++i) pricesRf[i] = list[i] * 1e17;
         shop = new KitShop(IGBoot(address(gboot)), IGBootPriceFeed(address(feed)), start, pricesRf);
-        lock = new LiquidityLock(IPositionManager(POSITION_MANAGER), burner, block.timestamp + vm.envOr("UNLOCK_DAYS", uint256(180)) * 1 days);
+        lock = new LiquidityLock(
+            IPositionManager(POSITION_MANAGER), burner, block.timestamp + vm.envOr("UNLOCK_DAYS", uint256(180)) * 1 days, RF, address(gboot), pot
+        );
         swapper = new PoolSwapper(IPoolManager(POOL_MANAGER));
-        // The pot for Skill Cup entries and Wildcards is the disclosed game treasury (the burner).
-        skillCup = new SkillCup(ISkillGenerations(GENERATIONS), ISkillToken(address(gboot)), IGBootPriceFeed(address(feed)), burner, start);
+        // One Cup pot for everything: Skill Cup entries, Wildcards, the edge split and the LP fees.
+        skillCup = new SkillCup(ISkillGenerations(GENERATIONS), ISkillToken(address(gboot)), IGBootPriceFeed(address(feed)), pot, start);
         wildcards = new Wildcards(
-            IWildcardGenerations(GENERATIONS), IWildcardToken(address(gboot)), IGBootPriceFeed(address(feed)), IWildcardEntropy(DICE_ENTROPY), DICE_PROVIDER, burner, start
+            IWildcardGenerations(GENERATIONS), IWildcardToken(address(gboot)), IGBootPriceFeed(address(feed)), IWildcardEntropy(DICE_ENTROPY), DICE_PROVIDER, pot, start
         );
     }
 
-    /// CREATE2 through the deterministic deployer at the first salt whose address has exactly the hook
-    /// flags. The hook is ownerless, so if that address already holds it, it is reused.
-    function _deployHook() internal returns (GBootFeeHook) {
-        bytes32 initHash = keccak256(abi.encodePacked(type(GBootFeeHook).creationCode, abi.encode(POOL_MANAGER)));
-        uint256 salt = vm.envOr("HOOK_SALT", uint256(0));
-        address predicted = _create2Address(salt, initHash);
-        while (uint160(predicted) & HOOK_MASK != HOOK_FLAGS) predicted = _create2Address(++salt, initHash);
-        console2.log("hook salt", salt);
-        if (predicted.code.length > 0) return GBootFeeHook(predicted);
-        GBootFeeHook deployed = new GBootFeeHook{ salt: bytes32(salt) }(POOL_MANAGER);
-        require(address(deployed) == predicted && deployed.FLAGS() == HOOK_FLAGS, "hook address");
-        return deployed;
-    }
-
     /// Everything except the pool's 55M leaves the deployer here; the operator is the disclosed burner.
-    /// Pure keccak (no cheatcode, no account loads on a fork) CREATE2 address through the factory.
-    function _create2Address(uint256 salt, bytes32 initHash) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), CREATE2_FACTORY, bytes32(salt), initHash)))));
-    }
-
     function _allocate(address operator) internal {
         drops = new EmissionVault(IERC20(address(gboot)), operator, block.timestamp, 2_500_000e18, 4);   // 10M per 4-week season, halving
         cups = new EmissionVault(IERC20(address(gboot)), operator, block.timestamp, 100_000e18, 0);      // flat: 100k per week
@@ -170,7 +153,7 @@ contract Launch is Script {
             vm.envOr("REFEREE_SIGNER", operator), start, 50_000e18, 52, sinkList
         );
         bounty = rewards.vault();
-        splitter = new EdgeSplitter(IERC20(RF), IERC20(address(gboot)), ISplitterSwapper(address(swapper)), key, operator, operator);
+        splitter = new EdgeSplitter(IERC20(RF), IERC20(address(gboot)), ISplitterSwapper(address(swapper)), key, pot, operator);
         gboot.transfer(address(drops), DROPS_GBOOT);
         gboot.transfer(address(cups), CUPS_GBOOT);
         gboot.transfer(address(bounty), BOUNTY_GBOOT);

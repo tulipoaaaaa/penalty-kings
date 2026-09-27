@@ -13,20 +13,22 @@
 | `Bootroom.sol` | Lacing: lock $GBOOT against a Friend for perk tiers 0–3 (cosmetics, XP, cup seeding; no payouts); 50% burn if unlaced early. Only the Friend (owner or token-bound account) or the whitelisted airdrop starts a lock; others only top up a live one; `lace(id, amount, weeks, maxUnlockAt)` reverts rather than join a longer lock |
 | `FriendsAirdrop.sol` | 10M pre-laced airdrop to Friends (Merkle); unclaimed tokens go to Cups after 180 days |
 | `EdgeSplitter.sol` | The 10% edge split: 40% RF burned / 30% $GBOOT bought back and burned / 30% Golden Boot Cup |
-| `LiquidityLock.sol` | Locks the launch liquidity; `collectAndBurn` burns both fee sides (permissionless) |
+| `LiquidityLock.sol` | Locks the launch liquidity; anyone's `collect` splits the 1% LP fees, per side, 50% burned / 50% to the Golden Boot Cup pot |
 | `KitShop.sol`, `SkillCup.sol`, `Wildcards.sol` | $GBOOT sinks (50% burned / 50% pot) |
 | `RewardsDistributor.sol` | Farm-proofed $GBOOT rewards: a referee EIP-712 signature, a hardwired Friend of generation ≤ 4, a real Skill Cup entry, per-entry and per-day caps, a season budget |
-| `GBootFeeHook.sol`, `GBootPriceFeed.sol` | Fee-burn hook plus a 30-minute TWAP (time-weighted average price) oracle, used to price sinks in RF |
+| `GBootFixedPrice.sol` | Launch-default price source: a fixed 0.1 RF per $GBOOT for the sinks and rewards (no hook, so no TWAP) |
+| `GBootFeeHook.sol`, `GBootPriceFeed.sol` | **Off by default.** Fee-burn hook plus a 30-minute TWAP (time-weighted average price) oracle, used to price sinks in RF after an audit |
 | `BallVault.sol` | Tradeable "Vault Balls" backed 1:1 by RF; a free-price escrow market; enforced edition scarcity |
-| `script/Launch.s.sol` | The whole launch wiring, rehearsed on a mainnet fork in CI |
+| `script/Launch.s.sol` | The whole launch wiring (the ONE default: plain pool, 1% LP fee, no hook, `LiquidityLock` and `EdgeSplitter` paying the Cup pot `CUP_POT`), rehearsed on a mainnet fork in CI |
 
-**Tests:** 184 Foundry unit/fuzz/invariant tests plus 7 mainnet-fork tests (`cd contracts && forge test`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
+**Tests:** 198 Foundry unit/fuzz/invariant tests plus 7 mainnet-fork tests (`cd contracts && forge test`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
 
 ## Recorded defaults (owner-approved design)
 
 | Setting | Default | Notes |
 |---|---|---|
-| **Fee hook** | **Off until audited.** Launch with a plain Uniswap v4 GBOOT/RF pool (no hook). | Without the hook there is no on-chain TWAP. So until the audit, the sinks use **fixed $GBOOT prices**: Skill Cup 100, Wildcards 100, kits as listed. RF-priced sinks switch on with the audited hook plus `GBootPriceFeed`. |
+| **Pool** | **Owner decision "option B": pool fees feed the pot.** A plain Uniswap v4 GBOOT/RF pool with a **1% LP fee and no hook**. The locked positions earn the fee; anyone's weekly `LiquidityLock.collect` splits each side 50% burned / 50% to the Golden Boot Cup pot. | Before this, the pool had LP fee 0 (the hook burned 1% instead), so the lock's burn collected nothing. The pot sizes are in [ECONOMY.md, "Where the pot comes from"](ECONOMY.md#where-the-pot-comes-from). |
+| **Fee hook** | **Off until audited.** | Without the hook there is no on-chain TWAP. So until the audit, the sinks use **fixed $GBOOT prices** through `GBootFixedPrice` (0.1 RF per $GBOOT): Skill Cup 100, Wildcards 100, kits as listed. RF-priced sinks switch on with the audited hook plus `GBootPriceFeed`, which needs a new pool. Known limit of fixed prices: if $GBOOT falls about 90%, Wildcards become a cheaper route to race points than balls (ECONOMY.md, farm check). |
 | **Rewards per entry** | **≤ 2 RF-equivalent** per Skill Cup entry | Enforced in `RewardsDistributor` |
 | **Rewards per day** | **≤ 3 RF-equivalent** per Friend per day | Enforced |
 | **Season 0 bootstrap** | **Proposed: 50,000 $GBOOT** (1% of the 5M rewards allocation) for the first 4-week season, under the same per-entry and per-day caps | The code currently pays **0** in season 0, because there is no previous season's burn to size it by. The proposal adds a one-time bootstrap constant for season 0 only. It's a one-line change plus a test, to be made when the upgrade is revived. At the 3 RF/day cap and 0.1 RF per $GBOOT, 50,000 $GBOOT serves about 1,600 capped Friend-days. |
@@ -38,7 +40,7 @@
 ## Reviving the upgrade later (checklist)
 
 1. An external audit of `GBootFeeHook` + `GBootPriceFeed` (or launch without them, per the default above).
-2. For the no-hook default: give `KitShop`, `SkillCup` and `Wildcards` a fixed-$GBOOT-price mode. The current contracts require `GBootPriceFeed`; the fixed-price versions are in git history before the F28 commit `be216b4`.
+2. For the no-hook default, the fixed-$GBOOT-price mode is `GBootFixedPrice` (done: `Launch.s.sol` wires it into `KitShop`, `SkillCup`, `Wildcards` and `RewardsDistributor`).
 3. Add the season-0 bootstrap constant and its test.
 4. Rehearse `Launch.s.sol` on a fork (`.github/workflows/rehearsal.yml`), then do a legal review (`HUMAN-CHECKS.md`).
 5. Only then deploy, from a fresh operator wallet, with every transaction logged in `TX-LOG.md` (rehearsal-first rules in the README).

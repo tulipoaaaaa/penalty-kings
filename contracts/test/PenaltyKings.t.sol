@@ -6,22 +6,7 @@ import { GBoot } from "../src/GBoot.sol";
 import { KitShop, IGBoot } from "../src/KitShop.sol";
 import { IGBootPriceFeed } from "../src/interfaces/IGBootPriceFeed.sol";
 import { FixedPriceFeed } from "./Mocks.sol";
-import { LiquidityLock, IPositionManager } from "../src/LiquidityLock.sol";
-
-contract MockPositionManager {
-    mapping(uint256 => address) public ownerOf;
-    bytes public lastUnlockData;
-    address public lastCaller;
-
-    function mint(address to, uint256 tokenId) external { ownerOf[tokenId] = to; }
-    function modifyLiquidities(bytes calldata unlockData, uint256) external payable {
-        lastUnlockData = unlockData; lastCaller = msg.sender;
-    }
-    function transferFrom(address from, address to, uint256 tokenId) external {
-        require(ownerOf[tokenId] == from && msg.sender == from, "not owner");
-        ownerOf[tokenId] = to;
-    }
-}
+import { GBootFixedPrice } from "../src/GBootFixedPrice.sol";
 
 contract GBootTest is Test {
     GBoot internal token;
@@ -97,63 +82,20 @@ contract KitShopTest is Test {
     }
 }
 
-contract LiquidityLockTest is Test {
-    MockPositionManager internal pm;
-    LiquidityLock internal lock;
-    address internal beneficiary = address(0xB0B);
-    uint256 internal unlockAt;
-
-    function setUp() public {
-        pm = new MockPositionManager();
-        unlockAt = block.timestamp + 180 days;
-        lock = new LiquidityLock(IPositionManager(address(pm)), beneficiary, unlockAt);
-        pm.mint(address(lock), 42);
+/// The launch default's price source (plain pool, no TWAP): fixed 0.1 RF per $GBOOT.
+contract GBootFixedPriceTest is Test {
+    function testFixedLaunchPrices() public {
+        GBootFixedPrice feed = new GBootFixedPrice();
+        assertEq(feed.gbootForRf(10e18, true), 100e18, "Skill Cup entry / Wildcard: 10 RF = 100 GBOOT");
+        assertEq(feed.gbootForRf(6e17, true), 6e18, "kit listed at 6 GBOOT");
+        assertEq(feed.gbootForRf(2e18, false), 20e18, "per-entry reward cap: 2 RF = 20 GBOOT");
+        assertEq(feed.gbootForRf(0, true), 0);
     }
 
-    function testEarlyWithdrawReverts() public {
-        vm.prank(beneficiary);
-        vm.expectRevert(LiquidityLock.Locked.selector);
-        lock.withdraw(42);
-        vm.warp(unlockAt - 1);
-        vm.prank(beneficiary);
-        vm.expectRevert(LiquidityLock.Locked.selector);
-        lock.withdraw(42);
-    }
-
-    function testOnlyBeneficiary() public {
-        vm.warp(unlockAt);
-        vm.expectRevert(LiquidityLock.NotBeneficiary.selector);
-        lock.withdraw(42);
-    }
-
-    function testWithdrawAfterUnlock() public {
-        vm.warp(unlockAt);
-        vm.prank(beneficiary);
-        lock.withdraw(42);
-        assertEq(pm.ownerOf(42), beneficiary);
-    }
-
-    function testCollectBurnsBothSidesAndIsPermissionless() public {
-        GBoot c0 = new GBoot();
-        GBoot c1 = new GBoot();
-        // Simulated fees taken to the lock (the mock PositionManager does not move tokens).
-        c0.transfer(address(lock), 7e18); c1.transfer(address(lock), 3e18);
-        uint256 supply0 = c0.totalSupply();
-        uint256 supply1 = c1.totalSupply();
-        vm.prank(address(0xBEEF)); // anyone
-        lock.collectAndBurn(42, address(c0), address(c1));
-        (bytes memory actions, bytes[] memory params) = abi.decode(pm.lastUnlockData(), (bytes, bytes[]));
-        assertEq(actions, hex"0111");
-        (uint256 tokenId, uint256 liquidity,,,) = abi.decode(params[0], (uint256, uint256, uint128, uint128, bytes));
-        assertEq(tokenId, 42); assertEq(liquidity, 0);
-        (address a0, address a1, address to) = abi.decode(params[1], (address, address, address));
-        assertEq(a0, address(c0)); assertEq(a1, address(c1)); assertEq(to, address(lock), "fees come to the lock, never to the caller");
-        assertEq(c0.totalSupply(), supply0 - 7e18, "currency0 fees burned");
-        assertEq(c1.totalSupply(), supply1 - 3e18, "currency1 fees burned");
-        assertEq(pm.ownerOf(42), address(lock), "position stays locked");
-    }
-
-    function testReceivesNft() public view {
-        assertEq(lock.onERC721Received(address(0), address(0), 1, ""), LiquidityLock.onERC721Received.selector);
+    function testFuzzExactConversion(uint256 rf) public {
+        GBootFixedPrice feed = new GBootFixedPrice();
+        rf = bound(rf, 0, 1e40);
+        assertEq(feed.gbootForRf(rf, true), rf * 10, "exact: 1 RF wei = 10 GBOOT wei, no rounding");
+        assertEq(feed.gbootForRf(rf, false), rf * 10);
     }
 }

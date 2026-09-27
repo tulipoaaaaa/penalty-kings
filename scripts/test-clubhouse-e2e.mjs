@@ -45,8 +45,8 @@ const deployerWallet = createWalletClient({ account: { address: DEPLOYER, type: 
 const cupsVault = grab("CupsVault");
 assert.ok(cupsVault, "deployed CupsVault");
 await client.waitForTransactionReceipt({ hash: await deployerWallet.writeContract({ address: cupsVault, abi: parseAbi(["function release(address,uint256)"]), functionName: "release", args: [owner, parseEther("500")], chain: null }) });
-// The sinks are priced in RF at the pool's 30-minute TWAP (GBootFeeHook + GBootPriceFeed): let 30 minutes
-// of pool history pass on the fork before buying.
+// Launch default: the sinks price through GBootFixedPrice (0.1 RF per $GBOOT; no hook, no TWAP). The
+// 30-minute time skip is kept so the same test also covers a TWAP-priced (audited hook) deployment.
 await rpc("evm_increaseTime", [toHex(31 * 60)]);
 await rpc("evm_mine", []);
 
@@ -91,18 +91,18 @@ try {
   await page.getByRole("button", { name: new RegExp(`^Friend #${FRIEND} `) }).click({ timeout: 120_000 });
   await button("Skill Cup").waitFor({ timeout: 60_000 });
 
-  // Kit shop: unlock Volt boots (item 1: 0.6 RF, ≈ 6 $GBOOT at the launch TWAP, burned).
+  // Kit shop: unlock Volt boots (item 1: 0.6 RF = 6 $GBOOT at the fixed launch price, burned).
   const supplyBefore = await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" });
   const voltQuote = await client.readContract({ address: live.kitShop, abi: parseAbi(["function quote(uint256) view returns (uint256)"]), functionName: "quote", args: [1n] });
-  assert.ok(voltQuote > parseEther("5.9") && voltQuote < parseEther("6.1"), `0.6 RF ≈ 6 $GBOOT at the launch TWAP (${voltQuote})`);
+  assert.ok(voltQuote > parseEther("5.9") && voltQuote < parseEther("6.1"), `0.6 RF ≈ 6 $GBOOT at the launch price (${voltQuote})`);
   await button("Kit shop").click();
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByRole("button").click();
   await confirmTx(); await confirmTx();
   await page.locator(".item").filter({ hasText: "Volt boots" }).getByText("unlocked").waitFor({ timeout: 60_000 });
   const unlocked = await client.readContract({ address: live.kitShop, abi: parseAbi(["function unlocked(uint256,uint256) view returns (bool)"]), functionName: "unlocked", args: [FRIEND, 1n] });
   assert.equal(unlocked, true, "KitShop unlock recorded on-chain");
-  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), voltQuote, "the TWAP quote was burned");
-  console.log(`PASS kit unlock: on-chain, ${voltQuote} wei $GBOOT (0.6 RF at the TWAP) burned`);
+  assert.equal(supplyBefore - await client.readContract({ address: live.gboot, abi: gbootAbi, functionName: "totalSupply" }), voltQuote, "the quote was burned");
+  console.log(`PASS kit unlock: on-chain, ${voltQuote} wei $GBOOT (0.6 RF at the launch price) burned`);
 
   // Skill Cup: on-chain entry, then 5 flicks judged by the referee.
   await button("Skill Cup").click();
@@ -125,7 +125,7 @@ try {
   assert.equal(board.length, 1); assert.equal(board[0].friendId, FRIEND.toString());
   console.log(`PASS Skill Cup: on-chain entry, 5 referee-judged kicks, signed score ${board[0].score}`);
 
-  // Wildcard: pays 10 RF in $GBOOT (TWAP) + Dice fee; the request is on-chain (delivery needs the live provider).
+  // Wildcard: pays 10 RF in $GBOOT (100 $GBOOT at the fixed launch price) + Dice fee; the request is on-chain (delivery needs the live provider).
   await button("Wildcards").click();
   await button("Draw a wildcard").click();
   await confirmTx(); await confirmTx();

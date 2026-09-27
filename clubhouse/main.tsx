@@ -3,8 +3,9 @@
  * perform (its CSP allows only the Robinhood RPC and it has no signer):
  *   • Skill Cup: on-chain entry (SkillCup.enter) + 5 kicks judged by the replay referee
  *   • Kit shop: KitShop.buy burns $GBOOT for cosmetics recorded per Friend
- * Prices are fixed in RF and charged in $GBOOT at the pool's 30-minute TWAP (each contract's `quote`);
- * every purchase passes maxGbootIn = quote + 2% so a moving TWAP can never charge more than shown.
+ * Prices are fixed in RF and charged in $GBOOT at the contracts' price source (each contract's `quote`):
+ * a fixed 0.1 RF per $GBOOT in the launch default (plain pool, no hook), the 30-minute TWAP only with the
+ * audited hook. Every purchase passes maxGbootIn = quote + 2%, so a moving price can never charge more than shown.
  *   • Wildcards: an extra Golden Boot Cup draw with Dice randomness
  * Wallet connection, owned-Friend discovery and the fresh hardwired check are the SDK's own
  * (`wallet`, `owned`, `identity` modules). Every transaction needs an explicit confirmation here
@@ -33,7 +34,7 @@ const WILDCARDS = parseAbi(["function draw(uint256 friendId, uint256 maxGbootIn)
 const ENTROPY = parseAbi(["function getFeeV2(address provider, uint32 gasLimit) view returns (uint128)"]);
 const FRIEND_WALLET = parseAbi(["function execute(address to, uint256 value, bytes data, uint8 operation) payable returns (bytes result)"]);
 const MAX_DICE_FEE = 25_000_000_000_000n; // 0.000025 ETH, the FriendSDK cap
-/** Slippage bound on RF-priced sinks: the TWAP may move between the quote and inclusion. */
+/** Slippage bound on RF-priced sinks: with the audited hook the TWAP may move between the quote and inclusion. */
 const withSlippage = (quote: bigint) => (quote * 102n + 99n) / 100n;
 const fmt = (value: bigint) => Number(formatUnits(value, 18)).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
@@ -180,7 +181,7 @@ function ShopPanel({ friend, client, send, approve, guard, refresh }: PanelProps
         const quote = await client.readContract({ address: LIVE.kitShop!, abi: KITSHOP, functionName: "quote", args: [BigInt(index)] });
         const max = withSlippage(quote);
         if (max > 0n) await approve(LIVE.kitShop!, max);
-        await send(`Unlock ${item.name}`, [`Burn ${fmt(quote)} $GBOOT (its RF price at the 30-minute TWAP; at most ${fmt(max)}) to unlock ${item.name} for Friend #${friend.id}.`], { address: LIVE.kitShop!, abi: KITSHOP, functionName: "buy", args: [friend.id, BigInt(index), max] });
+        await send(`Unlock ${item.name}`, [`Burn ${fmt(quote)} $GBOOT (its RF price at the launch price of 0.1 RF per $GBOOT; at most ${fmt(max)}) to unlock ${item.name} for Friend #${friend.id}.`], { address: LIVE.kitShop!, abi: KITSHOP, functionName: "buy", args: [friend.id, BigInt(index), max] });
       })}>{item.price ? `${(item.price / 10).toLocaleString("en-US")} RF in $GBOOT` : "Free"}</button>}
     </div>)}</div>
   </section>;
@@ -199,7 +200,7 @@ function WildcardPanel({ friend, client, send, approve, guard }: PanelProps) {
   }, [draw, client]);
   return <section className="card">
     <h2>Wildcards: an extra Golden Boot Cup draw</h2>
-    <p>10 RF paid in $GBOOT at the 30-minute TWAP (50% burned, 50% to the Cup pot) + the Dice randomness fee (≤ 0.000025 ETH; any overpayment is refunded). Odds: Gold 2.5% (1 race point), Golden Boot 1% (2 points), otherwise no points. Points count toward this week's Cup race.</p>
+    <p>100 $GBOOT (10 RF at the launch price; 50% burned, 50% to the Cup pot) + the Dice randomness fee (≤ 0.000025 ETH; any overpayment is refunded). Odds: Gold 2.5% (1 race point), Golden Boot 1% (2 points), otherwise no points. Points count toward this week's Cup race.</p>
     <button className="primary" onClick={() => void guard(async () => {
       const [entropy, provider] = await Promise.all([client.readContract({ address: LIVE.wildcards!, abi: WILDCARDS, functionName: "entropy" }), client.readContract({ address: LIVE.wildcards!, abi: WILDCARDS, functionName: "provider" })]);
       const fee = await client.readContract({ address: entropy, abi: ENTROPY, functionName: "getFeeV2", args: [provider, 200_000] });
@@ -207,7 +208,7 @@ function WildcardPanel({ friend, client, send, approve, guard }: PanelProps) {
       const quote = await client.readContract({ address: LIVE.wildcards!, abi: WILDCARDS, functionName: "quote" });
       const max = withSlippage(quote);
       await approve(LIVE.wildcards!, max);
-      const receipt = await send("Draw a wildcard", [`Pay ${fmt(quote)} $GBOOT (10 RF at the TWAP; at most ${fmt(max)}) and ${formatUnits(fee, 18)} ETH (Dice fee) for one draw for Friend #${friend.id}.`], { address: LIVE.wildcards!, abi: WILDCARDS, functionName: "draw", args: [friend.id, max], value: fee });
+      const receipt = await send("Draw a wildcard", [`Pay ${fmt(quote)} $GBOOT (10 RF at the launch price; at most ${fmt(max)}) and ${formatUnits(fee, 18)} ETH (Dice fee) for one draw for Friend #${friend.id}.`], { address: LIVE.wildcards!, abi: WILDCARDS, functionName: "draw", args: [friend.id, max], value: fee });
       const [requested] = parseEventLogs({ abi: WILDCARDS, eventName: "WildcardRequested", logs: receipt.logs.filter(log => log.address.toLowerCase() === LIVE.wildcards!.toLowerCase()) });
       if (!requested) throw new Error("Draw receipt has no WildcardRequested event.");
       setDraw({ id: requested.args.drawId, points: null });
@@ -239,12 +240,12 @@ function SkillCupPanel({ friend, client, send, approve, guard }: PanelProps) {
   };
   return <section className="card">
     <h2>Skill Cup: 5 kicks vs THE FINAL WALL</h2>
-    <p>Entry 10 RF paid in $GBOOT at the 30-minute TWAP (50% burned, 50% to the pot), on-chain. Friends hardwired at Gen 4 or better only. The referee replays every kick: your inputs are committed before the keeper's dive is derived from this week's secret{week ? <> (hash <code>{week.secretHash.slice(0, 18)}…</code>, revealed after week {week.week})</> : null}. Best score wins; ties go to the earlier entry. One entry per Friend per hour, 20 per week.</p>
+    <p>Entry 100 $GBOOT (10 RF at the launch price; 50% burned, 50% to the pot), on-chain. Friends hardwired at Gen 4 or better only. The referee replays every kick: your inputs are committed before the keeper's dive is derived from this week's secret{week ? <> (hash <code>{week.secretHash.slice(0, 18)}…</code>, revealed after week {week.week})</> : null}. Best score wins; ties go to the earlier entry. One entry per Friend per hour, 20 per week.</p>
     {entry === null ? <button className="primary" onClick={() => void guard(async () => {
       const quote = await client.readContract({ address: LIVE.skillCup!, abi: SKILLCUP, functionName: "quote" });
       const max = withSlippage(quote);
       await approve(LIVE.skillCup!, max);
-      const receipt = await send("Enter the Skill Cup", [`Pay ${fmt(quote)} $GBOOT (10 RF at the TWAP; at most ${fmt(max)}; half burned, half to the pot) for one shootout with Friend #${friend.id}.`], { address: LIVE.skillCup!, abi: SKILLCUP, functionName: "enter", args: [friend.id, max] });
+      const receipt = await send("Enter the Skill Cup", [`Pay ${fmt(quote)} $GBOOT (10 RF at the launch price; at most ${fmt(max)}; half burned, half to the pot) for one shootout with Friend #${friend.id}.`], { address: LIVE.skillCup!, abi: SKILLCUP, functionName: "enter", args: [friend.id, max] });
       const registered = await post("/entry", { txHash: receipt.transactionHash });
       setEntry(registered.entryId); setKicks([]); setScore(0); setSigned(null);
     })}>Enter · 10 RF in $GBOOT</button>

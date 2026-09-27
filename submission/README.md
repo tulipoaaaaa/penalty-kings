@@ -130,7 +130,7 @@ The pilot ships without $GBOOT. The upgrade package is kept for later:
 - farm-proofed rewards: at most 2 RF-equivalent per entry and 3 per day;
 - a free-price, RF-backed ball market (BallVault).
 
-It is covered by Foundry unit, fuzz, invariant and mainnet-fork tests. The owner approved it as a **design only**; the recorded defaults (no fee hook until audited, a proposed season-0 bootstrap, what the perk tiers mean) are in
+It is covered by Foundry unit, fuzz, invariant and mainnet-fork tests. The owner approved it as a **design only**; the recorded defaults (a plain pool with a 1% LP fee and no hook until audited, whose fees are split 50% burned / 50% to the Cup pot; a proposed season-0 bootstrap, what the perk tiers mean) are in
 [docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/GBOOT-UPGRADE.md),
 and the full maths is in [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md).
 

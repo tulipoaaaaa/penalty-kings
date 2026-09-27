@@ -77,13 +77,19 @@ export const PERKS = [
 
 /** FriendsAirdrop, SkillCup, Wildcards, LiquidityLock / pool. */
 export const AIRDROP = { LOCK_WEEKS: 12, CLAIM_WINDOW_DAYS: 180 };
-/** RF-priced sinks: the $GBOOT charged is ⌈price_RF ÷ TWAP⌉ (GBootPriceFeed, 30-minute TWAP). */
+/** RF-priced sinks: the $GBOOT charged is ⌈price_RF ÷ price⌉. Launch default: GBootFixedPrice (fixed
+ *  0.1 RF per $GBOOT, so 10 RF = 100 $GBOOT); with the audited hook: GBootPriceFeed (30-minute TWAP). */
 export const SKILL_CUP = { ENTRY_RF: 10, BURN_SHARE: 0.5, WEEKLY_LIMIT: 20, COOLDOWN_H: 1 };
 export const WILDCARD = { PRICE_RF: 10, BURN_SHARE: 0.5 };
 export const TWAP = { PERIOD_S: 1800, MAX_DEVIATION_TICKS: 1000, CHECKPOINT_S: 60, CARDINALITY: 64 };
 /** RewardsDistributor: RF-valued rewards tied to a paid Skill Cup entry, per-Friend daily cap, season budget. */
 export const REWARDS = { MAX_GENERATION: 4, SEASON_WEEKS: 4, DAILY_CAP_RF: 3, ENTRY_CAP_BPS: 2_000, MAX_VALIDITY_DAYS: 7 };
-export const POOL = { FEE: 0.01, UNLOCK_DAYS: 180 };
+/** Launch default (owner decision "option B"): a PLAIN v4 pool, 1% LP fee, no hook. The locked
+ *  positions earn the fee; LiquidityLock.collect splits each side 50% burned / 50% to the Cup pot. */
+export const POOL = { FEE: 0.01, UNLOCK_DAYS: 180, HOOK: false };
+export const LOCK = { BURN_BPS: 5_000 };
+/** GBootFixedPrice.RF_PER_GBOOT_WAD: the fixed sink/reward price while there is no hook (no TWAP). */
+export const FIXED_PRICE = 0.1;
 /** Nominal launch price used by the drop schedule (games/penalty-kings/economy.ts); the tick-snapped pool start is 0.10027. */
 export const NOMINAL_PRICE = 0.1;
 export const DROP_SHARE = 0.02;           // base drop value = 2% of the ball price at ×1 (economy.ts)
@@ -102,8 +108,14 @@ export function checkContracts(root = new URL("../../", import.meta.url)) {
   expect(launch, /drops = new EmissionVault\([^;]*2500000e18, 4\)/, "drop vault 2.5M/week, halving every 4 weeks");
   expect(launch, /cups = new EmissionVault\([^;]*100000e18, 0\)/, "cups vault 100k/week flat");
   expect(launch, /rewards = new RewardsDistributor\([^;]*50000e18, 52, sinkList/, "rewards vault 50k/week, halving every 52 weeks");
-  expect(launch, /PoolKey\(address\(gboot\), RF, 0, 200, address\(hook\)\)/, "pool: LP fee 0 + GBootFeeHook");
-  expect("contracts/src/GBootFeeHook.sol", /FEEBPS = 100;/, "hook fee 1% burned");
+  expect(launch, /LPFEE = 10000;/, "pool: 1% LP fee");
+  expect(launch, /PoolKey\(address\(gboot\), RF, LPFEE, 200, address\(0\)\)/, "pool: plain (no hook), 1% LP fee");
+  if (/new GBootFeeHook|new GBootPriceFeed|import \{ (GBootFeeHook|GBootPriceFeed) \}/.test(read(launch))) throw new Error("tokenomics drift: the launch default must not deploy the hook or the TWAP feed");
+  expect(launch, /new GBootFixedPrice\(\)/, "sinks priced by GBootFixedPrice");
+  expect(launch, /new LiquidityLock\([^;]*RF, address\(gboot\), pot\s*\)/, "LiquidityLock wired to the Cup pot");
+  expect(launch, /new EdgeSplitter\([^;]*key, pot, operator\)/, "EdgeSplitter wired to the Cup pot");
+  expect("contracts/src/GBootFixedPrice.sol", /RFPERGBOOTWAD = 0.1e18;/, "fixed price 0.1 RF per $GBOOT");
+  expect("contracts/src/GBootFeeHook.sol", /FEEBPS = 100;/, "hook (designed, off until audited) fee 1%");
   expect("contracts/src/GBootPriceFeed.sol", /PERIOD = 30 minutes;[\s\S]*MAXDEVIATIONTICKS = 1000;/, "TWAP 30 min, 1,000-tick guard");
   expect("contracts/src/EdgeSplitter.sol", /BURNBPS = 4000;[\s\S]*BUYBACKBPS = 3000;/, "edge split 40/30/30");
   expect("contracts/src/Bootroom.sol", /MAXWEEKS = 52;[\s\S]*MAXLACE = 10000e18;[\s\S]*XMAX = 520000;[\s\S]*TIER2BPS = 5000;[\s\S]*TIER3BPS = 8500;/, "Bootroom constants");
@@ -112,6 +124,6 @@ export function checkContracts(root = new URL("../../", import.meta.url)) {
   expect("contracts/src/SkillCup.sol", /ENTRYRF = 10e18;[\s\S]*WEEKLYLIMIT = 20;/, "Skill Cup entry 10 RF");
   expect("contracts/src/Wildcards.sol", /PRICERF = 10e18;/, "Wildcards 10 RF");
   expect("contracts/src/RewardsDistributor.sol", /MAXGENERATION = 4;[\s\S]*SEASONWEEKS = 4;[\s\S]*DAILYCAPRF = 3e18;[\s\S]*ENTRYCAPBPS = 2000;[\s\S]*MAXVALIDITY = 7 days;/, "rewards caps");
-  expect("contracts/src/LiquidityLock.sol", /if \(burned0 > 0\) IBurnableCurrency\(currency0\)\.burn[\s\S]*if \(burned1 > 0\) IBurnableCurrency\(currency1\)\.burn/, "LP fees burned on both sides");
+  expect("contracts/src/LiquidityLock.sol", /BURNBPS = 5000;[\s\S]*burned = \(amount \* BURNBPS\) \/ 10000;\s*toPot = amount - burned;[\s\S]*\.burn\(burned\)[\s\S]*safeTransfer\(pot, toPot\)/, "LP fees: 50% burned / 50% to the pot, each side");
   return true;
 }
