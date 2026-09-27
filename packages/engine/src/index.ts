@@ -6,6 +6,7 @@
  *
  * Goal-plane units: posts at x = ±1, ground at y = 0, crossbar at y = 1.
  */
+import { keeperFrame, keeperTouch, BALL_RADIUS, GOAL_ASPECT, LEG_CHANCE, type KeeperPart } from "./keeper-rig.ts";
 
 export type ShotInput = Readonly<{
   /** Aim across the goal face, goal units (posts at ±1). WHERE you point is where it goes. */
@@ -86,7 +87,6 @@ export function kickSeed(ballId: number, kickIndex: number, keeper: KeeperId) {
 }
 
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const BALL_RADIUS = 0.045;
 const FRAME = 0.025;
 
 /** Power above this is an overhit: it adds rise (up to +0.4 goal units at full power) and can clear the bar. */
@@ -117,6 +117,10 @@ export type KeeperPlan = Readonly<{
   scan?: number;
   /** Boss phase 1–3. */
   phase?: number;
+  /** Arm-length multiplier (difficulty reach × boss phase); 1 = the keeper's art. */
+  armScale?: number;
+  /** This dive leaves a trailing leg across the middle (drawn, and it saves only what it touches). */
+  leg?: boolean;
 }>;
 
 /** Keeper dive decision. Seeded + context, so the same inputs always dive the same way. */
@@ -163,7 +167,7 @@ export function keeperPlan(profile: KeeperProfile, seed: number, target: { x: nu
   }
 }
 
-/** Keeper hand position at time t after the strike. */
+/** Keeper hand position at time t after the strike (free kicks; penalties use keeperFrame). */
 export function keeperAt(plan: KeeperPlan, t: number) {
   const raw = clamp((t - plan.reaction) / plan.diveTime, 0, 1);
   const progress = plan.teleport ? (raw > 0.5 ? 1 : 0) : 1 - (1 - raw) ** 2;
@@ -203,6 +207,8 @@ export type ShotOutcome = Readonly<{
   zone: Zone;
   /** Clipped the inside of the post and went in. */
   postIn: boolean;
+  /** Which part of the keeper the ball hit (saves only). */
+  touch?: KeeperPart;
 }>;
 
 /** Independent seeded stream for judgement calls, so the base dive plan never shifts. */
@@ -210,7 +216,8 @@ const judge = (seed: number) => prng((seed ^ 0x9e3779b9) >>> 0);
 
 /** Applies read probability and difficulty to a plan. Pure. */
 function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: number; y: number }, roll: () => number, difficulty: Difficulty): KeeperPlan {
-  let next: KeeperPlan = { ...plan, reaction: Math.max(0, plan.reaction + difficulty.reaction), reach: plan.reach * difficulty.reach };
+  const leg = !plan.wall && !plan.teleport && roll() < LEG_CHANCE;
+  let next: KeeperPlan = { ...plan, reaction: Math.max(0, plan.reaction + difficulty.reaction), reach: plan.reach * difficulty.reach, armScale: difficulty.reach * (profile.reach ? plan.reach / profile.reach : 1), leg };
   const read = clamp(profile.read + difficulty.read, 0, 0.95);
   // A read: the keeper guesses the right side and height. Walls and teleports already "know".
   if (!plan.wall && !plan.teleport && Math.abs(target.x) > 0.2 && roll() < read) {
@@ -219,7 +226,11 @@ function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: numbe
   return next;
 }
 
-/** Resolve a shot: frame first, then keeper (wall, body, hands), then goal. Pure and deterministic. */
+/**
+ * Resolve a shot: frame first, then the keeper, then goal. Pure and deterministic.
+ * The keeper saves ONLY if the ball touches his body, arms, gloves, trailing leg or (mime) wall at the
+ * moment it crosses the line: keeperFrame(plan, target.time), the very frame the Stage draws.
+ */
 export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: number, context: KickContext = NO_CONTEXT, difficulty: Difficulty = NEUTRAL): ShotOutcome {
   const target = shotTarget(shot);
   const roll = judge(seed);
@@ -229,20 +240,18 @@ export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: numbe
   const hitsPost = Math.abs(ax - 1) < BALL_RADIUS + FRAME && target.y < 1 + BALL_RADIUS;
   const hitsBar = Math.abs(target.y - 1) < BALL_RADIUS + FRAME && ax < 1 + BALL_RADIUS;
   const postRoll = roll();
+  const touch = () => keeperTouch(keeperFrame(profile.id, plan, target.time), { x: target.x, y: target.y * GOAL_ASPECT });
   if (hitsPost || hitsBar) {
-    // Clipping the inside of the frame deflects in half the time: "in off the post".
-    const inside = ax < 1 - FRAME && target.y < 1 - FRAME;
-    return { result: inside && postRoll < 0.5 ? "goal" : "post", target, plan, zone, postIn: inside && postRoll < 0.5 };
+    // Clipping the inside of the frame deflects in half the time: "in off the post" (unless the keeper is right there).
+    const postIn = ax < 1 - FRAME && target.y < 1 - FRAME && postRoll < 0.5;
+    const hit = postIn ? touch() : null;
+    if (hit) return { result: "save", target, plan, zone, postIn: false, touch: hit };
+    return { result: postIn ? "goal" : "post", target, plan, zone, postIn };
   }
   if (ax > 1) return { result: "wide", target, plan, zone, postIn: false };
   if (target.y > 1) return { result: "over", target, plan, zone, postIn: false };
-  if (plan.wall && target.x >= plan.wall[0] && target.x <= plan.wall[1]) return { result: "save", target, plan, zone, postIn: false };
-  const hands = keeperAt(plan, target.time);
-  const body = Math.abs(target.x - hands.x * 0.6) < plan.body + 0.04 && target.y < 0.85;
-  const reach = Math.hypot(target.x - hands.x, (target.y - Math.min(hands.y, plan.maxY)) * 1.2) < plan.reach && target.y <= plan.maxY + plan.reach * 0.6;
-  // Low centre shots usually meet a trailing leg; a chipped centre (Panenka) beats it.
-  const trailingLeg = zone === "centre" && target.y < 0.55 && !plan.teleport && roll() < 0.7;
-  return { result: body || reach || trailingLeg ? "save" : "goal", target, plan, zone, postIn: false };
+  const hit = touch();
+  return hit ? { result: "save", target, plan, zone, postIn: false, touch: hit } : { result: "goal", target, plan, zone, postIn: false };
 }
 
 /** Flight position at progress p (0 … 1), before projection. */
@@ -383,3 +392,4 @@ export function nextDifficultyLevel(level: number, history: readonly ShotRecord[
   return clamp(level + step, 0, DIFFICULTY_LADDER.length - 1);
 }
 export * from "./freekick.ts";
+export * from "./keeper-rig.ts";

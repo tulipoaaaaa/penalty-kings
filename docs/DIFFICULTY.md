@@ -13,15 +13,28 @@ game and the Skill Cup referee.
 | Parameter | Meaning |
 |---|---|
 | `reaction` | seconds added to the keeper's reaction (negative = sharper) |
-| `reach` | multiplier on the keeper's save radius |
+| `reach` | multiplier on the keeper's arm length (drawn: the arms you see are the arms that save) |
 | `read` | added to the keeper's own read probability (the chance it dives the right way) |
 | `clock` | shot clock, seconds (5 s; 4 s on the hardest rungs; off in the tutorial) |
 | `wobble` | aim-wobble amplitude; it grows +20 % per streak goal (max +100 %) |
 | `assist` | invisible aim assist, only on the three easiest rungs |
 
-Each keeper keeps its own personality on top: reaction, dive time, reach, body, max height,
-its **read probability** (Squeak 10 % … THE FINAL WALL 35 %) and its **tell** (shown in the
-Scouting Book).
+Each keeper keeps its own personality on top: reaction, dive time, max height, its **read
+probability** (Squeak 10 % … THE FINAL WALL 35 %), its **tell** (shown in the Scouting Book)
+and its **body**, which is its art: the sprite's pixels, arm length and gloves.
+
+## Saves need contact (round 6 B4)
+
+A penalty is saved **only if the ball touches the keeper as drawn** when it crosses the line.
+`keeperFrame(id, plan, t)` in `packages/engine` is the single source of truth: the sprite's
+opaque pixels (`KEEPER_RIGS`, checked against the art), both arms, both gloves, the trailing
+leg when the dive leaves one, and the mime's wall. `resolveShot` tests the ball (radius
+`BALL_RADIUS`) against the frame at `target.time`; the Stage draws the keeper from the same
+frame (its flight is a uniform time-lapse of the engine's, so the crossing frame is the same
+instant). Dives travel and tip towards the dive point so both gloves arrive there; central
+plans stand up big with the arms spread at the shot height. `tests/game/keeper-sync.test.ts`
+rebuilds the drawn keeper and ball over 2,000 seeded kicks and requires 0 mismatches; the
+Showroom's *Keeper hitbox* overlay shows the hitbox now, at arrival and the ball at arrival.
 
 The ladder (`DIFFICULTY_LADDER`, easiest → hardest):
 
@@ -52,7 +65,7 @@ hidden rubber-banding.
 
 | Zone | Where | Multiplier |
 |---|---|---|
-| Centre | \|x\| < 0.34 | 1× — low centre shots meet a trailing leg 70 % of the time; a chipped centre can beat it |
+| Centre | \|x\| < 0.34 | 1× — 70 % of dives leave a visible trailing leg (with a "leg!" call-out) that stops ground shots through the middle; a chipped centre beats it |
 | Side | 0.34 ≤ \|x\| < 0.66 | 2× |
 | Corner | \|x\| ≥ 0.66, low | 3× |
 | Top bin | \|x\| ≥ 0.66, high | 5× |
@@ -66,15 +79,16 @@ rounds:
 
 ```
 bot       easiest  hardest  | with director: goal rate  mean level
-novice      66.1%    22.4%  |    57.3%    1.29   PASS
-casual      73.5%    23.2%  |    58.8%    1.90   PASS
-good        82.9%    26.6%  |    59.5%    3.00   PASS
-expert      91.6%    33.9%  |    59.6%    4.77   PASS
+novice      75.2%    41.3%  |    59.4%    3.39   PASS
+casual      78.8%    40.0%  |    59.5%    3.57   PASS
+good        82.8%    41.3%  |    59.6%    4.39   PASS
+expert      86.4%    49.5%  |    60.6%    6.24   PASS
 ```
 
 The fixed-difficulty columns show why the director is needed. At a fixed rung, rates range from
-22 % to 92 %; with the director, every profile settles inside the band. CI fails if any
-profile leaves it.
+40 % to 86 %; with the director, every profile settles inside the band. CI fails if any
+profile leaves it. (Before contact-only saves the keeper also saved balls it visibly missed,
+which is why the old fixed-rung rates were lower: 22–92 %.)
 
 ## Input
 

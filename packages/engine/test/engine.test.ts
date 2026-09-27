@@ -66,7 +66,7 @@ test("the boss has three phases by kick index", () => {
   assert.deepEqual([0, 2, 4].map(k => resolveShot({ aimX: 0.5, aimY: 0.725, power: 0.7, curl: 0 }, boss, 1, { kickIndex: k, history: [] }).plan.phase), [1, 2, 3]);
 });
 
-import { shotZone, ZONE_MULT, swipeToShot, assistShot, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL, type ShotRecord } from "../src/index.ts";
+import { shotZone, ZONE_MULT, swipeToShot, assistShot, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL, keeperFrame, keeperTouch, keeperPlan, toWorld, GOAL_ASPECT, type ShotRecord } from "../src/index.ts";
 
 test("placement zones: centre 1x, side 2x, corner 3x, top bin 5x; in off the post +50%", () => {
   assert.equal(shotZone({ x: 0.1, y: 0.3 }), "centre");
@@ -79,15 +79,45 @@ test("placement zones: centre 1x, side 2x, corner 3x, top bin 5x; in off the pos
   assert.equal(goalPoints(squirrel, 1, 1, false, "corner", true), 450);
 });
 
-test("low centre shots are usually saved; a chipped centre can beat the trailing leg", () => {
-  const mouse = keeperById("mouse");
-  let lowSaved = 0, chipGoals = 0;
+test("low centre shots usually meet the trailing leg; a chipped centre can beat it", () => {
+  const squirrel = keeperById("squirrel");
+  let lowSaved = 0, legSaves = 0, chipGoals = 0;
   for (let seed = 0; seed < 400; seed++) {
-    if (resolveShot({ aimX: 0.05, aimY: 0.4125, power: 0.45, curl: 0 }, mouse, seed).result === "save") lowSaved++;
-    if (resolveShot({ aimX: 0.05, aimY: 0.75, power: 0.72, curl: 0 }, mouse, seed).result === "goal") chipGoals++;
+    const low = resolveShot({ aimX: 0.05, aimY: 0.08, power: 0.45, curl: 0 }, squirrel, seed);
+    if (low.result === "save") lowSaved++;
+    if (low.touch === "leg") { legSaves++; assert.ok(low.plan.leg, "only a dive that leaves a leg saves with it"); }
+    if (resolveShot({ aimX: 0.05, aimY: 0.75, power: 0.72, curl: 0 }, squirrel, seed).result === "goal") chipGoals++;
   }
-  assert.ok(lowSaved > 250, `low centre saved ${lowSaved}/400`);
-  assert.ok(chipGoals > 0, `chip scored ${chipGoals}/400`);
+  assert.ok(lowSaved > 200, `low centre saved ${lowSaved}/400`);
+  assert.ok(legSaves > 150, `trailing-leg saves ${legSaves}/400`);
+  assert.ok(chipGoals > 300, `chip scored ${chipGoals}/400`);
+});
+
+test("a save happens exactly when the ball touches the keeper frame at the crossing time", () => {
+  let checked = 0;
+  for (const keeper of KEEPERS) for (let seed = 0; seed < 150; seed++) {
+    const shot = { aimX: ((seed * 37) % 180) / 100 - 0.9, aimY: ((seed * 53) % 90) / 100, power: 0.4 + ((seed * 29) % 60) / 100, curl: 0 };
+    const outcome = resolveShot(shot, keeper, kickSeed(seed, seed % 5, keeper.id), { kickIndex: seed % 5, history: [] });
+    if (outcome.result !== "goal" && outcome.result !== "save") continue;
+    const frame = keeperFrame(keeper.id, outcome.plan, outcome.target.time), ball = { x: outcome.target.x, y: outcome.target.y * GOAL_ASPECT };
+    assert.equal(outcome.result === "save", keeperTouch(frame, ball) !== null);
+    if (outcome.result === "save") assert.equal(outcome.touch, keeperTouch(frame, ball));
+    checked++;
+  }
+  assert.ok(checked > 800, `checked ${checked}`);
+});
+
+test("keeper frame: standing at t = 0, on or above the grass through the dive, gloves reach the dive point", () => {
+  for (const keeper of KEEPERS) {
+    const plan = keeperPlan(keeper, 11, { x: 0.7, y: 0.5 });
+    const standing = keeperFrame(keeper.id, plan, 0);
+    assert.ok(standing.progress === 0 && standing.rotate === 0 && standing.x === 0);
+    for (let t = 0; t <= 1.5; t += 0.05) assert.ok(keeperFrame(keeper.id, plan, t).y > 0);
+    const full = keeperFrame(keeper.id, { ...plan, x: 0.6, y: 0.6, reaction: 0, diveTime: 0.2, teleport: false, wall: undefined }, 1);
+    const hands = full.arms.map(arm => toWorld(full, arm.hand));
+    const mid = { x: (hands[0].x + hands[1].x) / 2, y: (hands[0].y + hands[1].y) / 2 };
+    if (keeper.maxY >= 0.6) assert.ok(Math.hypot(mid.x - 0.6, mid.y - 0.6 * GOAL_ASPECT) < 0.08, `${keeper.id} gloves at ${mid.x.toFixed(2)}, ${mid.y.toFixed(2)}`);
+  }
 });
 
 test("clipping the inside of the post sometimes goes in (and is flagged), never from outside", () => {

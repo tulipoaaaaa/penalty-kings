@@ -2,7 +2,7 @@
 // It renders the SAME Stage the game uses; outcomes are produced by the real engine
 // (resolveShot), searched until the requested result comes up, so nothing is faked visually.
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
-import { KEEPERS, keeperById, resolveShot, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
+import { KEEPERS, keeperById, keeperFrame, resolveShot, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
 import { spawnTargets, targetAt } from "../../games/penalty-kings/game/target.js";
 import { Stage, CELEBRATIONS, RARITY_NAMES } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
@@ -31,19 +31,26 @@ async function loadFriend(id: string) {
 }
 
 // ── Forced outcomes via the real engine ─────────────────────────────────────
-function findShot(result: ShotResult, keeper: KeeperId): { outcome: ShotOutcome; curl: number } {
+function findShot(result: ShotResult, keeper: KeeperId, accept: (outcome: ShotOutcome) => boolean = () => true): { outcome: ShotOutcome; curl: number } {
   const profile = keeperById(keeper);
-  for (let attempt = 0; attempt < 4000; attempt++) {
+  for (let attempt = 0; attempt < 20000; attempt++) {
     const shot = { aimX: Math.random() * 2.8 - 1.4, aimY: Math.random() * 1.2, power: Math.random(), curl: Math.random() * 2 - 1 };
-    const outcome = resolveShot(shot, profile, Math.floor(Math.random() * 2 ** 31), { kickIndex: 0, history: [] });
-    if (outcome.result === result) return { outcome, curl: shot.curl };
+    const outcome = resolveShot(shot, profile, Math.floor(Math.random() * 2 ** 31), { kickIndex: attempt % 5, history: [] });
+    if (outcome.result === result && accept(outcome)) return { outcome, curl: shot.curl };
   }
   throw new Error(`engine never produced "${result}" against ${profile.name}`);
 }
-function shoot(result: ShotResult) {
-  try { const { outcome, curl } = findShot(result, stage.keeper); stage.play(outcome, curl); log(`shot → ${result} (target ${outcome.target.x.toFixed(2)}, ${outcome.target.y.toFixed(2)})`); }
+function shoot(result: ShotResult, accept?: (outcome: ShotOutcome) => boolean, label: string = result) {
+  try { const { outcome, curl } = findShot(result, stage.keeper, accept); stage.play(outcome, curl); log(`shot → ${label} (target ${outcome.target.x.toFixed(2)}, ${outcome.target.y.toFixed(2)}${outcome.touch ? `, touched: ${outcome.touch}` : ""})`); }
   catch (error) { log((error as Error).message); }
 }
+// Hitbox inspection: saves by each body part, and goals that only just beat the keeper.
+for (const part of ["glove", "arm", "body", "leg", "wall"] as const) button("#hitbox-shots", `SAVE: ${part}`, () => { toPenalty(); shoot("save", outcome => outcome.touch === part, `save (${part})`); });
+button("#hitbox-shots", "GOAL: past the dive", () => {
+  toPenalty();
+  shoot("goal", outcome => { const f = keeperFrame(stage.keeper, outcome.plan, outcome.target.time); return f.progress > 0.8 && Math.abs(f.x - outcome.target.x) < 0.45; }, "goal past the dive");
+});
+$<HTMLInputElement>("#hitbox").onchange = event => { stage.debugHitbox = (event.target as HTMLInputElement).checked; };
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 function button(parent: string, label: string, onClick: () => void) {
@@ -136,7 +143,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(element => {
 // ── Event log (the game maps these to SFX) ──────────────────────────────────
 const logElement = $<HTMLPreElement>("#log");
 function log(line: string) { logElement.textContent = `${(performance.now() / 1000).toFixed(1)}s  ${line}\n${logElement.textContent}`.slice(0, 3000); }
-stage.onEvent = (event, data) => log(event === "sfx" ? `sfx: ${data}` : `${event}${data ? `: ${data}` : ""}`);
+stage.onEvent = (event, data) => {
+  log(event === "sfx" ? `sfx: ${data}` : `${event}${data ? `: ${data}` : ""}`);
+  if (event === "resolved" && $<HTMLInputElement>("#freeze").checked) { paused = true; $("#pause").textContent = "Resume"; }
+};
 
 // ── Loop ─────────────────────────────────────────────────────────────────────
 let last = performance.now();

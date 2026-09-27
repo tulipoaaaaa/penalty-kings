@@ -4,7 +4,7 @@
  * dive-right / dive-high / celebrate / sad from one body. Signature FX live in drawKeeperFx.
  * '1' outline · '2' main · '3' secondary · '4' highlight · '5' white · '6' dark detail · '7' accent
  */
-import type { KeeperId } from "@penalty-kings/engine";
+import { ART_UNIT, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperFrame } from "@penalty-kings/engine";
 import { sprite, type Palette } from "./core.js";
 
 type Design = { rows: string[]; palette: Palette; arm: string; glove: string; scale: number; shoulderY: number; armLength: number; sfx: "squeak" | "chitter" | "yawn" | "honk" | "blub" | "mime" | "disco" | "stomp" | "hiss" | "beep" | "boo" | "rumble" };
@@ -275,3 +275,60 @@ export const KEEPER_TAUNTS: Readonly<Record<KeeperId, string[]>> = {
   disco: ["Stayin' in goal!", "Feel the beat!"], sumo: ["HOOAH!", "Nothing gets past Bento"], chameleon: ["Surprise!", "Didn't see me?"],
   robot: ["PATTERN LEARNED", "PREDICTABLE HUMAN"], ghost: ["Boo!", "Right through you"], finalwall: ["YOU SHALL NOT SCORE", "THE WALL STANDS"],
 };
+
+// ── Penalty dives: drawn from the engine's KeeperFrame (the physics hitbox) ──────
+/** Goal-art px of an iso goal-unit point (x across, y = height; GOAL.cx 240, goal line 176, 90 px per unit). */
+export const artPoint = (p: { x: number; y: number }) => ({ x: 240 + p.x * ART_UNIT, y: 176 - p.y * ART_UNIT });
+/**
+ * Everything drawKeeperFrame puts on screen, in goal-art px: the body sprite (centre, rotation, size),
+ * arms (canvas-local to the body centre), gloves (outer size incl. outline), trailing leg and wall.
+ * Pure (no canvas), so tests can check the drawn keeper against the physics.
+ */
+export function keeperArt(frame: KeeperFrame) {
+  const design = KEEPER_DESIGNS[frame.id], centre = artPoint(frame);
+  const w = design.rows[0].length * design.scale, h = design.rows.length * design.scale;
+  const local = (p: { x: number; y: number }) => ({ x: p.x * ART_UNIT, y: -p.y * ART_UNIT });
+  return {
+    x: centre.x, y: centre.y, rotate: frame.rotate, w, h,
+    arms: frame.arms.map(arm => ({ shoulder: local(arm.shoulder), hand: local(arm.hand) })),
+    armWidth: frame.armWidth * ART_UNIT, glove: frame.glove * ART_UNIT,
+    leg: frame.leg ? { hip: artPoint(frame.leg.hip), foot: artPoint(frame.leg.foot), r: LEG_RADIUS * ART_UNIT } : null,
+    wall: frame.wall ? { x0: 240 + Math.max(-1, frame.wall[0]) * ART_UNIT, x1: 240 + Math.min(1, frame.wall[1]) * ART_UNIT, y0: 176 - GOAL_ASPECT * ART_UNIT, y1: 176 } : null,
+  };
+}
+
+/**
+ * Draws a diving keeper exactly where the physics has him: sprite, arms, gloves and (when the dive
+ * leaves one) the trailing leg with its boot. `arms` overrides the arm angles for the after-save
+ * celebration only (never at the crossing).
+ */
+export function drawKeeperFrame(context: CanvasRenderingContext2D, frame: KeeperFrame, options: { alpha?: number; arms?: [number, number] } = {}) {
+  const design = KEEPER_DESIGNS[frame.id], art = keeperArt(frame), body = sprite(`keeper-${frame.id}`, design.rows, design.palette);
+  context.save();
+  context.globalAlpha = options.alpha ?? 1;
+  context.fillStyle = "#00000044";
+  context.beginPath(); context.ellipse(art.x, 177, art.w * 0.45, 3, 0, 0, Math.PI * 2); context.fill();
+  if (art.leg) {
+    // The trailing leg: a thick sock-coloured leg with a dark boot, so the save is readable.
+    context.lineCap = "round"; context.strokeStyle = "#111"; context.lineWidth = art.leg.r * 2;
+    context.beginPath(); context.moveTo(art.leg.hip.x, art.leg.hip.y); context.lineTo(art.leg.foot.x, art.leg.foot.y); context.stroke();
+    context.strokeStyle = design.arm; context.lineWidth = art.leg.r * 2 - 2;
+    context.beginPath(); context.moveTo(art.leg.hip.x, art.leg.hip.y); context.lineTo(art.leg.foot.x, art.leg.foot.y); context.stroke();
+    context.fillStyle = "#111"; context.beginPath(); context.arc(art.leg.foot.x, art.leg.foot.y, art.leg.r, 0, Math.PI * 2); context.fill();
+    context.fillStyle = design.glove; context.fillRect(Math.round(art.leg.foot.x) - 1, Math.round(art.leg.foot.y) - 1, 2, 2);
+  }
+  context.translate(art.x, art.y);
+  context.rotate(art.rotate);
+  const hands = options.arms
+    ? options.arms.map((angle, i) => { const side = i ? 1 : -1, a = side < 0 ? Math.PI - angle : angle, s = art.arms[i].shoulder, len = Math.hypot(art.arms[i].hand.x - s.x, art.arms[i].hand.y - s.y); return { shoulder: s, hand: { x: s.x + Math.cos(a) * len, y: s.y + Math.sin(a) * len } }; })
+    : art.arms;
+  context.strokeStyle = design.arm; context.lineWidth = art.armWidth; context.lineCap = "round";
+  for (const arm of hands) { context.beginPath(); context.moveTo(arm.shoulder.x, arm.shoulder.y); context.lineTo(arm.hand.x, arm.hand.y); context.stroke(); }
+  context.drawImage(body, -art.w / 2, -art.h / 2, art.w, art.h);
+  const g = art.glove;
+  for (const { hand } of hands) {
+    context.fillStyle = "#111"; context.fillRect(hand.x - g / 2, hand.y - g / 2, g, g);
+    context.fillStyle = design.glove; context.fillRect(hand.x - g / 2 + 1, hand.y - g / 2 + 1, g - 2, g - 2);
+  }
+  context.restore();
+}
