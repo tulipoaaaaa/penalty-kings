@@ -1,0 +1,27 @@
+name: Verified sources
+# Fetches Blockscout-verified source + ABI for the Rare Friends contracts we integrate with
+# (read-only). Blockscout challenges the build container's IP, so this runs on GitHub runners.
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/sources.yml"]
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch verified contracts
+        run: |
+          mkdir -p sources
+          for pair in market:0x99930E551b6f849bAabC4B491053eF28a700C4F2 activation:0xD4A35e11318E3679168d409184B788bcF9F283Ac generations:0x14C49e6118F46525dE9ab41a51cBAA3c6EBF181D hook:0x7A65d0194e6Cc43971C31CE7D1471Da01D42A0cC reserve:0xA850B2499c064900EfF341745807e1cB0d71a52b rf:0x0779369854d3EcdEA927206718FFD7730C67B71f; do
+            name=${pair%%:*}; addr=${pair#*:}
+            curl -sS -m 60 -A "Mozilla/5.0" "https://robinhoodchain.blockscout.com/api/v2/smart-contracts/$addr" -o "sources/$name.json" -w "$name %{http_code}\n"
+            echo "===== $name $addr: $(jq -r '.name // "UNVERIFIED"' sources/$name.json) verified=$(jq -r '.is_verified // false' sources/$name.json) proxy=$(jq -r '.proxy_type // "none"' sources/$name.json)"
+            jq -r '.abi[]? | select(.type=="function") | "\(.stateMutability) \(.name)(\([.inputs[] | "\(.type) \(.name)"] | join(", "))) -> (\([.outputs[]? | .type] | join(", ")))"' sources/$name.json || true
+            jq -r '.implementations[]? | "implementation: \(.address_hash // .address) \(.name)"' sources/$name.json || true
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-sources
+          path: sources/
