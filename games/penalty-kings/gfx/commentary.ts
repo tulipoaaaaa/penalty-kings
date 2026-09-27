@@ -14,6 +14,8 @@ export type CommentaryContext =
   | "pack-wait" | "pack-wait-long" | "keeper-deciding"
   /** Part B (B2 near-miss, B6 streak fever): a whisker wide or over, a fingertip save, 5 and 10 goals in a row. */
   | "so-close" | "fingertip" | "streak5" | "streak10"
+  /** C3b: the Saturday Champions Night intro (every tier, 19:00–21:00 UTC). */
+  | "champions-night"
   /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
   | `line:${string}`;
 
@@ -64,6 +66,7 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   tour: ["The World Tour rolls on.", "Another stop on the World Tour."],
   "lucky-ball": ["Out comes the lucky ball...", "The lucky ball is back! The crowd knows it.", "{friend} kisses the lucky ball. Superstition? Absolutely."],
   "veteran-ball": ["A veteran ball. It's seen a few goals, this one.", "That ball has more goals than most strikers."],
+  "champions-night": ["It's CHAMPIONS NIGHT! Golden lights, full house!", "Champions Night: the big stage, two hours only!", "Champions Night! The stadium glows gold for {friend}."],
   pack: ["A fresh pack! Let's see what's inside.", "New balls, new dreams."],
   "pack-wait": ["Sealed tight. The randomness is on its way...", "What's in the pack? Nobody knows. Not even me!", "Hands off the foil, the draw isn't in yet."],
   "pack-wait-long": ["Still sealed! The suspense is unbearable.", "Listen to that drumroll...", "Any second now. Any second..."],

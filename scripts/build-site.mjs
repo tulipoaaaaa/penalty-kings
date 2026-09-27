@@ -47,6 +47,8 @@ const RUNTIME_COPY = [
 const LANDING_CLIP = "site-src/landing/play.webm"; // 6 s of real play from docs/media/judge-path.webm (384 × 240, VP8, muted)
 
 const TIERS = [["park", "Park · 10 RF"], ["pro", "Pro · 1,000 RF"], ["champions", "Champions · 10,000 RF"]];
+/** Must equal STADIUM_MESSAGE in games/penalty-kings/economy.ts (tests/game/weekly.test.ts checks it). */
+const STADIUM_MESSAGE = "penalty-kings:open-stadium";
 const liveTiers = new Set();
 
 /** Trusted host page only (outside the game sandbox): links between stadium builds. */
@@ -68,9 +70,14 @@ async function addStadiumBar(outdir, tier, live) {
   const landing = `<section class="pk-landing" aria-label="Play without a wallet"><div class="pk-landing-text"><p class="pk-landing-lead">No wallet on this device? Kick a ball right now: free, no sign-up.</p><a class="pk-landing-cta" data-testid="practice-cta" href="${root}practice/">Play a free practice kick &#9654;</a><p class="pk-landing-friend">To play for real you need a Friend: a hardwired <a href="https://rarefriends.com">Rare Friends Generations NFT</a> on Robinhood.</p></div><video src="${root}landing/play.webm" width="384" height="240" autoplay muted loop playsinline preload="auto" aria-label="Six seconds of real play: three penalty kicks"></video></section>`
     + `<script>(()=>{const panel=document.currentScript.previousElementSibling,hide=()=>{panel.hidden=true};if(window.ethereum)hide();addEventListener("eip6963:announceProvider",hide);const top=()=>{if(!panel.hidden)requestAnimationFrame(()=>scrollTo(0,0))},stop=()=>document.removeEventListener("focusin",top);document.addEventListener("focusin",top);for(const type of ["pointerdown","keydown","wheel","touchstart"])addEventListener(type,stop,{once:true,capture:true})})()</script>`;
   const landingStyle = "<style>.pk-landing{max-width:var(--rf-game-max-width,960px);margin:0 auto 8px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;font:14px/1.4 ui-monospace,monospace;background:#fff;border:2px solid #111}.pk-landing[hidden]{display:none}.pk-landing-text{flex:1 1 280px;display:flex;flex-direction:column;gap:10px}.pk-landing p{margin:0}.pk-landing-lead{font-weight:700}.pk-landing-cta{display:flex;align-items:center;justify-content:center;min-height:56px;padding:8px 20px;background:#ffd23f;color:#111;border:3px solid #111;box-shadow:4px 4px 0 #111;font:700 18px ui-monospace,monospace;text-decoration:none}.pk-landing-cta:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #111}.pk-landing-cta:focus-visible{outline:3px solid #2a6df4;outline-offset:3px}.pk-landing-friend a{color:#111;font-weight:700}.pk-landing video{display:block;flex:0 1 384px;width:100%;max-width:384px;height:auto;aspect-ratio:8/5;background:#2f7d32;border:2px solid #111}</style>";
+  // C3b: the Ball shop's "Play at Pro / Champions" buttons. The game runs in an allow-scripts sandbox (it cannot
+  // navigate this page), so it posts STADIUM_MESSAGE (games/penalty-kings/economy.ts); this trusted page opens that
+  // stadium's page, by the same relative links as the bar, only for a message from a frame on this page.
+  const pages = Object.fromEntries(TIERS.filter(([id]) => id !== tier && (!live || liveTiers.has(id))).map(([id]) => [id, href(id)]));
+  const opener = `<script>(()=>{const pages=${JSON.stringify(pages)};addEventListener("message",event=>{const data=event.data;if(!data||data.type!==${JSON.stringify(STADIUM_MESSAGE)}||typeof data.stadium!=="string"||!Object.hasOwn(pages,data.stadium))return;if(![...document.querySelectorAll("iframe")].some(frame=>frame.contentWindow===event.source))return;location.assign(pages[data.stadium])})})()</script>`;
   const file = `${outdir}/index.html`;
   const html = await readFile(file, "utf8");
-  await writeFile(file, html.replace("<body>", `<body>${style}${landingStyle}${bar}${landing}`));
+  await writeFile(file, html.replace("<body>", `<body>${style}${landingStyle}${bar}${landing}${opener}`));
 }
 
 for (const tier of ["park", "pro", "champions"]) if (await exists(`${GAME}/deployments/${tier}.json`)) liveTiers.add(tier);

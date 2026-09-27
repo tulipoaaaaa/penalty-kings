@@ -23,6 +23,12 @@ export const TIERS: readonly Tier[] = [
   { id: "champions", name: "Champions", priceRF: 10000, path: "./champions/", raceWeight: 1000, baseDrop: 930 },
 ];
 
+/**
+ * C3b: the one message the sandboxed game may post to its host page, asking it to open another stadium's page
+ * (scripts/build-site.mjs listens for exactly this type and a known stadium id; nothing else is ever navigated).
+ */
+export const STADIUM_MESSAGE = "penalty-kings:open-stadium";
+
 export const tierForPrice = (priceRF: number) => TIERS.find(tier => tier.priceRF === priceRF) ?? TIERS[0];
 
 export type Rarity = Readonly<{ name: string; dropMult: number; racePoints: number; color: string; accent: string; label: string }>;

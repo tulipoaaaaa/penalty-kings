@@ -4,7 +4,8 @@
 //   - a short muted, looping, autoplaying clip of real play is shown (and stays small: <= 600 KB);
 //   - one line says how to get a Friend and links to https://rarefriends.com;
 //   - the SDK's "local preview" copy is not on the published page;
-//   - with a browser wallet present (window.ethereum), the no-wallet panel stays hidden.
+//   - with a browser wallet present (window.ethereum), the no-wallet panel stays hidden;
+//   - C3b: the host page opens /pro/ or /champions/ when a frame on it asks (the Ball shop's "Play at …"), and nothing else.
 // Run after `npm run build:site`. Screenshot: artifacts/landing-390x844-no-wallet.png.
 import assert from "node:assert/strict";
 import { mkdir, readFile, stat } from "node:fs/promises";
@@ -68,6 +69,32 @@ try {
   assert.equal(await walletPage.getByTestId("practice-cta").isVisible(), false, "the no-wallet panel shows although a wallet is present");
   checks.push("hidden with a wallet");
   await walletContext.close();
+
+  // 3. C3b: the Ball shop's "Play at Pro" asks the host page (the game is an allow-scripts sandbox). The page opens
+  //    the stadium's relative link only for a known stadium asked by a frame on the page; anything else is ignored.
+  const hostContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const host = await hostContext.newPage();
+  await host.goto(server.url, { waitUntil: "load" });
+  const ask = (stadium, fromFrame) => host.evaluate(([stadium, fromFrame]) => {
+    const message = { type: "penalty-kings:open-stadium", stadium };
+    if (!fromFrame) { window.postMessage(message, "*"); return; }
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.srcdoc = `<script>parent.postMessage(${JSON.stringify(message)}, "*")<\/script>`;
+    document.body.appendChild(frame);
+  }, [stadium, fromFrame]);
+  const start = host.url();
+  await ask("pro", false); await ask("../../evil", true); await ask("park", true);
+  await host.waitForTimeout(600);
+  assert.equal(host.url(), start, "a message from the page itself, an unknown stadium or the current one navigates nowhere");
+  await ask("pro", true);
+  await host.waitForURL(/\/pro\/$/, { timeout: 10_000 });
+  checks.push(`Play at Pro → ${new URL(host.url()).pathname}`);
+  await ask("champions", true);
+  await host.waitForURL(/\/champions\/$/, { timeout: 10_000 });
+  assert.equal(new URL(host.url()).pathname, "/champions/", "relative links from /pro/ reach /champions/");
+  checks.push(`then Champions → ${new URL(host.url()).pathname}`);
+  await hostContext.close();
 } finally {
   await browser.close(); await server.close();
 }

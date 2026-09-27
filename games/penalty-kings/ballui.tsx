@@ -6,7 +6,8 @@
 import { useState } from "react";
 import type { ChanceGameDefinition } from "@rarefriends/friendsdk/game";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
-import { TIERS, formatNumber, type Tier } from "./economy.js";
+import { TIERS, formatNumber, type Tier, type TierId } from "./economy.js";
+import { STADIUM_RACE_RULE, stadiumRaceLine } from "./game/weekly.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
 import { BallSpin, ballGlow, TokenExplainer, RarityChip, Tile } from "./ui.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
@@ -27,9 +28,11 @@ export function OddsLine({ definition, onFull }: { definition: ChanceGameDefinit
 export type PackPhase = "tear" | "flip" | "summary";
 
 /** a) SHOP: stadium tier + pack size; total cost, max prize and odds before confirming. */
-export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false }: {
+export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false, now = Date.now(), onStadium }: {
   definition: ChanceGameDefinition; tier: Tier; simulated: boolean; balance: bigint; busy: boolean; full: boolean;
   onBuy: (quantity: bigint) => void; onOdds: () => void; unopened: bigint; onOpen: () => void; firstPurchase?: boolean;
+  /** C3b: the stadium clock (Champions Night doubles the Cup points line) and "Play at <stadium>" (opens that stadium's own page). */
+  now?: number; onStadium?: (id: TierId) => void;
 }) {
   const affordable = PACKS.filter(size => balance >= definition.price * size);
   const [pack, setPack] = useState<bigint>(affordable.includes(5n) ? 5n : affordable[affordable.length - 1] ?? 1n);
@@ -47,9 +50,13 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
         <strong>{item.name}</strong>
         <span className="pk-tierprice"><b>{item.priceRF.toLocaleString("en-US")} RF</b> per ball</span>
         <small>top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
-        <small className="pk-tierwhere">{item.id === tier.id ? "You are here" : "Open its own page to play there (/pro/ or /champions/)"}</small>
+        <small className="pk-tierrace" data-testid={`race-${item.id}`}>{stadiumRaceLine(item, now)}</small>
+        {item.id === tier.id ? <small className="pk-tierwhere">You are here</small>
+          : <button type="button" className="pk-tiergo" data-testid={`go-${item.id}`} onClick={() => onStadium?.(item.id)} disabled={!onStadium}>
+            Play at {item.name} ›<small>{item.id === "park" ? "main page" : `/${item.id}/`}{simulated ? " · SIMULATED" : " · LIVE"}</small></button>}
       </div>)}
     </div>
+    <p className="pk-note" data-testid="stadium-rule">{STADIUM_RACE_RULE}</p>
     <div className="pk-packs" role="radiogroup" aria-label="Pack size">
       {PACKS.map(size => <button key={size.toString()} type="button" role="radio" aria-checked={pack === size} onClick={() => setPack(size)} data-testid={`pack-${size}`} disabled={balance < definition.price * size} title={balance < definition.price * size ? "Not enough RF for this pack" : undefined}>
         {size.toString()} ball{size > 1n ? "s" : ""}</button>)}
