@@ -12,6 +12,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["dev/showroom", "games/**/*.ts", "games/**/*.tsx", "games/**/*.d.ts", "packages/**/*.ts", "verifier/**/*.ts", "clubhouse/**/*.tsx", "clubhouse/**/*.d.ts"],
+  "include": ["dev/showroom", "site-src/**/*.ts", "games/**/*.ts", "games/**/*.tsx", "games/**/*.d.ts", "packages/**/*.ts", "verifier/**/*.ts", "clubhouse/**/*.tsx", "clubhouse/**/*.d.ts"],
   "exclude": ["**/.friendsdk/**", "node_modules"]
 }

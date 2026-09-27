@@ -1,0 +1,81 @@
+/* Free practice page (public site, outside the SDK sandbox). Every text is >= 11 CSS px. */
+@font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
+:root { --pk-ink: #0b0d1a; --pk-panel: #151a33; --pk-line: #2a3160; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2; --top: 40px; color-scheme: dark; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden;
+  background: var(--pk-ink); color: var(--pk-paper); font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+a { color: var(--pk-volt); }
+button { font: inherit; }
+:focus-visible { outline: 3px solid var(--pk-volt); outline-offset: 2px; }
+
+.pp-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-height: var(--top); padding: 4px 12px; max-width: 1200px; margin: 0 auto; }
+.pp-top h1 { margin: 0; font: 700 18px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); letter-spacing: 1px; }
+.pp-top .pp-free { font-size: 11px; font-weight: 700; padding: 2px 6px; background: var(--pk-volt); color: var(--pk-ink); }
+.pp-home { font-size: 12px; }
+@media (max-width: 480px) { .pp-top .pp-home { display: none; } .pp-top h1 { font-size: 16px; } .pp-top .pp-btn { min-height: 32px; padding: 4px 8px; font-size: 12px; } }
+.pp-count { margin-left: auto; font-weight: 700; font-size: 13px; }
+.pp-btn { min-height: 36px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--pk-ink); background: var(--pk-gold); border: 2px solid #000; box-shadow: 2px 2px 0 #000; cursor: pointer; }
+.pp-btn:disabled { opacity: 0.45; cursor: default; }
+.pp-btn-quiet { background: var(--pk-panel); color: var(--pk-paper); border-color: var(--pk-paper); }
+
+.pp-rotate { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  .pp-rotate:not([hidden]) { display: flex; align-items: center; gap: 10px; margin: 0 12px 8px; padding: 6px 10px; font-size: 12px; background: var(--pk-panel); border: 1px solid var(--pk-line); }
+  .pp-rotate i { flex: none; width: 14px; height: 22px; border: 2px solid var(--pk-paper); animation: pp-turn 2.4s steps(6) infinite; }
+  .pp-rotate span { flex: 1; }
+  .pp-rotate button { flex: none; min-width: 32px; min-height: 32px; font-size: 14px; color: var(--pk-paper); background: none; border: 1px solid var(--pk-line); cursor: pointer; }
+}
+@keyframes pp-turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) { .pp-rotate i { animation: none; transform: rotate(-90deg); } }
+
+.pp-main { display: flex; flex-direction: column; gap: 10px; max-width: 1200px; margin: 0 auto; padding: 0 12px 12px; }
+.pp-stage { position: relative; width: 100%; max-width: 960px; margin: 0 auto; }
+#pp-canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; image-rendering: pixelated; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; background: var(--pk-panel); border: 2px solid #000; cursor: crosshair; }
+.pp-banner { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 10px; padding: 3px 10px; background: #0b0d1ad9; border: 2px solid var(--pk-gold); pointer-events: none; text-align: center; max-width: 92%; }
+.pp-banner[hidden] { display: none; }
+.pp-banner strong { font: 700 18px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); }
+.pp-banner[data-tone="miss"] { border-color: var(--pk-red); }
+.pp-banner[data-tone="miss"] strong { color: var(--pk-red); }
+.pp-banner span { font-size: 12px; }
+
+.pp-side { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 960px; margin: 0 auto; }
+.pp-results { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pp-results li { min-height: 30px; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--pk-panel); border: 1px solid var(--pk-line); color: #a9b0d0; }
+.pp-results li[data-result="goal"] { background: var(--pk-volt); color: var(--pk-ink); border-color: #000; }
+.pp-results li[data-result="save"], .pp-results li[data-result="post"], .pp-results li[data-result="over"], .pp-results li[data-result="wide"] { background: var(--pk-red); color: var(--pk-ink); border-color: #000; }
+.pp-status { min-height: 1.45em; margin: 0; font-size: 13px; }
+.pp-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pp-keys { margin: 0; font-size: 12px; color: #c9cde0; }
+.pp-foot { max-width: 1200px; margin: 0 auto; padding: 4px 12px 16px; font-size: 12px; color: #c9cde0; }
+.pp-foot p { margin: 4px 0; }
+
+/* Landscape phones (844 x 390 and alike): the pitch fills the height, the panel sits to its right. */
+@media (orientation: landscape) and (max-height: 560px) {
+  :root { --top: 34px; }
+  .pp-top { padding: 2px 12px; }
+  .pp-top h1 { font-size: 16px; }
+  .pp-main { flex-direction: row; align-items: flex-start; }
+  .pp-stage { width: auto; flex: none; margin: 0; }
+  #pp-canvas { width: auto; height: min(calc(100vh - var(--top) - 14px), calc((100vw - 264px) / 1.5)); height: min(calc(100dvh - var(--top) - 14px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), calc((100vw - 264px) / 1.5)); }
+  .pp-side { flex: 1; min-width: 0; max-width: none; margin: 0; }
+  .pp-results { grid-template-columns: repeat(5, 1fr); }
+  .pp-foot { display: none; }
+}
+
+/* The end card: over everything, scrollable on small screens. */
+.pp-end { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; overflow-y: auto; background: #0b0d1ae6; }
+.pp-end[hidden] { display: none; }
+.pp-end-card { width: 100%; max-width: 520px; padding: 16px; background: var(--pk-panel); border: 2px solid var(--pk-paper); box-shadow: 4px 4px 0 #000; }
+.pp-end-card h2 { margin: 6px 0 8px; font: 700 20px/1.2 PixelifySans, ui-monospace, monospace; color: var(--pk-gold); }
+.pp-end-card h2:focus { outline: none; }
+.pp-end-score { margin: 0; font-size: 15px; font-weight: 700; }
+.pp-end-card p { margin: 8px 0; font-size: 13px; }
+.pp-end-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.pp-cta { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; font-size: 14px; font-weight: 700; text-decoration: none; color: var(--pk-ink); background: var(--pk-volt); border: 2px solid #000; box-shadow: 3px 3px 0 #000; }
+.pp-cta-alt { background: var(--pk-gold); }

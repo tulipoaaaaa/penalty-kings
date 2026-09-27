@@ -19,6 +19,10 @@ designed and tested, not deployed). Built on **FriendSDK v0.1.2** for the Rare F
 **Play:** https://tulipoaaaaa.github.io/penalty-kings/. You need a browser wallet on Robinhood
 mainnet (4663) holding a hardwired Generations NFT (generation ≥ 1).
 
+**Free practice (no wallet):** https://tulipoaaaaa.github.io/penalty-kings/practice/. Five penalty
+kicks against the keepers on the real engine and scene, for anyone: no wallet, no sign-in, no
+Friend art (a generic striker stands in), nothing to buy or win.
+
 ## How to play
 
 - **Shoot:** swipe up from the ball. The direction aims left/right, the length aims higher (never
@@ -86,6 +90,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `scripts/` | `verify-odds`, `economy-sim`, the pool plan and TickMath port, stadium deployer, weekly Cup/drop computation, budget guard, wallet loader, secret scan, test runners |
 | `docs/` | [ECONOMY](docs/ECONOMY.md) · [SCARCITY](docs/SCARCITY.md) · [BALL-MARKET](docs/BALL-MARKET.md) · [LEGAL](docs/LEGAL.md) · [ADDRESSES](docs/ADDRESSES.md) · [DEPLOYMENT](docs/DEPLOYMENT.md) · [TX-LOG](docs/TX-LOG.md) · [DROPS](docs/DROPS.md) · [WEEKLY](docs/WEEKLY.md) · [DIFFICULTY](docs/DIFFICULTY.md) · [FLOW-AUDIT](docs/FLOW-AUDIT.md) · [PERSISTENCE](docs/PERSISTENCE.md) · [WALLETS](docs/WALLETS.md) · [RELEASES](docs/RELEASES.md) · [HUMAN-CHECKS](docs/HUMAN-CHECKS.md) |
 | `submission/` | Vibeathon submission README and PR text |
+| `site-src/practice/` | The free practice page (built into `site/practice/` by `scripts/build-practice.mjs`): the real engine, Stage and Match Director, an original stand-in striker, no wallet code and a CSP with `connect-src 'none'` |
 | `vendor/` | The official FriendSDK v0.1.2 release archive (sha256 in docs/ADDRESSES.md) |
 
 ## Checks
@@ -101,6 +106,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `npm run sim:difficulty` | Every player profile settles in the 55–65% goal band |
 | `npm run test:smoke` · `npm run test:game` | The SDK browser harness, and the buy → open → reveal → Bag → kick → redeem flow at 960 px and 360 px |
 | `npm run test:flow` · `npm run test:modes` · `npm run qa:90s` | 13 awkward interleavings (double release, key + mouse, walkout, pack reveal, resize mid-swipe, speed); every free mode; the 90-second first-session QA |
+| `npm run test:practice` | The free practice page in Chromium at 844×390, 360×640 and 1280×800 (and with storage blocked): 5 swipes → 5 results → the "Get your Friend" card; only same-origin GETs, no RPC or provider request; text ≥ 11 px (after `npm run build:site`) |
 | `npm run test:real-gate` | The real SDK ownership gate against Robinhood mainnet: read-only, no mocks, needs network |
 | `cd contracts && forge test` | Contract unit tests. The `Fork` suites run against a mainnet fork in CI |
 | `npm run secret-scan` | No mnemonics or private keys in tracked files (also a pre-commit hook) |
