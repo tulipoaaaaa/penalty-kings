@@ -55,7 +55,7 @@ test("SFX_NAMES is the Stage's Sfx union, has no duplicates, and covers every ke
   assert.equal(sameUnion, true);
   assert.equal(new Set(SFX_NAMES).size, SFX_NAMES.length, "no duplicate names");
   for (const [keeper, design] of Object.entries(KEEPER_DESIGNS)) assert.ok(isSfx(design.sfx), `${keeper}'s "${design.sfx}" is a sound name`);
-  for (const name of ["clang", "fingertip", "net-ripple", "roar-swell", "stinger-3", "stinger-5", "stinger-10", "so-close", "perfect", "hush", "whoosh", "beep", "honk"]) assert.ok(isSfx(name), `${name} is wired`);
+  for (const name of ["clang", "fingertip", "net-ripple", "roar-swell", "stinger-3", "stinger-5", "stinger-10", "so-close", "perfect", "hush", "whoosh", "beep", "honk", "pot-up"]) assert.ok(isSfx(name), `${name} is wired`);
   assert.equal(isSfx("nope"), false);
 });
 

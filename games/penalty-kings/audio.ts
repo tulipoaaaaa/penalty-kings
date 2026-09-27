@@ -129,6 +129,7 @@ export function createCrowd() {
     "pack-tear": () => { hiss("bandpass", 2500, 6000, 1.5, 0.22, 0.3); hiss("highpass", 5000, 5000, 0.7, 0.06, 0.2, 0.18); }, // a paper-foil rip
     "rarity-0": () => rarityChime(0), "rarity-1": () => rarityChime(1), "rarity-2": () => rarityChime(2), "rarity-3": () => rarityChime(3),
     "rarity-4": () => rarityChime(4), "rarity-5": () => rarityChime(5), "rarity-6": () => rarityChime(6),
+    "pot-up": () => { pv = 1; osc("triangle", 988, 988, 0.08, 0.07); osc("triangle", 1319, 1319, 0.22, 0.07, 0.07); osc("sine", 2638, 2638, 0.18, 0.02, 0.07); }, // a bright two-note chime: B5 → E6 with a glint
     net: () => { hiss("bandpass", 5000, 2000, 0.7, 0.32, 0.22); osc("sine", 90, 70, 0.06, 0.5); }, // swish + the back-of-the-net thud
     "net-ripple": () => { hiss("bandpass", 3800, 1400, 0.8, 0.5, 0.1, 0.04); hiss("bandpass", 2600, 1200, 0.8, 0.35, 0.06, 0.2); },
     clang: () => { // modal post: inharmonic partials, higher ones die faster

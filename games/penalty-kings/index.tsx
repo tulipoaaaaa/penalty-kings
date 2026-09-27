@@ -13,7 +13,7 @@ import {
   type KeeperId, type ShotInput, type FreeKickShot, type FreeKickSetup, type SwipePoint, type Difficulty, type ShotResult, type ShotOutcome, type FreeKickOutcome,
 } from "@penalty-kings/engine";
 import { FREE_PLAY_MODES, type BallGlow, type TimeOfDay } from "@penalty-kings/game-director";
-import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, tierForPrice, formatNumber, celebrationOf, type Cosmetic } from "./economy.js";
+import { RARITIES, TIERS, ALL_COSMETICS, CUP_CURVE, CUP_SHARE_OF_PRICE, SIM_CUP_SEED_RF, SIM_CUP_SEED_GBOOT, WILDCARD_PRICE, SKILL_CUP_ENTRY, SIM_STARTING_GBOOT, STADIUM_MESSAGE, tierForPrice, formatNumber, celebrationOf, type Cosmetic, type Tier } from "./economy.js";
 import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight, freeKickShot, type WaitBeatEvent, type Sfx } from "./gfx/stage.js";
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { ReelPlayer } from "./gfx/reelplayer.js";
@@ -34,6 +34,8 @@ import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/ra
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
+import { championsNight, championsNightLine, cupDrawLine, cupEntriesLine, racePointMultiplier, isChampionsNight, SIM_TRICKLE_MS } from "./game/weekly.js";
+import { PotCounter, WinnersTicker, useCountUp, useGlow } from "./potui.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, kickSetup, type KeyAim } from "./game/input.js";
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
@@ -89,6 +91,8 @@ const FIRST_GOAL_CELEBRATION: CelebrationId = "trophy-lift";
 const JUMBOTRON_HOLD_MS = 6000;
 /** Discovery toasts ("NEW: Kiss Cam!"): on screen time and how many may wait. */
 const DISCOVER_MS = 1700, DISCOVER_QUEUE = 4;
+/** C3c: the pot chime plays at most once a minute (the simulated pot grows every 15 s). */
+const POT_SFX_GAP_MS = 60_000;
 /** Discovery counts from a stored seen code (before the Director exists). */
 const discoverySeen = (code: string) => { const found = discovery(decodeSeen(code)); return { seen: found.seen, total: found.total }; };
 const timeOfDay = (hour = new Date().getHours()): TimeOfDay => (hour < 11 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night");
@@ -100,6 +104,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const tier = tierForPrice(Number(definition.price / 10n ** 18n));
   const simulated = client.mode === "preview";
   const tag = simulated ? " (sim)" : "";
+  /** C3b: the stadium look (Champions Night dresses every tier as Champions; the tier's prices and rules never change). */
+  const lookFor = (at = Date.now()) => (isChampionsNight(at) ? "champions" as const : tier.id);
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [progress, setProgress] = useState<Progress>(() => loadProgress());
   const [screen, setScreen] = useState<Screen>("title");
@@ -265,7 +271,23 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const prizeSource: PrizeSource = simulated
     ? { kind: "simulated", potRF: cupRF, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : 0, price: rfPrice }
     : { kind: "live", potRF: null, topPrizeRF: rfNumber(maxPrize), freeStakeRF: snapshot ? rfNumber(snapshot.freeStake) : null, readAt: snapshot ? now : null, price: rfPrice };
-  const pot = potBanner(prizeSource, now);
+  // C3c: the pot counts up to each new value (static under reduced motion), glows and chimes when it grows.
+  const potCount = useCountUp(prizeSource.potRF ?? 0, reducedMotion), potGlow = useGlow(potCount.grew);
+  const pot = potBanner(prizeSource.potRF === null ? prizeSource : { ...prizeSource, potRF: potCount.shown }, now);
+  const lastPotSfx = useRef(0);
+  useEffect(() => {
+    if (!potCount.grew || live.current.phase === "shooting" || Date.now() - lastPotSfx.current < POT_SFX_GAP_MS) return;
+    lastPotSfx.current = Date.now(); playSfx("pot-up");
+  }, [potCount.grew]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Preview only: simulated rival Friends keep buying balls, so the simulated pot visibly ticks up (a Pro ball's Cup share).
+  useEffect(() => {
+    if (!simulated) return;
+    const id = window.setInterval(() => setCupRF(value => value + TIERS[1].priceRF * CUP_SHARE_OF_PRICE), SIM_TRICKLE_MS);
+    return () => window.clearInterval(id);
+  }, [simulated]);
+  // C3b Champions Night (Saturday 19:00-21:00 UTC): the Champions look on every tier; double Cup points in the preview's race.
+  const night = championsNight(now), nightLine = championsNightLine(now, simulated), drawLine = cupDrawLine(now);
+  const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} />;
   // BQ-P1-11: the commentator strip (canvas) drops below the DOM pot banner whenever they would overlap.
   const potRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -282,6 +304,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   });
   const raceTable = [...SIM_RACE.map((points, index) => ({ name: RIVALS[index], points, mine: false })), { name: "Your Friend", points: race, mine: true }].sort((a, b) => b.points - a.points);
   const raceRank = raceTable.findIndex(row => row.mine) + 1;
+  const entriesLine = cupEntriesLine(race, raceRank, simulated);
 
   useEffect(() => { saveProgress(progress); }, [progress]);
   // D18 daily check-in (XP, a cosmetic on day 7; progression only): once per UTC day, on the modes screen after the tutorial.
@@ -355,10 +378,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   useEffect(() => {
     const node = canvas.current, context = node?.getContext("2d");
     if (!node || !context) return;
-    const scene = new Stage({ stadium: tier.id, weather: weatherForDay(), keeper: "squirrel" });
+    const scene = new Stage({ stadium: lookFor(), weather: weatherForDay(), keeper: "squirrel" });
     stage.current = scene;
     // Read-only viewer stats for the 90-second QA harness (counts only; no game state is writable).
-    (window as unknown as { __pkStats?: () => unknown }).__pkStats = () => Object.fromEntries(Object.entries(scene.stats).map(([key, value]) => [key, value instanceof Set ? [...value] : value]));
+    (window as unknown as { __pkStats?: () => unknown }).__pkStats = () => ({ ...Object.fromEntries(Object.entries(scene.stats).map(([key, value]) => [key, value instanceof Set ? [...value] : value])), stadium: scene.stadium });
     scene.rows = (facing, walking, frame) => (sprites.current ? spriteFrame(sprites.current, facing, walking, frame, "right").frame.rows : null);
     scene.friendName = `Friend #${friendId}`;
     scene.onEvent = (event, data) => {
@@ -407,12 +430,20 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return () => {
       window.clearInterval(watch); window.removeEventListener("keydown", skip);
       reel.current = null; scene.camera.targetZoom = 1;
-      if (scene.stadium !== tier.id) scene.setStadium(tier.id);
+      if (scene.stadium !== lookFor()) scene.setStadium(lookFor());
       // Only reset the scene if we are still on the title (a session may have just started its walkout).
       if (live.current.screen === "title") { scene.cancel(); scene.weather = weatherForDay(); scene.keeper = "squirrel"; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, ready, intro]);
+
+  // C3b: Champions Night starts or ends while on the title or modes screen: switch the look (a session keeps its own until it ends).
+  useEffect(() => {
+    const scene = stage.current;
+    if (!scene || screen === "play" || reel.current) return;
+    if (scene.stadium !== lookFor()) scene.setStadium(lookFor());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [night.active, screen, ready]);
 
   // Attract mode (after the cold open): a showreel of SKILL moments behind the title (engine-resolved shots, never paid reveals).
   useEffect(() => {
@@ -638,7 +669,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     setSessionNow(next); setSummary(null); setMenu(null); setScreen("play"); setBanner(null); setMessage("");
     if (scene) {
       if (!inFlight.current) scene.cancel(); // clear any showreel/attract shot still playing on the Stage
-      if (scene.stadium !== tier.id) scene.setStadium(tier.id);
+      if (scene.stadium !== lookFor()) scene.setStadium(lookFor());
       scene.kind = next.kind; scene.keeper = next.keeper; scene.streak = 0; scene.setScore(0);
       scene.hints = next.mode === "tutorial" ? 1 : next.mode === "penalties" && assist > 0.5 ? 0.45 : 0;
       scene.freeKick = next.kind === "freekick" && next.setup ? { setup: next.setup, wall: resolveFreeKick(next.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(next.keeper)).wall } : null;
@@ -648,6 +679,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       // First session: the walkout with the name banner, and the commentator introducing YOUR Friend.
       if (next.mode === "tutorial") scene.walkout("first-walkout");
       else if (opening) playBeat({ ...opening, keeperChanged: false }, next.kind);
+      if (next.mode !== "tutorial" && isChampionsNight(Date.now())) scene.say("champions-night"); // C3b: the special intro line
     }
     syncDiscovery({ stadium: tier.id });
     if (next.mode === "match") { setPhaseNow("idle"); return; }
@@ -1169,7 +1201,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
       if (!rarities.length) { live.current = { ...live.current, pack: false }; if (!left) setMenu("balls"); return; }
       let drops = 0, race = 0, value = 0n;
-      for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight; value += definition.outcomes[rarity].reward; }
+      for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight * racePointMultiplier(Date.now()); value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
       setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race }));
       const best = Math.max(...rarities);
@@ -1427,7 +1459,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
   const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
-  return <section className={`pk pk-stadium-${tier.id}${reducedMotion ? " pk-reduce-motion" : ""}`} aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen}>
+  return <section className={`pk pk-stadium-${tier.id}${reducedMotion ? " pk-reduce-motion" : ""}`} aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen} data-night={night.active || undefined}>
     <div className="pk-stage" inert={Boolean(menu) || paused || screen !== "play" || undefined}>
       <canvas ref={canvas} className="pk-canvas" width={W} height={H} tabIndex={0}
         aria-label="Swipe up from the ball to shoot: where you release decides the shot. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power."
@@ -1446,8 +1478,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onLostPointerCapture={event => { if (event.pointerId === pointer.current) { swipe.current = null; pointer.current = null; } }} />
 
       {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
-      <button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
-        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra">{pot.priceNote} · {pot.ends}</span>{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
+      <button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} data-glow={potGlow || undefined} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
+        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra">{pot.priceNote} ·</span><span className="pk-pot-extra" data-testid="pot-draw">{drawLine}</span>{night.active && <b className="pk-nighttag" data-testid="night-tag" title={nightLine}>{simulated ? "NIGHT ×2" : "CHAMPIONS NIGHT"}</b>}{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
       </button>
 
       {screen === "play" && s && <>
@@ -1497,6 +1529,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       <div className="pk-attract-top">
         <h1>PENALTY KINGS</h1>
         <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
+        {potCounter("title")}
+        <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />
       </div>
       <div className="pk-attract-bottom">
         <button type="button" className="pk-primary" autoFocus onClick={() => { void unlockAudio(); if (progress.tutorialDone) setScreen("modes"); else startMode("penalties"); }} data-testid="play">{progress.tutorialDone ? "Play" : "Kick off"}</button>
@@ -1507,6 +1541,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     </div>}
 
     {screen === "modes" && !menu && <div className="pk-title pk-modescreen" role="dialog" aria-label="Choose a mode">
+      {potCounter("modes")}
+      <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />
       <h2>Level {playerLevel} · {into}/{next} XP</h2>
       {(() => { const goal = nextGoal(progress, LEVELS, today); return <button type="button" className="pk-nextgoal" data-testid="next-goal" data-mode={goal.mode} onClick={() => startMode(goal.mode)}><b>NEXT GOAL</b> {goal.text} ▸</button>; })()}
       {checkinNote && <p className="pk-note" role="status" data-testid="checkin">{checkinNote}</p>}
@@ -1531,7 +1567,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "balls" && <>
-        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} />
+        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} now={now} onStadium={openStadium} />
         {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
         <BallCase definition={definition} tag={tag} />
         <StadiumPrices source={prizeSource} now={now} />
@@ -1636,13 +1672,25 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
-      {menu === "results" && summary && <Results summary={summary} next={tourNext} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext}
+        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
     </GameMenu>}
   </section>;
+
+  /**
+   * C3b: "Play at Pro / Champions". Each stadium is its own build (one SDK ChanceGame per tier), so the game asks the
+   * trusted host page to open that stadium's page (scripts/build-site.mjs listens and navigates to its relative path).
+   */
+  function openStadium(id: Tier["id"]) {
+    const target = TIERS.find(item => item.id === id);
+    if (!target || id === tier.id) return;
+    try { window.parent.postMessage({ type: STADIUM_MESSAGE, stadium: id }, "*"); } catch { /* no host page */ }
+    setError(""); setMessage(`Opening the ${target.name} stadium page${simulated ? " (simulated preview)" : ""}. If nothing happens, use the ${target.name} link above the game.`);
+  }
 
   async function shareCard(text: string) {
     const url = typeof location === "undefined" ? "" : location.href;
