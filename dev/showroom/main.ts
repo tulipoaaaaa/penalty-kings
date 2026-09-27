@@ -26,6 +26,7 @@ import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
 import type { PlayMode } from "@penalty-kings/game-director";
 import { ReelPlayer } from "../../games/penalty-kings/gfx/reelplayer.js";
 import { MONTAGE, ATTRACT } from "../../games/penalty-kings/gfx/showreel.js";
+import { isFingertip, nearFrame } from "../../games/penalty-kings/gfx/feel.js";
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 const canvas = $<HTMLCanvasElement>("#stage"), context = canvas.getContext("2d")!;
@@ -153,7 +154,24 @@ for (const celebration of CELEBRATIONS) button("#celebrations", celebration.name
 for (const kind of ["miss", "save", "post"] as const) button("#reactions", `React: ${kind}`, () => stage.react(kind));
 RARITY_NAMES.slice(0, 7).forEach((name, index) => button("#rarities", name, () => stage.showReveal(revealPlan(index + 1))));
 button("#moments", "Walk-out", () => stage.walkout());
-button("#moments", "Streak fire ×3", () => { stage.streak = 3; stage.rarity = 6; stage.ballVisible = true; log("streak = 3 (heat shimmer + fire ball)"); });
+button("#moments", "Streak fire ×5", () => { stage.streak = 5; stage.rarity = 6; stage.ballVisible = true; log("streak = 5 (heat shimmer + fire ball)"); });
+
+// ── Game feel (Part B: B1 goal moment, B2 near-miss, B6 streak fever) ───────
+// Real engine outcomes, filtered to the moment. The slow-mo gate (≤ 1 kick in 3) is reset for the near-miss triggers.
+const FEEL: Record<string, () => void> = {
+  "goal-rocket": () => { toPenalty(); shoot("goal", o => o.target.y > 0.6 && Math.abs(o.target.x) > 0.5 && o.target.time < 0.62 && Math.sign(o.plan.x) !== Math.sign(o.target.x), "B1 goal: top-bin rocket, keeper wrong-footed"); },
+  "goal-tapin": () => { toPenalty(); shoot("goal", o => o.target.y < 0.3 && Math.abs(o.target.x) < 0.5 && o.target.time > 0.75, "B1 goal: rolled in"); },
+  post: () => { toPenalty(); stage.resetSlowMoGate?.(); shoot("post", o => o.target.y <= 0.9, "B2 post clang"); },
+  bar: () => { toPenalty(); stage.resetSlowMoGate?.(); shoot("post", o => o.target.y > 0.9, "B2 crossbar clang"); },
+  fingertip: () => { toPenalty(); stage.resetSlowMoGate?.(); shoot("save", o => isFingertip(o, stage.keeper), "B2 fingertip save"); },
+  "so-close": () => { toPenalty(); stage.resetSlowMoGate?.(); shoot("wide", o => nearFrame(o.target), "B2 a whisker wide"); },
+  "fever-3": () => { toPenalty(); stage.streak = 2; shoot("goal", undefined, "B6 goal → 3 in a row"); },
+  "fever-5": () => { toPenalty(); stage.streak = 4; shoot("goal", undefined, "B6 goal → 5 in a row"); },
+  "fever-10": () => { toPenalty(); stage.streak = 9; shoot("goal", undefined, "B6 goal → 10 in a row"); },
+};
+const FEEL_LABELS: Record<string, string> = { "goal-rocket": "B1 goal: top-bin rocket", "goal-tapin": "B1 goal: rolled in", post: "B2 post CLANG", bar: "B2 crossbar CLANG", fingertip: "B2 fingertip save", "so-close": "B2 so close (wide)", "fever-3": "B6 fever 3", "fever-5": "B6 fever 5", "fever-10": "B6 fever 10" };
+for (const [id, run] of Object.entries(FEEL)) button("#feel", FEEL_LABELS[id], run).dataset.testid = `feel-${id}`;
+button("#feel", "Slow-mo gate: reset", () => { stage.resetSlowMoGate(); log("slow-mo gate reset: the next close call slows down"); });
 button("#moments", "Reset streak", () => { stage.streak = 0; stage.rarity = 7; stage.ballVisible = false; });
 button("#moments", "Mexican wave", () => stage.wave());
 button("#moments", "Score +250", () => stage.setScore(stage.score + 250));
@@ -267,7 +285,7 @@ setStadium("park");
 (window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); },
   crowd: (mood: CrowdMood) => stage.crowd.react(mood), census: () => stage.crowd.census, drop: BACKDROP_DROP, loadSample: (id: string) => loadSample(id),
   reel: (which: "montage" | "attract" | "off") => playReel(which), reelTime: () => reel?.time ?? -1,
-  friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); } };
+  feel: (id: string) => FEEL[id](), friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); } };
 select<Weather>("#weather", (["sun", "rain", "snow", "fog", "sunset"] as const).map(value => ({ value, label: value })), value => { stage.weather = value; });
 select<string>("#rarity", RARITY_NAMES.map((name, index) => ({ value: String(index), label: name })), value => { stage.rarity = Number(value); });
 ($<HTMLSelectElement>("#rarity")).value = "7";

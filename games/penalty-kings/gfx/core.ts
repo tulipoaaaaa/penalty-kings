@@ -39,25 +39,63 @@ export class Timeline {
 }
 
 // ── Camera: follow, zoom punch, trauma shake, slow-mo time scale ─────────────
+/** Largest shake in logical px (480 × 320) at trauma 1. */
+export const SHAKE_MAX = { x: 5, y: 4 } as const;
+/**
+ * Screen shake offset (Eiserloh's trauma model): trauma² × max, smooth (two incommensurate sines, not
+ * white noise), snapped to whole logical pixels so the pixel art never shimmers. Zero under reduced motion.
+ */
+export function shakeOffset(trauma: number, time: number, reduced: boolean, yScale = 1) {
+  if (reduced || trauma <= 0) return { x: 0, y: 0 };
+  const s = trauma * trauma;
+  const nx = Math.sin(time * 38.1) * 0.65 + Math.sin(time * 61.7 + 1.3) * 0.35, ny = Math.cos(time * 43.3) * 0.65 + Math.sin(time * 57.9 + 2.1) * 0.35;
+  return { x: Math.round(s * SHAKE_MAX.x * nx) || 0, y: Math.round(s * SHAKE_MAX.y * yScale * ny) || 0 };
+}
+/** Zoom punch envelope 0–1 at `t` s: an 80 ms ease-out rise, a hold to 0.3 s, then an ease back by `dur`. */
+export function punchEnvelope(t: number, dur: number) {
+  if (t < 0 || t >= dur) return 0;
+  if (t < 0.08) return ease.outQuad(t / 0.08);
+  if (t < 0.3) return 1;
+  return 1 - ease.inOutCubic(clamp01((t - 0.3) / (dur - 0.3)));
+}
 export class Camera {
   x = W / 2; y = H / 2; zoom = 1;
   targetX = W / 2; targetY = H / 2; targetZoom = 1;
   trauma = 0; timeScale = 1; hitStop = 0;
+  /** Vertical share of the shake (a post clang shakes mostly sideways). Back to 1 once the trauma is spent. */
+  shakeY = 1;
+  /** A short zoom-in punch towards a world point (the net point on a goal), on top of the follow zoom. */
+  punch: { x: number; y: number; amount: number; t: number; dur: number } | null = null;
   reduced = false;
-  addTrauma(amount: number) { if (!this.reduced) this.trauma = Math.min(1, this.trauma + amount); }
+  addTrauma(amount: number, shakeY = 1) { if (this.reduced) return; if (this.trauma <= 0.05 || shakeY < this.shakeY) this.shakeY = shakeY; this.trauma = Math.min(1, this.trauma + amount); }
+  /** Hit-stop: freeze for `seconds` (the longer of the current and the new freeze). */
+  freeze(seconds: number) { this.hitStop = Math.max(this.hitStop, seconds); }
+  punchAt(x: number, y: number, amount: number, dur = 0.8) { if (!this.reduced) this.punch = { x, y, amount, t: 0, dur }; }
   update(dt: number) {
     const k = 1 - Math.exp(-dt * 6);
     this.x = lerp(this.x, this.targetX, k); this.y = lerp(this.y, this.targetY, k); this.zoom = lerp(this.zoom, this.targetZoom, k);
     this.trauma = Math.max(0, this.trauma - dt * 1.8);
+    if (this.trauma === 0) this.shakeY = 1;
+    if (this.punch && (this.punch.t += dt) >= this.punch.dur) this.punch = null;
   }
   apply(context: CanvasRenderingContext2D, time: number) {
-    const shake = this.reduced ? 0 : this.trauma * this.trauma;
-    const ox = shake * 7 * Math.sin(time * 61.3), oy = shake * 5 * Math.cos(time * 47.9);
+    const { x: ox, y: oy } = shakeOffset(this.trauma, time, this.reduced, this.shakeY);
+    let zoom = this.zoom, cx = this.x, cy = this.y;
+    const p = this.punch, env = p && !this.reduced ? punchEnvelope(p.t, p.dur) : 0;
+    if (p && env > 0) {
+      // Keep the punch point where it is on screen, drift it a quarter of the way to the centre, never show past the world's edge.
+      const z = zoom * (1 + p.amount * env);
+      cx = p.x - ((p.x - cx) * zoom) / z; cy = p.y - ((p.y - cy) * zoom) / z;
+      cx += (p.x - cx) * 0.25 * env; cy += (p.y - cy) * 0.25 * env;
+      const hw = W / (2 * z), hh = H / (2 * z);
+      cx = Math.min(W - hw, Math.max(hw, cx)); cy = Math.min(H - hh, Math.max(hh, cy));
+      zoom = z;
+    }
     context.translate(W / 2 + ox, H / 2 + oy);
-    context.scale(this.zoom, this.zoom);
-    context.translate(-this.x, -this.y);
+    context.scale(zoom, zoom);
+    context.translate(-cx, -cy);
   }
-  reset() { this.targetX = this.x = W / 2; this.targetY = this.y = H / 2; this.targetZoom = this.zoom = 1; this.trauma = 0; this.timeScale = 1; this.hitStop = 0; }
+  reset() { this.targetX = this.x = W / 2; this.targetY = this.y = H / 2; this.targetZoom = this.zoom = 1; this.trauma = 0; this.timeScale = 1; this.hitStop = 0; this.shakeY = 1; this.punch = null; }
 }
 
 // ── Particles: pooled, capped, cheap pixel squares ───────────────────────────

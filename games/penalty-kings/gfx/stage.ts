@@ -18,6 +18,7 @@ import type { RevealPlan } from "../game/reveal.js";
 import { waitCue, WAIT_EVENTS, PACK_TEAR_MS, type WaitCue } from "../game/suspense.js";
 import { drawBallWarmup, drawPenaltyWait, drawSealedPack, drawPackTear } from "./waits.js";
 import { HUSH, type Sfx } from "../audio-core.js";
+import { FeelFx, SlowMoGate, hitStopFor, goalTrauma, paceOf, feverTier, feverStinger, slowMoRate, isCloseCall, isFingertip, nearFrame, CONFETTI, TRAUMA, PUNCH, FEVER_AT, FX_LIFE } from "./feel.js";
 
 export type Facing = "up" | "down" | "left" | "right";
 export type RowsProvider = (facing: Facing, walking: boolean, frame: number) => readonly string[] | null;
@@ -184,6 +185,12 @@ export class Stage {
    */
   private waiting: { kind: "penalty" | "pack"; t: number; expected: number; count: number; fired: Set<string>; nextDrum: number; nextClap: number; nextBeat: number; locked: { x: number; y: number } | null } | null = null;
   private clapT = 9;
+  /** Part B game feel (B1/B2/B6): short-lived FX, the slow-mo rate limit, and this kick's close-call flags. */
+  private feel = new FeelFx();
+  private slowGate = new SlowMoGate();
+  private feelKick = { slowmo: false, fingertip: false };
+  /** Seconds left of the commentator "losing it" (tier-3 streak fever). */
+  private hype = 0;
 
   constructor(options: Partial<Pick<Stage, "stadium" | "weather" | "keeper" | "reduced">> = {}) {
     Object.assign(this, options);
@@ -200,7 +207,7 @@ export class Stage {
   /** Seconds since the current kick was released (null when no kick is playing). */
   get kickClock() { return this.mode === "shot" && this.shot ? this.modeTime : null; }
   /** Abandon an in-flight kick WITHOUT emitting resolved/done (mode switch, redeemed ball). */
-  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; this.waiting = null; this.packTear = null; this.flip = null; }
+  cancel() { this.timeline.reset(); this.mode = "idle"; this.shot = null; this.walkOn = null; this.replaying = null; this.camera.targetZoom = 1; this.camera.targetX = W / 2; this.camera.targetY = H / 2; this.fk = null; this.reticle = null; this.preview = null; this.clock = null; this.ballVisible = true; this.cue = null; this.reveal = null; this.waiting = null; this.packTear = null; this.flip = null; this.feel.clear(); this.camera.punch = null; }
 
   // ── Waits for randomness (FD-3b) ───────────────────────────────────────────
   /** Start a wait: `expectedMs` paces it (0 = instant: nothing shows unless it runs late). */
@@ -282,6 +289,7 @@ export class Stage {
     // Snappy (round 6 B3): strike 0.4 s after release, flight 0.35–0.55 s by power (target.time 0.4–0.95).
     const flight = flightOverride ?? penaltyFlight(outcome.target.time);
     this.shot = this.lastShot = { outcome, curl, flight, strikeAt: STRIKE_AT };
+    this.feelPlan(outcome, live, flightOverride !== undefined);
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
     this.sfx("heartbeat"); if (live && (!this.said || this.said.t > 1.5)) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
@@ -291,8 +299,8 @@ export class Stage {
       .at(0.1, () => this.stepDust(0.1)).at(0.19, () => this.stepDust(0.19)).at(0.28, () => this.stepDust(0.28))
       .at(STRIKE_AT, () => {
         const ball = this.ballHome();
-        this.camera.hitStop = 2 / 60; this.flash = this.reduced ? 0 : 0.35; this.ring = { x: ball.x, y: ball.y, t: 0 };
-        this.ball.squash = 0.35; this.camera.addTrauma(0.25); this.camera.targetZoom = this.reduced ? 1 : 1.12;
+        this.feelStrike(ball, outcome); this.ring = { x: ball.x, y: ball.y, t: 0 };
+        this.ball.squash = 0.35; this.camera.targetZoom = this.reduced ? 1 : 1.12;
         this.particles.emit("grass", ball.x, ball.y + 3, 10, { color: ["#2e7d32", "#8bc34a"], speed: 50, spread: 1.4, life: 0.5 });
         this.sfx("kick"); this.sfx("whoosh"); if (live) this.onEvent("strike");
         const k = KEEPER_DESIGNS[this.keeper].sfx; if (k === "stomp") { this.camera.addTrauma(0.3); this.sfx("stomp"); }
@@ -385,7 +393,7 @@ export class Stage {
       return;
     }
     // Woodwork near the top is the crossbar, not the post (round 6 C13).
-    const said = this.cue ?? result, bar = result === "post" && shot.outcome.target.y > 0.9;
+    const said = this.cue ?? this.feelLine(shot.outcome), bar = result === "post" && shot.outcome.target.y > 0.9;
     this.say(bar && (said === "post" || said === "near-miss") ? "crossbar" : said); this.cue = null;
     if (result === "goal") this.stats.goals++; else if (result === "save") this.stats.saves++; else if (result === "post") this.stats.woodwork++;
     this.onEvent("resolved", result);
@@ -396,23 +404,26 @@ export class Stage {
       return;
     }
     if (result === "goal") {
-      this.net.impulse(art.x, art.y, 160); this.camera.addTrauma(0.5); this.goalFlash = 2;
-      this.particles.emit("confetti", end.x, end.y - 10, 60, { color: THEMES[this.stadium].confetti, speed: 140, spread: Math.PI * 1.2, gravity: 70, life: 2.4 });
+      this.goalFlash = 2;
+      this.feelGoal(shot.outcome, art, end);
       this.particles.emit("thread", end.x, end.y, 8, { color: "#ffffff", speed: 60, life: 0.5, gravity: 60 });
       this.sfx("net"); this.sfx("roar");
       if (this.streak >= 2) this.sfx("chant"); // the game owns streak: its "resolved" handler has already set it (BQ-P1-1)
+      this.feelFever();
     } else {
       this.reaction = result === "post" ? "post" : result === "save" ? "save" : "miss";
       if (result === "save") {
         this.particles.emit("spark", end.x, end.y, 16, { color: ["#ffffff", "#ffd23f"], speed: 90, spread: Math.PI * 2, life: 0.4, gravity: 0 });
         if (this.keeper === "octopus") this.particles.emit("ink", end.x, end.y, 20, { color: "#1a0f2e", speed: 40, spread: Math.PI * 2, life: 1, gravity: 20, size: 2 });
         const taunts = KEEPER_TAUNTS[this.keeper]; this.bubble = { text: taunts[Math.floor(Math.random() * taunts.length)], t: 0 }; this.stats.taunts++;
-        this.camera.hitStop = 0.07; this.camera.addTrauma(0.3); this.sfx("glove"); this.sfx("groan"); this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
+        this.sfx("glove"); this.sfx("groan"); this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
+        this.feelSave(end);
       } else if (result === "post") {
-        this.postWobble = 1.4; this.camera.addTrauma(0.45); this.sfx("clang"); this.sfx("ooh");
-        this.particles.emit("spark", end.x, end.y, 10, { color: "#ffffff", speed: 70, spread: Math.PI * 2, life: 0.3, gravity: 0 });
+        this.sfx("clang"); this.sfx("ooh");
+        this.feelPost(shot.outcome, art);
       } else if (result === "over") { this.fanCatch = { x: end.x + (end.x - 240) * 0.5, t: 0 }; this.sfx("ooh"); }
       else { this.ballKid = { t: 0, x: end.x > 240 ? W + 10 : -10 }; this.sfx("groan"); }
+      if ((result === "wide" || result === "over") && nearFrame(shot.outcome.target)) this.feelSoClose();
     }
     this.scoreFlip = { from: this.score, t: 0 };
   }
@@ -448,16 +459,10 @@ export class Stage {
   update(realDt: number) {
     this.updateWait(realDt); this.clapT += realDt; this.tickReplay(realDt);
     if (this.camera.hitStop > 0) { this.camera.hitStop -= realDt; return; }
-    // Slow-mo (skill layer only): a beat on the release, and near-misses (post, bar, just wide/over, fingertip saves).
+    // Slow-mo (skill layer only, B2): 0.3× on the last ~400 ms of a genuine close call, at most 1 kick in 3, snapping back at impact.
     let slow = 1;
     const shot = this.shot;
-    if (shot && this.mode === "shot" && !this.reduced) {
-      const since = this.modeTime - shot.strikeAt, t = shot.outcome.target;
-      const near = shot.outcome.result === "post" || (shot.outcome.result !== "goal" && (Math.abs(Math.abs(t.x) - 1) < 0.12 || Math.abs(t.y - 1) < 0.1));
-      // Near-misses only (no default slow-mo), ≤ 0.5 s of real time.
-      // Free kicks play the engine's flight 1:1 (on-screen flight time = engine time): their near-miss beat starts at the line.
-      if (near && since > shot.flight * (this.fk ? 1 : 0.85) && since < shot.flight + 0.1) slow = 0.5;
-    }
+    if (shot && this.mode === "shot" && this.feelKick.slowmo && !this.reduced) slow = slowMoRate(this.modeTime - shot.strikeAt, shot.flight, shot.strikeAt);
     if (this.replaying && this.mode === "shot") {
       slow = Math.min(slow, this.replaying.slow);
       if (!this.reduced) { const goal = this.replaying.instant?.focus ?? this.goalPoint(toScreen(0, 0.5)); this.camera.targetX = goal.x; this.camera.targetY = goal.y; this.camera.targetZoom = this.replaying.instant ? 1.7 : 1.5; }
@@ -468,6 +473,7 @@ export class Stage {
     this.camera.update(dt); this.particles.update(dt); this.net.update(dt); this.crowd.update(dt);
     this.flash = Math.max(0, this.flash - dt * 3); this.postWobble = Math.max(0, this.postWobble - dt * 1.5); this.goalFlash = Math.max(0, this.goalFlash - dt);
     this.ball.squash = Math.max(0, this.ball.squash - dt * 4);
+    this.feel.update(dt); this.hype = Math.max(0, this.hype - dt);
     if (this.ring) { this.ring.t += dt; if (this.ring.t > 0.5) this.ring = null; }
     if (this.bubble) { this.bubble.t += dt; if (this.bubble.t > 2.2) this.bubble = null; }
     if (this.said) { this.said.t += dt; if (this.said.t > 3.2) this.said = null; }
@@ -510,13 +516,14 @@ export class Stage {
     drawBackdrop(c, this.stadium, this.weather, this.time, pan, backdropEvents);
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
     this.drawFan(c);
+    this.feel.drawChant(c, 72, this.time, this.reduced, this.stadium === "pro" ? "#ccff00" : "#ffd23f");
     drawBoards(c, this.stadium, this.time, pan, this.boardText ?? undefined);
     drawPitch(c, this.stadium, this.weather);
     drawStadiumFx(c, this.stadium, this.weather, this.time, pan, backdropEvents); // round 6 E22: stadium set pieces behind the goal
     c.restore();
     if (fk) drawPitchMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
     else drawPitchMarkings(c, PENALTY_SETUP, THEMES[this.stadium].lines, null, this.time, PENALTY_CAMERA);
-    drawHeatShimmer(c, this.streak >= 2 && !this.reduced ? Math.min(1, this.streak - 1) : 0, this.time);
+    drawHeatShimmer(c, this.reduced ? 0 : [0, 0.55, 0.85, 1][feverTier(this.streak)], this.time); // B6: from 3 in a row
     this.drawReferee(c);
     const xf = this.goalXf();
     c.save();
@@ -546,12 +553,14 @@ export class Stage {
     if (this.clock && this.mode === "idle" && this.ballVisible) { const home = this.ballHome(); drawClock(c, home.x, home.y - 4, this.clock.left, this.clock.total, this.time); }
     this.drawBallKid(c);
     this.particles.draw(c);
+    this.feel.drawWorld(c, this.reduced);
     if (this.ring) { c.strokeStyle = `rgba(255,255,255,${1 - this.ring.t / 0.5})`; c.lineWidth = 2; c.beginPath(); c.ellipse(this.ring.x, this.ring.y, 6 + this.ring.t * 70, 3 + this.ring.t * 25, 0, 0, Math.PI * 2); c.stroke(); }
     drawWeather(c, this.weather, this.stadium, this.time, this.particles, 1 / 60, this.reduced);
     c.restore();
     // Screen-space UI on the canvas.
     this.drawScoreboard(c);
     this.drawCommentary(c);
+    this.feel.drawUI(c, this.commentaryTop, this.reduced, this.time);
     this.drawBubble(c);
     if (this.mode === "walkout") this.drawWalkout(c);
     if (this.replaying) this.drawReplayCaption(c);
@@ -763,7 +772,7 @@ export class Stage {
 
   private drawBallLayer(c: CanvasRenderingContext2D) {
     if (!this.ballVisible) return;
-    const fx = seasonFx(this.season, this.rarity), onFire = this.streak >= 3;
+    const fx = seasonFx(this.season, this.rarity), onFire = feverTier(this.streak) >= 2; // B6: the "on fire" trail from 5 in a row
     const home = this.ballHome();
     let { x, y, r } = { x: home.x, y: home.y, r: "pxPerM" in home ? Math.max(2, 0.11 * home.pxPerM) : 4.5 }, spin = 0;
     const shot = this.shot;
@@ -795,8 +804,9 @@ export class Stage {
         const q = clamp01((this.modeTime - shot.strikeAt - shot.flight) / 1.3), result = shot.outcome.result;
         if (result === "goal") { x = end.x + (240 - end.x) * 0.1 * q; y = end.y + ease.outBounce(q) * (GOAL.line - 4 - end.y); r = 2.3; }
         else if (result === "save" && this.fk?.tipOver) { x = end.x + (end.x - 240) * 0.15 * q; y = end.y - 34 * Math.sin(Math.PI * 0.5 * q) + 20 * q * q; r = 2.5 - 0.8 * q; spin = this.time * 20; } // tipped over the bar
+        else if (result === "save" && this.feelKick.fingertip) ({ x, y, r, spin } = this.fingertipBall(end, q)); // B2: tipped round the post, spinning
         else if (result === "save") { const dir = end.x >= 240 ? 1 : -1; x = end.x + dir * 130 * q; y = end.y + 95 * q - 45 * Math.sin(Math.PI * q); r = 2.5 + 2 * q; spin = this.time * 20; }
-        else if (result === "post") { x = end.x + (240 - end.x) * 0.5 * q; y = end.y + 120 * ease.outBounce(q) - 20; r = 2.5 + 2 * q; }
+        else if (result === "post") { x = end.x + (240 - end.x) * 0.5 * q; y = end.y + 120 * ease.outBounce(q) - 20 * Math.sin(Math.PI * Math.min(1, q * 2.5)); r = 2.5 + 2 * q; } // B2: rebounds from the contact point (no 20 px jump)
         else if (result === "over") { x = end.x + (end.x - 240) * 0.5 * q; y = end.y - 70 * q; r = 2.5 - 1.2 * q; }
         else { x = end.x + (end.x - 240) * 1.2 * q; y = end.y + 20 * q; r = 2.5; }
         if (q >= 1 && result !== "goal") return;
@@ -874,8 +884,10 @@ export class Stage {
     const t = this.said.t, slide = ease.outBack(clamp01(t / 0.35)), fade = t > 2.8 ? 1 - (t - 2.8) / 0.4 : 1;
     const text = this.said.text.slice(0, Math.floor(t * 40)), width = Math.min(260, 30 + this.said.text.length * 4.6);
     c.globalAlpha = Math.max(0, fade);
-    const x = Math.round(W / 2 - width / 2), y = Math.round(lerp(-28, this.commentaryTop, slide));
-    c.fillStyle = "#0b0d1ae6"; c.fillRect(x, y, width, 22); c.fillStyle = "#ffd23f"; c.fillRect(x, y + 21, width, 1);
+    // B6 tier 3: the commentator loses it (the box shakes on the beat, the rule glows red). Still under reduced motion.
+    const hype = this.hype > 0, shake = hype && !this.reduced ? Math.round(Math.sin(this.time * 60)) : 0;
+    const x = Math.round(W / 2 - width / 2) + shake, y = Math.round(lerp(-28, this.commentaryTop, slide)) + (hype && !this.reduced ? Math.round(Math.sin(this.time * 47)) : 0);
+    c.fillStyle = "#0b0d1ae6"; c.fillRect(x, y, width, 22); c.fillStyle = hype ? "#ff3b1f" : "#ffd23f"; c.fillRect(x, y + 21, width, hype ? 2 : 1);
     drawCommentator(c, x + 2, y + 2, text.length < this.said.text.length, this.time);
     c.fillStyle = "#f7f7f2"; c.font = "8px PixelifySans, monospace"; c.textBaseline = "middle"; c.fillText(text, x + 25, y + 11); c.textBaseline = "alphabetic";
     c.globalAlpha = 1;
@@ -948,6 +960,82 @@ export class Stage {
     this.particles.draw(c);
   }
 
+  // ── Game feel (Part B: B1 goal moment, B2 near-miss drama, B6 streak fever) ────────────────
+  // Kept together (and the rules in gfx/feel.ts) so gameplay-rule changes elsewhere in the Stage merge cleanly.
+  // Visual only: the engine decided every outcome before play(); none of this changes a result.
+
+  /** Before the kick: a fingertip save? And does this kick earn the slow-mo (a close call, at most 1 kick in 3)? */
+  private feelPlan(outcome: ShotOutcome, live: boolean, freeKick: boolean) {
+    const keeper = this.kind === "target" || freeKick ? null : this.keeper;
+    this.feelKick.fingertip = keeper !== null && isFingertip(outcome, keeper);
+    this.feelKick.slowmo = live && this.slowGate.allow(isCloseCall(outcome, keeper), this.reduced);
+  }
+  /** Showroom: let the next close call slow down again. */
+  resetSlowMoGate() { this.slowGate.reset(); }
+  /** B1 boot contact: a 50 ms freeze, a little trauma, and a local contact star with speed lines (no full-screen flash). */
+  private feelStrike(ball: { x: number; y: number }, outcome: ShotOutcome) {
+    this.camera.freeze(hitStopFor("strike")); this.camera.addTrauma(TRAUMA.strike);
+    const end = this.goalPoint(toScreen(outcome.target.x, outcome.target.y));
+    this.feel.contact(ball.x, ball.y - 1, end.x - ball.x, end.y - ball.y);
+  }
+  /** B1 goal: a 90 ms freeze, a zoom-in punch on the net point, shake by pace and fever, the net bulge, stadium confetti. */
+  private feelGoal(outcome: ShotOutcome, art: { x: number; y: number }, end: { x: number; y: number }) {
+    const pace = paceOf(outcome.target.time), tier = feverTier(this.streak), recipe = CONFETTI[this.stadium];
+    this.camera.freeze(hitStopFor("net")); this.camera.addTrauma(goalTrauma(pace, tier));
+    this.camera.punchAt(end.x, end.y, PUNCH.goal * (1 + 0.12 * tier), 0.85);
+    this.net.impulse(art.x, art.y, 0.8 + 0.3 * pace); this.sfx("net-ripple");
+    this.particles.emit("confetti", end.x, end.y - 10, recipe.count, { color: THEMES[this.stadium].confetti, speed: recipe.speed, spread: recipe.spread, gravity: 70, life: recipe.life });
+    if (recipe.glints) this.particles.emit("sparkle", end.x, end.y - 10, recipe.glints, { color: [...recipe.glint], speed: recipe.speed * 0.8, spread: recipe.spread, gravity: 30, life: recipe.life * 0.6 });
+  }
+  /** B2 save: a short freeze and a small punch; a fingertip save gets its own beat (spark, deflection, "TIPPED!"). */
+  private feelSave(end: { x: number; y: number }) {
+    const tip = this.feelKick.fingertip;
+    this.camera.freeze(hitStopFor(tip ? "fingertip" : "save")); this.camera.addTrauma(tip ? TRAUMA.fingertip : TRAUMA.save);
+    this.camera.punchAt(end.x, end.y, PUNCH.save, 0.6);
+    if (!tip) return;
+    const dir = end.x >= 240 ? 1 : -1;
+    this.feel.spark(end.x, end.y); this.ball.squash = 0.4; this.sfx("fingertip");
+    this.particles.emit("spark", end.x, end.y, 8, { color: ["#ffffff", "#ffe27a"], speed: 70, angle: dir > 0 ? -0.5 : -Math.PI + 0.5, spread: 1, life: 0.3, gravity: 40 });
+    this.feel.say("TIPPED!", "FINGERTIP SAVE");
+  }
+  /** B2 woodwork: a 120 ms freeze, a sideways tremor, a spark burst at the contact point, "CLANG!" then "SO CLOSE!". */
+  private feelPost(outcome: ShotOutcome, art: { x: number; y: number }) {
+    const bar = outcome.target.y > 0.9;
+    const hit = this.goalPoint(bar ? { x: art.x, y: GOAL.bar - 2 } : { x: outcome.target.x < 0 ? GOAL.left - 2 : GOAL.right + 1, y: art.y });
+    this.postWobble = 1.4; this.camera.freeze(hitStopFor("post")); this.camera.addTrauma(TRAUMA.post, 0.25);
+    this.camera.punchAt(hit.x, hit.y, PUNCH.post, 0.6);
+    this.feel.spark(hit.x, hit.y);
+    this.particles.emit("spark", hit.x, hit.y, 14, { color: ["#ffffff", "#ffe27a", "#ffb347"], speed: 90, spread: Math.PI * 2, life: 0.35, gravity: 60 });
+    this.feel.say("CLANG!", "SO CLOSE!"); this.sfx("so-close");
+  }
+  /** B2 a whisker wide or over. */
+  private feelSoClose() { this.feel.say("SO CLOSE!", "BY A WHISKER"); this.sfx("so-close"); }
+  /** The result line when the Director has none: the near-miss and fingertip lines, else the plain result. */
+  private feelLine(outcome: ShotOutcome): CommentaryContext {
+    if (outcome.result === "save" && this.feelKick.fingertip) return "fingertip";
+    if ((outcome.result === "wide" || outcome.result === "over") && nearFrame(outcome.target)) return "so-close";
+    return outcome.result;
+  }
+  /** The ball after a fingertip: deflected out round the post, spinning hard, then dropping. */
+  private fingertipBall(end: { x: number; y: number }, q: number) {
+    const dir = end.x >= 240 ? 1 : -1;
+    return { x: end.x + dir * (26 * q + 40 * q * q), y: end.y - 22 * Math.sin(Math.PI * 0.6 * q) + 60 * q * q, r: 2.5 + 1.5 * q, spin: this.time * 42 * dir };
+  }
+  /**
+   * B6 streak fever, on a goal (the game has already set this.streak: BQ-P1-1). 3: a louder crowd and the heat
+   * shimmer; 5: the ball catches fire; 10: the whole stadium chants and the commentator loses it. Stingers mark each step.
+   */
+  private feelFever() {
+    const tier = feverTier(this.streak), stinger = feverStinger(this.streak);
+    if (tier >= 1) this.sfx("roar-swell");
+    if (stinger) this.sfx(stinger);
+    if (this.streak === FEVER_AT[0]) this.feel.say("HAT-TRICK!", "3 IN A ROW", true);
+    if (this.streak === FEVER_AT[1]) { this.say("streak5"); this.feel.say("ON FIRE!", "5 IN A ROW", true); }
+    if (tier === 3) {
+      this.feel.chant = FX_LIFE.chant; this.hype = 3.2;
+      if (this.streak % 5 === 0) { this.say("streak10"); this.crowd.startWave(); this.feel.say(`${this.streak} IN A ROW!`, "THE WHOLE STADIUM IS SINGING", true); }
+    }
+  }
   /** B5: a lower ball's card flip (up to FLIP_SECONDS; the next flip or the best reveal replaces it): the ball turns face-up with a glow sized and coloured by its TRUE rarity tier. */
   private drawFlip(c: CanvasRenderingContext2D) {
     const f = this.flip!, t = f.t, fx = RARITY_FX[f.plan.rarity], tier = f.plan.tier;

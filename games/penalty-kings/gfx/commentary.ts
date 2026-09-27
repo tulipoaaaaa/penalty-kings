@@ -12,6 +12,8 @@ export type CommentaryContext =
   | "first-walkout" | "cold-streak" | "daily" | "tour" | "curler" | "screamer" | "near-miss" | "showreel" | "lucky-ball" | "veteran-ball" | "pack" | `intro:${KeeperId}`
   /** FD-3b waits for randomness: the sealed pack, and the keeper deciding after your shot is locked in. */
   | "pack-wait" | "pack-wait-long" | "keeper-deciding"
+  /** Part B (B2 near-miss, B6 streak fever): a whisker wide or over, a fingertip save, 5 and 10 goals in a row. */
+  | "so-close" | "fingertip" | "streak5" | "streak10"
   /** A Match Director line (see cueLine): Stage.say() shows it verbatim. */
   | `line:${string}`;
 
@@ -28,6 +30,10 @@ const LINES: Readonly<Record<string, readonly string[]>> = {
   "near-miss": ["Inches! Actual inches!", "So close you could hear the crowd gasp.", "That kissed the paint!", "A coat of varnish away!"],
   streak2: ["{friend} is heating up!", "Two in a row. Feel the heat.", "Somebody stop {friend}!", "Back to back!"],
   streak3: ["{friend} is ON FIRE!", "Unstoppable! Absolutely unstoppable!", "Hat-trick hero!", "Call the fire brigade!", "Is there anything {friend} can't do?"],
+  "so-close": ["SO CLOSE! The paint's still wet!", "That shaved a whisker off the frame!", "The crowd were already celebrating!", "A shoelace wide! A SHOELACE!", "Half the stadium is holding its head!"],
+  fingertip: ["FINGERTIPS! {keeper} tips it away!", "{keeper} gets the faintest touch!", "One fingernail from {keeper}. That's all it took.", "Clawed away at full stretch!"],
+  streak5: ["FIVE in a row! The ball is on fire!", "Five straight! Somebody hose down that ball!", "{friend} has gone full furnace!", "Five! This is getting silly now!"],
+  streak10: ["TEN IN A ROW! I've lost my headset!", "TEN!! I'M STANDING ON THE DESK!", "TEN!! SOMEBODY HOLD ME BACK!", "TEN STRAIGHT! THIS IS NOT NORMAL!"],
   "cold-streak": ["Keep the head up, {friend}.", "It'll come. It always comes.", "Shake it off. Next one.", "Even the greats miss."],
   "rarity-high": ["Ooh, a shiny ball!", "That ball's worth a closer look.", "Now that's a proper ball."],
   "rarity-top": ["A GOLDEN BOOT BALL! Hold everything!", "Gold! Pure gold!", "The Golden Boot! I've gone all goosebumpy!"],
