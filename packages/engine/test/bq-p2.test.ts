@@ -1,7 +1,7 @@
 // Bug Quest P2 (engine / difficulty): one test per item, each failed before its fix.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KEEPERS, resolveShot, kickSeed, prng, aimWobble, assistShot, keeperPlan, shotTarget, DIFFICULTY_LADDER, swipeToShot, releasePoint, OVERHIT, MIN_SWIPE_MS, freeKickSetup, resolveFreeKick } from "../src/index.ts";
+import { KEEPERS, resolveShot, kickSeed, prng, aimWobble, assistShot, keeperPlan, shotTarget, DIFFICULTY_LADDER, swipeToShot, releasePoint, OVERHIT, MIN_SWIPE_MS, freeKickSetup, resolveFreeKick, freeKickWall, FK_BALL_RADIUS, JUMP_HEIGHT, JUMP_TIME } from "../src/index.ts";
 
 const gauss = (random: () => number) => Math.sqrt(-2 * Math.log(random() || 1e-9)) * Math.cos(2 * Math.PI * random());
 
@@ -98,4 +98,25 @@ test("BQ-P2-8: the engine flags which woodwork a shot touched (hitPost / hitBar)
     fkPosts++; assert.ok(fk.hitPost || fk.hitBar);
   }
   assert.ok(fkPosts > 0, "free-kick woodwork found");
+test("BQ-P2-5: a free kick only gets past the wall when the whole BALL clears it (end, heads, boots), not just its centre", () => {
+  const random = prng(0x5a11);
+  let passed = 0;
+  for (let k = 0; k < 4000; k++) {
+    const setup = freeKickSetup(0x900 + k, { distance: 18 + (k % 15), angle: (random() - 0.5) * 0.9, maxWind: 3, wallHeight: [1.65, 1.8, 1.9][k % 3] });
+    const shot = { aimX: random() * 2 - 1, lift: random() * 0.6, power: random(), spin: random() * 1.6 - 0.8, top: random() * 0.8 };
+    const outcome = resolveFreeKick(setup, shot, KEEPERS[k % KEEPERS.length]);
+    if (outcome.result === "wall") continue;
+    const wall = freeKickWall(setup), path = outcome.path;
+    const i = path.findIndex(p => p.z >= wall.z);
+    if (i < 1) continue;
+    const a = path[i - 1], b = path[i], u = (wall.z - a.z) / (b.z - a.z || 1);
+    const cx = a.x + (b.x - a.x) * u, cy = a.y + (b.y - a.y) * u, t = a.t + (b.t - a.t) * u;
+    const jump = t >= setup.wallJumpAt ? Math.sin(Math.min(1, (t - setup.wallJumpAt) / JUMP_TIME) * Math.PI) * JUMP_HEIGHT : 0;
+    const tol = 0.02; // the 30 Hz path is interpolated here; the engine tests every 240 Hz step
+    const beside = Math.abs(cx - wall.x) >= wall.halfWidth + FK_BALL_RADIUS - tol, over = cy - FK_BALL_RADIUS >= setup.wallHeight + jump - tol;
+    const under = jump > 0.12 && cy + FK_BALL_RADIUS <= jump + tol;
+    passed++;
+    assert.ok(beside || over || under, `kick ${k}: ${outcome.result} but the ball met the wall (centre ${cx.toFixed(2)}, ${cy.toFixed(2)} m; wall ${wall.x.toFixed(2)} ± ${wall.halfWidth.toFixed(2)}, top ${(setup.wallHeight + jump).toFixed(2)} m)`);
+  }
+  assert.ok(passed > 1000, `${passed} kicks past the wall`);
 });

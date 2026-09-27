@@ -21,6 +21,8 @@ const G = 9.81, DRAG = 0.0125, MAGNUS = 0.2, TOPSPIN = 0.5, DT = 1 / 240, WIND_G
 /** Every struck free kick carries a little natural topspin (an instep drive); a knuckleball carries none. */
 const BASE_TOP = 0.2;
 export const PLAYER_WIDTH = 0.62, JUMP_HEIGHT = 0.38, JUMP_TIME = 0.5;
+/** The ball's radius in metres (a size-5 ball, 0.11 m: it rests with its centre this high). */
+export const FK_BALL_RADIUS = 0.11;
 /** Wall height by difficulty (stadium): a youth wall at Park, a pro wall at Champions. Levels may override. */
 export const WALL_HEIGHTS = { park: 1.65, pro: 1.8, champions: 1.9 } as const;
 /** Launch speed band, m/s: a soft 18 m chip at the bottom, the hardest 32 m strike at the top. */
@@ -152,9 +154,10 @@ function fly(setup: FreeKickSetup, shot: FreeKickShot, random: () => number, wob
       const k = (wall.z - prevZ) / (z - prevZ || 1), cx = prevX + (x - prevX) * k, cy = prevY + (y - prevY) * k;
       const jump = t >= setup.wallJumpAt ? Math.sin(clamp((t - setup.wallJumpAt) / JUMP_TIME, 0, 1) * Math.PI) * JUMP_HEIGHT : 0;
       jumped = jump > 0;
-      // Over the top, or UNDER a wall that has jumped (a skidding low shot).
-      const under = jump > 0.12 && cy < jump - 0.08;
-      if (Math.abs(cx - wall.x) < wall.halfWidth && cy < (setup.wallHeight ?? 1.85) + jump && !under) wallHit = true;
+      // Over the top, or UNDER a wall that has jumped (a skidding low shot). BQ-P2-5: the BALL (radius
+      // FK_BALL_RADIUS), not its centre point, must clear the wall: past its end, over its heads, under its boots.
+      const under = jump > 0.12 && cy + FK_BALL_RADIUS < jump;
+      if (Math.abs(cx - wall.x) < wall.halfWidth + FK_BALL_RADIUS && cy - FK_BALL_RADIUS < (setup.wallHeight ?? 1.85) + jump && !under) wallHit = true;
     }
     if (wallHit) break;
     if (t >= nextSample) { path.push({ t, x, y, z }); nextSample += 1 / 30; }
@@ -187,6 +190,11 @@ export function resolveFreeKick(setup: FreeKickSetup, shot: FreeKickShot, keeper
   // ball the drawn keeper touches is always a save (a tip over the bar or round the post included).
   const touch = keeperTouch(freeKickKeeperFrame(keeper.id, motion, t), { x: target.x, y: target.y * GOAL_ASPECT }, BALL_RADIUS);
   if (touch) return { ...base, result: "save", touch, ...(target.y > 0.8 ? { tipOver: true } : {}) };
+  // The frame. Deliberately NOT the penalty rule (resolveShot: band BALL_RADIUS + FRAME = 0.07 goal units, a 50 %
+  // "in off the post" from the inside): a free kick's woodwork band is 0.045 goal units (the ball's 0.11 m radius
+  // over the 2.44 m goal height) and every contact is a "post" (C1's free-kick balance; free kicks have no
+  // postIn). The crossing point is interpolated linearly to the goal line from the last 30 Hz sample (millimetre
+  // error), where a penalty's is analytic (shotTarget).
   const ax = Math.abs(target.x);
   const hitsPost = Math.abs(ax - 1) < 0.045 && target.y < 1.03;
   const hitsBar = Math.abs(target.y - 1) < 0.045 && ax < 1.03;

@@ -124,8 +124,10 @@ test("C1b: reachability — at every distance and pace a natural swipe (topspin 
       }
       cells.push(lo < 0 ? "none" : `${lo.toFixed(2)}–${hi.toFixed(2)}`);
       assert.ok(lo >= 0, `${d} m power ${power}: no scoring height over the wall`);
-      // Comfortable: a soft-to-natural swipe has a band ≥ 0.2 goal units (≈0.5 m) from every distance.
-      if (power <= 0.5) assert.ok(hi - lo >= 0.2 - 1e-9, `${d} m power ${power}: band ${lo.toFixed(2)}–${hi.toFixed(2)} too narrow`);
+      // Comfortable: a soft-to-natural swipe has a band ≥ 0.2 goal units (≈0.5 m) from every distance; ≥ 0.15 (≈0.37 m)
+      // at 18 m, where the wall is steepest to clear. BQ-P2-5: the whole BALL must clear the wall now (it was the
+      // centre point), which took the 18 m natural-pace band from 0.70–0.94 to 0.78–0.94.
+      if (power <= 0.5) assert.ok(hi - lo >= (d === 18 ? 0.15 : 0.2) - 1e-9, `${d} m power ${power}: band ${lo.toFixed(2)}–${hi.toFixed(2)} too narrow`);
     }
     table.push(`${String(d).padStart(2)} m  ${cells.map(c => c.padEnd(10)).join(" ")}`);
   }
