@@ -21,6 +21,23 @@ export const CELEBRATIONS = [
 ] as const;
 export type CelebrationId = typeof CELEBRATIONS[number]["id"];
 
+const maskCache = new Map<string, HTMLCanvasElement>();
+/** The canonical mask at one pixel per cell with a one-cell halo border ('#' → black, halo around it). */
+function maskImage(rows: readonly string[], halo: string) {
+  const key = `${halo}|${rows.join("/")}`, cached = maskCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas"), w = Math.max(...rows.map(row => row.length)) + 2, h = rows.length + 2;
+  canvas.width = w; canvas.height = h;
+  const m = canvas.getContext("2d")!;
+  m.fillStyle = halo;
+  rows.forEach((row, py) => { for (let px = 0; px < row.length; px++) if (row[px] === "#") m.fillRect(px, py, 3, 3); });
+  m.fillStyle = "#000000";
+  rows.forEach((row, py) => { for (let px = 0; px < row.length; px++) if (row[px] === "#") m.fillRect(px + 1, py + 1, 1, 1); });
+  if (maskCache.size > 96) maskCache.delete(maskCache.keys().next().value!);
+  maskCache.set(key, canvas);
+  return canvas;
+}
+
 /** Draws the canonical mask exactly (black pixels, one-pixel halo in the kit colour) + layers. */
 export function drawFriend(c: CanvasRenderingContext2D, rows: FriendRows, pose: FriendPose, layers: FriendLayers, time: number) {
   const s = pose.scale;
@@ -44,10 +61,14 @@ export function drawFriend(c: CanvasRenderingContext2D, rows: FriendRows, pose: 
     c.fillStyle = "#ffffff"; c.font = `bold ${6 * s}px PixelifySans, monospace`; c.textAlign = "center"; c.textBaseline = "middle";
     c.fillText("?", 0, top + 9 * s); c.textAlign = "left"; c.textBaseline = "alphabetic";
   } else {
-    c.fillStyle = layers.halo;
-    rows.forEach((row, py) => { for (let px = 0; px < row.length; px++) if (row[px] === "#") c.fillRect(left + px * s - s, top + py * s - s, s * 3, s * 3); });
-    c.fillStyle = "#000000";
-    rows.forEach((row, py) => { for (let px = 0; px < row.length; px++) if (row[px] === "#") c.fillRect(left + px * s, top + py * s, s, s); });
+    // The scale follows perspective (non-integer) and the sprite rotates/squashes, so the mask is
+    // rasterised once at one pixel per cell (halo + black, exactly as read) and drawn as a single
+    // nearest-neighbour image: no seams between cells at any scale or angle.
+    const smoothing = c.imageSmoothingEnabled;
+    c.imageSmoothingEnabled = false;
+    const mask = maskImage(rows, layers.halo);
+    c.drawImage(mask, left - s, top - s, mask.width * s, mask.height * s);
+    c.imageSmoothingEnabled = smoothing;
     const topRow = rows.findIndex(row => row.includes("#")), lowest = rows.reduce((found, row, index) => (row.includes("#") ? index : found), -1);
     if (layers.headband && topRow >= 0) { c.fillStyle = layers.headband; c.fillRect(left + rows[topRow].indexOf("#") * s - s, top + (topRow - 1) * s, (rows[topRow].lastIndexOf("#") - rows[topRow].indexOf("#") + 3) * s, s); }
     if (lowest >= 0) {
@@ -57,6 +78,48 @@ export function drawFriend(c: CanvasRenderingContext2D, rows: FriendRows, pose: 
       c.fillStyle = layers.boots;
       c.fillRect(left + first * s - s, by, s * 2, s); c.fillRect(left + last * s, by, s * 2, s);
     }
+  }
+  c.restore();
+}
+
+/**
+ * Kick-leg overlay (drawn ON TOP of the unaltered sprite): a pixel leg from the Friend's right hip
+ * to the boot, in the mask's black with the kit halo, bent at the knee by frame
+ * (back-lift → swing → contact → follow-through). The boot's centre is exactly `leg.foot`.
+ */
+export function drawKickLeg(c: CanvasRenderingContext2D, leg: { frame: "back" | "swing" | "contact" | "through"; hip: { x: number; y: number }; foot: { x: number; y: number } }, scale: number, halo: string, boots: string) {
+  const { hip, foot } = leg, dx = foot.x - hip.x, dy = foot.y - hip.y, len = Math.hypot(dx, dy) || 1;
+  const bend = { back: 0.35, swing: 0.18, contact: 0.04, through: -0.12 }[leg.frame];
+  // Knee: off the hip→foot line, towards the camera (down-screen) and back.
+  const knee = { x: hip.x + dx / 2 - (dy / len) * len * bend, y: hip.y + dy / 2 + (Math.abs(dx) / len) * len * bend };
+  const w = Math.max(2, Math.round(scale * 1.2)), h = Math.max(1, Math.round(scale * 0.5));
+  const walk = (grow: number) => {
+    for (const [a, b] of [[hip, knee], [knee, foot]] as const) {
+      const steps = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / Math.max(1, w / 2)));
+      for (let i = 0; i <= steps; i++) {
+        const x = a.x + ((b.x - a.x) * i) / steps, y = a.y + ((b.y - a.y) * i) / steps;
+        c.fillRect(Math.round(x - w / 2) - grow, Math.round(y - w / 2) - grow, w + grow * 2, w + grow * 2);
+      }
+    }
+  };
+  c.fillStyle = halo; walk(h);
+  c.fillStyle = "#000000"; walk(0);
+  const bw = Math.max(3, Math.round(scale * 2)), bh = Math.max(2, Math.round(scale));
+  c.fillStyle = "#000000"; c.fillRect(Math.round(foot.x - bw / 2) - 1, Math.round(foot.y - bh / 2) - 1, bw + 2, bh + 2);
+  c.fillStyle = boots; c.fillRect(Math.round(foot.x - bw / 2), Math.round(foot.y - bh / 2), bw, bh);
+}
+
+/** Contact flash at the ball: a white pixel burst that grows and fades over ~0.12 s (`k` 1 → 0). */
+export function drawContactFlash(c: CanvasRenderingContext2D, x: number, y: number, r: number, k: number, reduced = false) {
+  const reach = r + 2 + (reduced ? 2 : (1 - k) * 9), dot = Math.max(2, Math.round(r * 0.6));
+  c.save();
+  c.globalAlpha = Math.min(1, k * 1.4) * (reduced ? 0.6 : 1);
+  c.strokeStyle = "#ffffff"; c.lineWidth = 1.5;
+  c.beginPath(); c.arc(x, y, r + 1.5, 0, Math.PI * 2); c.stroke();
+  c.fillStyle = "#fff6b0";
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4, d = i % 2 ? reach * 0.75 : reach;
+    c.fillRect(Math.round(x + Math.cos(a) * d - dot / 2), Math.round(y + Math.sin(a) * d - dot / 2), dot, dot);
   }
   c.restore();
 }

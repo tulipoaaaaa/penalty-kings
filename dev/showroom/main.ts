@@ -4,7 +4,7 @@
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
 import { KEEPERS, keeperById, resolveShot, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
 import { spawnTargets, targetAt } from "../../games/penalty-kings/game/target.js";
-import { Stage, CELEBRATIONS, RARITY_NAMES } from "../../games/penalty-kings/gfx/stage.js";
+import { Stage, CELEBRATIONS, RARITY_NAMES, STRIKE_AT } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
 import { THEMES, type StadiumId, type Weather } from "../../games/penalty-kings/gfx/stadium.js";
 import { drawKeeper } from "../../games/penalty-kings/gfx/keepers.js";
@@ -95,6 +95,22 @@ button("#setpieces", "Target practice", () => {
   targetTimer = window.setInterval(() => { const t = (performance.now() - start) / 1000; stage.targets = targets.map(target => ({ ...targetAt(target, t), r: target.r, value: target.value })); }, 33);
 });
 button("#setpieces", "Zone hints on/off", () => { stage.hints = stage.hints ? 0 : 1; });
+
+// ── Kick animation review: the run-up, plant, leg swing and contact flash, slowed down ─────
+let freezeAtStrike = false;
+function setSpeed(value: number) { speed.value = String(value); speed.dispatchEvent(new Event("input")); }
+function kickReview(view: "penalty" | "freekick", mode: "slow" | "contact") {
+  paused = false; $("#pause").textContent = "Pause";
+  if (view === "penalty") { toPenalty(); shoot("goal"); } else { if (stage.kind !== "freekick") useSetup(setup); freeKick("goal"); }
+  freezeAtStrike = mode === "contact";
+  setSpeed(mode === "slow" ? 0.12 : 0.25);
+  log(mode === "slow" ? "kick replay at 0.12× (Speed slider to change; Step frame to scrub)" : `frozen at the contact frame (${STRIKE_AT} s after release)`);
+}
+button("#kickreview", "Penalty kick ×0.12", () => kickReview("penalty", "slow"));
+button("#kickreview", "Free kick ×0.12", () => kickReview("freekick", "slow"));
+button("#kickreview", "Penalty: freeze at contact", () => kickReview("penalty", "contact"));
+button("#kickreview", "Free kick: freeze at contact", () => kickReview("freekick", "contact"));
+button("#kickreview", "Normal speed", () => setSpeed(1));
 button("#setpieces", "Back to penalties", () => toPenalty());
 for (const celebration of CELEBRATIONS) button("#celebrations", celebration.name, () => { stage.celebration = celebration.id as CelebrationId; stage.startCelebration(celebration.id as CelebrationId); });
 for (const kind of ["miss", "save", "post"] as const) button("#reactions", `React: ${kind}`, () => stage.react(kind));
@@ -145,6 +161,7 @@ function frame(now: number) {
   walkFrame.value = Math.floor(now / 140) % 4;
   const started = performance.now();
   if (!paused || stepOnce) { stage.update(stepOnce ? 1 / 60 : dt); stepOnce = false; }
+  if (freezeAtStrike && (stage.kickClock ?? 0) >= STRIKE_AT) { freezeAtStrike = false; paused = true; $("#pause").textContent = "Resume"; }
   stage.render(context);
   meter.push(performance.now() - started);
   $("#meter").textContent = `frame ${meter.average.toFixed(2)} ms avg · ${meter.p95.toFixed(2)} ms p95 · particles ${stage.particles.count ?? "?"}`;
