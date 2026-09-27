@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { KEEPERS, KEEPER_RIGS, RIG_POSES, DIFFICULTY_LADDER, NEUTRAL, resolveShot, kickSeed, prng, type KeeperId, type ShotOutcome } from "@penalty-kings/engine";
-import { KEEPER_DESIGNS, keeperArt, keeperRows } from "../../games/penalty-kings/gfx/keepers.ts";
+import { KEEPER_DESIGNS, keeperArt, keeperRows, lookFor } from "../../games/penalty-kings/gfx/keepers.ts";
 import { penaltyFlight, keeperClock, penaltyKeeperFrame, penaltyBallArt } from "../../games/penalty-kings/gfx/stage.ts";
 
 // Round 6 B4: a penalty is saved ONLY when the rendered keeper touches the rendered ball at the crossing frame.
@@ -82,4 +82,12 @@ test("render vs physics: 2,000 seeded kicks, the drawn keeper touches the drawn 
   assert.ok(saves > 300 && saves < kicks - 300, `a real mix of saves (${saves}) and goals`);
   assert.ok((parts.leg ?? 0) > 0 && (parts.glove ?? 0) > 0 && (parts.body ?? 0) > 0, "legs, gloves and bodies all make saves");
   assert.ok((poses.set ?? 0) > 0 && (poses.launch ?? 0) > 0 && (poses.stretch ?? 0) > 0, "every body pose is on screen at some crossing");
+});
+
+test("keeper animation phase is a valid sprite frame (0–3) for any time, negative included", () => {
+  for (const mood of ["idle", "set", "dive", "celebrate", "taunt", "sad"] as const)
+    for (const time of [-5, -1.3, -0.01, 0, 0.37, 12.9]) {
+      const { phase } = lookFor(mood, time);
+      assert.ok(Number.isInteger(phase) && phase >= 0 && phase <= 3, `${mood} at t=${time}: phase ${phase}`);
+    }
 });

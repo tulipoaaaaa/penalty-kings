@@ -5,6 +5,7 @@
 //   >= 5 keepers, >= 8 distinct Director moments, >= 15 unique commentary lines, 0 lines repeated within 60 s.
 // Usage: node scripts/qa-90s.mjs [--width 960|360] [--motion]
 import assert from "node:assert/strict";
+import { chromium } from "playwright";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
 import { playInPortraitIfAsked } from "./lib/phone.mjs";
@@ -15,6 +16,23 @@ const args = process.argv.slice(2);
 const width = Number(args[args.indexOf("--width") + 1] || 0) || 960;
 /** --motion: play with full motion (the SDK harness forces prefers-reduced-motion: reduce by default). */
 const motion = args.includes("--motion");
+// Full motion from the FIRST frame (the SDK harness creates its context with reducedMotion "reduce"), and every
+// uncaught page error recorded from page creation on: a render loop that throws on load (the negative-dt bug in
+// 23b8d85, which only showed with full motion at load) must fail this QA, not slip past a later emulateMedia switch.
+const pageErrors = [];
+{
+  const launch = chromium.launch.bind(chromium);
+  chromium.launch = async (...launchArgs) => {
+    const browser = await launch(...launchArgs);
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (options = {}) => {
+      const context = await newContext(motion ? { ...options, reducedMotion: "no-preference" } : options);
+      context.on("page", page => page.on("pageerror", error => pageErrors.push(String(error?.message ?? error))));
+      return context;
+    };
+    return browser;
+  };
+}
 // keepers: distinct keepers on screen in the 90 s (Stage stats: cold open, walk-ons and kicks). keepersFaced
 // (keepers actually kicked against) is reported next to it: Park free play rotates within the Director's
 // easy pool (the ladder keeper ± one rung), so it is lower on a fresh profile.
@@ -29,7 +47,6 @@ await testGame("./games/penalty-kings", {
   width, timeout: 60_000,
   check: async ({ page, game }) => {
     await playInPortraitIfAsked(game); // 360 × 800 is a portrait phone: "Play in portrait anyway" (R6-B7)
-    if (motion) await page.emulateMedia({ reducedMotion: "no-preference" });
     const started = Date.now(), elapsed = () => (Date.now() - started) / 1000;
     const button = name => game.getByRole("button", { name, exact: true });
     const canvas = game.locator("canvas.pk-canvas");
@@ -86,4 +103,5 @@ console.log(`90-second QA at ${width}px (${motion ? "full motion" : "reduced mot
 for (const [key, value] of Object.entries(report)) console.log(`  ${key.padEnd(17)} ${value}${MINIMUMS[key] !== undefined ? `   (min ${MINIMUMS[key]})` : MAXIMUMS[key] !== undefined ? `   (max ${MAXIMUMS[key]})` : ""}`);
 for (const [key, min] of Object.entries(MINIMUMS)) assert.ok(report[key] >= min, `${key} ${report[key]} < ${min}`);
 for (const [key, max] of Object.entries(MAXIMUMS)) assert.ok(report[key] <= max, `${key} ${report[key]} > ${max}: ${repeatList.join(" | ")}`);
+assert.deepEqual(pageErrors, [], `uncaught page errors: ${pageErrors.join(" | ")}`);
 console.log("PASS 90-second QA");

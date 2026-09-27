@@ -823,7 +823,8 @@ export type KeeperPose = {
 
 /** Which display frame a pose shows at `time`: breath, blinks and the parts' sway phase. */
 export function lookFor(mood: KeeperPose["mood"], time: number, reduced = false): { look: KeeperLook; phase: number } {
-  const phase = reduced ? 0 : Math.floor(time * (mood === "celebrate" || mood === "taunt" ? 9 : 5)) % 4;
+  // ((n % 4) + 4) % 4: a sprite frame 0–3 even if time is ever negative (a negative phase has no frame and threw).
+  const phase = reduced ? 0 : ((Math.floor(time * (mood === "celebrate" || mood === "taunt" ? 9 : 5)) % 4) + 4) % 4;
   switch (mood) {
     case "set": return { look: "set", phase: 0 };
     case "dive": return { look: "stretch", phase: 0 };
@@ -967,7 +968,7 @@ export function drawKeeperFrame(context: CanvasRenderingContext2D, frame: Keeper
   const design = KEEPER_DESIGNS[frame.id], art = keeperArt(frame), time = options.time ?? 0, reduced = options.reduced ?? false;
   const landed = options.after !== undefined && options.after > 0.12;
   const look: KeeperLook = !landed ? frame.pose : frame.pose === "set" ? (options.mood === "sad" ? "sad" : options.mood === "celebrate" ? "cheer" : "set") : "land";
-  const phase = landed && !reduced ? Math.floor(time * 6) % 4 : 0;
+  const phase = landed && !reduced ? ((Math.floor(time * 6) % 4) + 4) % 4 : 0;
   const { image, pad: margin } = keeperSprite(frame.id, look, phase, 0, time, reduced);
   const s = art.scale;
   context.save();
