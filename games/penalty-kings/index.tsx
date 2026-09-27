@@ -37,6 +37,7 @@ import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { nextGoal } from "./game/nextgoal.js";
+import { skillZoneOf, streakAfter, SKILL_ZONE_XP, SKILL_ZONE_LABEL } from "./game/rewards.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
@@ -52,6 +53,8 @@ import "@rarefriends/friendsdk/frame.css";
 import "./style.css";
 
 const LEVELS = levelsData as unknown as Level[];
+/** Goals scored in a row at the end of a round (text only; the scoring streak can run ahead on Skill Zone goals). */
+const goalsInARow = (kicks: readonly { result: string }[]) => { let run = 0; for (let i = kicks.length - 1; i >= 0 && kicks[i].result === "goal"; i--) run++; return run; };
 type Menu = "hub" | "balls" | "bag" | "market" | "odds" | "cups" | "shop" | "book" | "tour" | "daily" | "settings" | "rules" | "results" | null;
 type Screen = "title" | "modes" | "play";
 type Phase = "idle" | "reveal" | "aim" | "shooting";
@@ -808,7 +811,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     }
     kicksTaken.current++;
     if (goal && haptics) vibrate([40, 30, 40]);
-    const streak = goal ? current.streak + 1 : 0;
+    // D17 Skill Zones (free modes only; Big Match and the Skill Cup keep identical rules): a top-bin, in-off-the-post
+    // or crossbar-in goal counts two steps of streak and pays its own XP. Progression only.
+    const freeMode = current.mode !== "match" && current.mode !== "skill" && current.kind !== "target";
+    const skillZone = freeMode ? skillZoneOf({ goal, zone: record.zone, postIn: record.postIn, y: record.y }) : null;
+    const streak = goal ? streakAfter(current.streak, skillZone) : 0;
+    // Goals actually scored in a row (the text): the streak above can run ahead of it on Skill Zone goals.
+    const priorRun = goalsInARow(current.kicks), goalRun = goal ? priorRun + 1 : 0;
     const kicks = [...current.kicks, record], points = current.points + record.points;
     let next: Session = { ...current, kicks, points, streak };
     // Target Practice: the hit, combo and count show when the ball arrives (not at release).
@@ -819,13 +828,14 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       next = { ...next, target: { ...current.target, combo, hits: current.target.hits + (targetHit?.hit ? 1 : 0) } };
     }
     const scene = stage.current;
-    if (scene) { scene.setScore(points); scene.streak = streak; }
+    if (scene) { scene.setScore(points); scene.streak = goalRun; } // the scoreboard's "N IN A ROW" counts real goals
     // Plain words on the pitch (round 6 C15): the multipliers behind the points live in the Scouting Book.
-    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${streak >= 2 ? ` · ${streak} in a row` : ""}` : current.streak >= 2 ? `Your run of ${current.streak} goals ends` : "No goal this time";
+    let sub = timedOut ? "The shot clock ran out. Next kick in a moment." : goal ? `+${formatNumber(record.points)} points${record.golden ? " · Golden Hour: double points" : ""} · ${record.zone === "bin" ? "TOP BIN" : record.zone === "corner" ? "corner" : record.zone === "side" ? "side" : "centre"}${record.postIn ? " · in off the post" : ""}${record.knuckle ? " · knuckleball" : ""}${goalRun >= 2 ? ` · ${goalRun} in a row` : ""}` : priorRun >= 2 ? `Your run of ${priorRun} goals ends` : "No goal this time";
     if (current.kind === "target") { const run = next.target?.combo ?? 0; sub = record.points ? `+${formatNumber(record.points)} points${run >= 2 ? ` · ${run} hits in a row` : ""}` : "Missed: the run of hits starts again"; }
     // Free modes: XP for goals and placement.
-    const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + XP.zoneBonus[record.zone] : 0;
+    const xp = current.mode === "match" || current.mode === "skill" ? 0 : goal ? XP.goal + (skillZone ? SKILL_ZONE_XP[skillZone] : XP.zoneBonus[record.zone]) : 0;
     if (xp) addXp(xp);
+    if (skillZone) sub += ` · SKILL ZONE: ${SKILL_ZONE_LABEL[skillZone]} +${SKILL_ZONE_XP[skillZone]} XP, streak +2`;
     // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
       const regular = kicks.length <= 5 && !current.suddenDeath;
@@ -1258,7 +1268,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
-          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel}{s.kind !== "target" && s.streak >= 2 ? ` · ${s.streak} in a row` : ""}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
+          <span className="pk-stat" data-testid="round" data-kicks={s.kicks.length} data-score={s.points}>{kickLabel}{s.kind !== "target" && goalsInARow(s.kicks) >= 2 ? ` · ${goalsInARow(s.kicks)} in a row` : ""}{s.kind === "freekick" && s.setup ? <> · <b data-testid="wind" title="Wind">{windLabel(s.setup.wind)}</b></> : null}</span>
           <div className="pk-clockbar" ref={clockBar} hidden data-testid="shot-clock" role="meter" aria-label="Shot clock" aria-valuemin={0} aria-valuemax={5}><span>Shot clock</span><i /></div>
         </header>
       </>}

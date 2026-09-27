@@ -8,6 +8,7 @@
 // ── D17 Skill Zones: top bins / in off the post / crossbar-in extend the streak and pay XP ──────
 export type SkillZone = "top-bin" | "post-in" | "bar-in";
 export const SKILL_ZONE_XP: Readonly<Record<SkillZone, number>> = { "top-bin": 15, "post-in": 20, "bar-in": 25 };
+export const SKILL_ZONE_LABEL: Readonly<Record<SkillZone, string>> = { "top-bin": "top bin", "post-in": "in off the post", "bar-in": "in off the bar" };
 export function skillZoneOf(kick: { goal: boolean; zone: string; postIn?: boolean; y: number }): SkillZone | null {
   if (!kick.goal) return null;
   if (kick.postIn && kick.y >= 0.9) return "bar-in";
