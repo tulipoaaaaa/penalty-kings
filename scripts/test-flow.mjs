@@ -94,6 +94,33 @@ await testGame("./games/penalty-kings", {
     ok("menus opened from the modes screen close back to it (also after opening a pack)");
     await potOpensOdds(modes.getByTestId("pot-counter"), "modes", modes);
     ok("the pot line opens the odds on the title, the modes screen and the HUD");
+
+    // Big Match with the pack's ball (aimed wide: few goals, so sudden death ends quickly), to Results.
+    const flow = () => game.locator("body").evaluate(() => window.__pkFlow());
+    const playMatch = async () => {
+      await waitShootable();
+      await hold("ArrowRight", 1500);
+      for (let kick = 0; kick < 30; kick++) {
+        await game.getByTestId("quick").click();
+        await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+        if (await game.locator("body").evaluate(() => new Promise(resolve => { const poll = () => { const f = window.__pkFlow(); if (f.menu) resolve(true); else if (f.shootable) resolve(false); else setTimeout(poll, 50); }; poll(); }))) break;
+      }
+      await game.getByTestId("results").waitFor({ timeout: 5000 });
+      return game.getByTestId("results").innerText();
+    };
+    await game.getByTestId("mode-match").click();
+    await waitShootable();
+    const ball = (await flow()).ball;
+    assert.ok(ball, "Big Match kicks with the pack's ball");
+    await playMatch();
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await waitShootable();
+    const again = await flow();
+    assert.equal(again.match, true, "Play again starts another Big Match");
+    assert.equal(again.ball, ball, "Play again kicks with the same ball");
+    assert.equal(await game.getByTestId("change-ball").textContent(), "Change ball");
+    ok("Big Match Results 'Play again' reuses the ball the player kicked with");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }

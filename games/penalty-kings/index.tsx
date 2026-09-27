@@ -1425,7 +1425,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, []);
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
-  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed), replay: Boolean(instantRef.current) }; };
+  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed), replay: Boolean(instantRef.current), ball: live.current.session?.ball?.recordId ?? null }; };
   // QA hook (read-only): the Director's seen moments, the moments played and keepers faced (seconds since load), the Discovery meter.
   (window as unknown as { __pkDirector?: () => unknown }).__pkDirector = () => ({ seen: dir.current?.seenIds() ?? [], discovery: dir.current?.discovery().label ?? "", played: qaLog.current.moments, keepers: qaLog.current.keepers, debug: dir.current?.debugState() ?? null });
   latest.current = { tickAim, tickTargets, onResolved, onKickDone, onStrike, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), onWait, haptics };
@@ -1700,7 +1700,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }
-          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); }
+          else if (last.mode === "match") { live.current = { ...live.current, session: null }; const id = last.ball?.recordId; kickWith(id && bagRef.current.some(ball => ball.id === id && !ball.sample) ? id : lastUsedBall()); } // the same ball, in a new match
+          else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
       {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={sprites.current ? spriteFrame(sprites.current, "down", false, 0, "right").frame.rows : null} halo={ALL_COSMETICS.find(item => item.id === equipped.kit)?.color} login={progress.login} today={today} />; })()}
     </GameMenu>}
   </section>;
