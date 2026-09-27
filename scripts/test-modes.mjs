@@ -86,6 +86,8 @@ await testGame("./games/penalty-kings", {
     // Daily Challenge: today's scenario (penalties or a free kick), attempt counter.
     await game.getByTestId("mode-daily").click();
     await game.getByText("Attempts left:").waitFor();
+    // Round 6 B6: the SDK sandbox cannot persist, so the Daily limit is labelled as practice attempts.
+    await game.getByTestId("daily-practice").waitFor();
     await button("Play today's challenge").click();
     const daily = await game.getByTestId("mode-chip").textContent();
     console.log(`daily: ${daily}`);
@@ -95,6 +97,17 @@ await testGame("./games/penalty-kings", {
     }
     await game.getByTestId("results").waitFor();
     assert.match(await game.getByTestId("results").textContent(), /Daily/);
+
+    // Save code round-trip (Settings): copy the code, paste it back, progress is restored.
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Settings", exact: true }).click();
+    const code = await game.getByTestId("save-code-out").inputValue();
+    assert.match(code, /^PK1\./, "a save code is shown");
+    await game.getByTestId("save-code-in").fill(code);
+    await game.getByTestId("save-code-restore").click();
+    assert.match(await game.getByTestId("save-code-note").textContent(), /restored/);
+    console.log(`save code: ${code.length} chars, restored`);
   },
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);

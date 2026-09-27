@@ -215,3 +215,8 @@
   .pk-carousel .pk-note, .pk-honest { display: none; }
   .pk-tiers { grid-template-columns: 1fr; }
 }
+
+/* Save code (round 6 B6): the SDK sandbox cannot persist, so progress travels as a code. */
+.pk-save { display: grid; gap: 6px; margin-top: 8px; }
+.pk-save textarea { width: 100%; font: 11px/1.3 ui-monospace, monospace; word-break: break-all; resize: vertical; }
+.pk-save label { display: grid; gap: 4px; }

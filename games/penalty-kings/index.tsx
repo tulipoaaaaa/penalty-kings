@@ -35,6 +35,7 @@ import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview } from "./ballui.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
+import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
 import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
 import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
@@ -97,6 +98,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [selectedBall, setSelectedBall] = useState<string | null>(null);
   const [carousel, setCarousel] = useState(false);
   const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
+  /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
+  const [persistent] = useState(() => canPersist());
+  const [restoreCode, setRestoreCode] = useState(""), [restoreNote, setRestoreNote] = useState("");
 
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<Stage | null>(null);
@@ -906,7 +910,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "tour" && (pendingLevel
         ? <><h3>{pendingLevel.name}</h3><LevelBrief level={pendingLevel} /><div className="pk-buyrow"><button type="button" className="pk-primary" autoFocus onClick={() => startLevel(pendingLevel)}>Kick off</button><button type="button" onClick={() => setPendingLevel(null)}>Back</button></div></>
         : <TourMap levels={LEVELS} progress={progress} onPick={setPendingLevel} />)}
-      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} onPlay={startDaily} onShare={() => void shareCard(`Penalty Kings Daily ${today}: ${formatNumber(progress.daily.best)} pts`)} />}
+      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} onShare={() => void shareCard(`Penalty Kings Daily ${today}: ${formatNumber(progress.daily.best)} pts`)} />}
 
       {menu === "cups" && <>
         <h3>Golden Boot Cup: this week</h3>
@@ -962,6 +966,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <label><input type="checkbox" checked={haptics} onChange={event => setHaptics(event.target.checked)} /> Vibration (Android)</label>
         <p>Level {playerLevel} · {progress.xp} XP · ★ {Object.values(progress.stars).reduce((a, b) => a + b, 0)} · {progress.stamps.length}/12 keepers stamped</p>
         <p>Best: penalties {formatNumber(progress.best.penalties)} · free kicks {formatNumber(progress.best.freekicks)} · target {formatNumber(progress.best.target)}</p>
+        <div className="pk-save" data-testid="save-code">
+          <p>{persistent ? "Your progress is saved on this device. A save code moves it to another browser." : "This preview can't save between visits (the game sandbox has no storage). Copy your save code to keep your XP, stars, stamps and bests:"}</p>
+          <textarea readOnly rows={3} value={encodeSaveCode(progress, friendId)} onFocus={event => event.currentTarget.select()} aria-label="Your save code" data-testid="save-code-out" />
+          <label>Restore from a save code<textarea rows={2} value={restoreCode} onChange={event => setRestoreCode(event.target.value)} data-testid="save-code-in" /></label>
+          <button type="button" disabled={!restoreCode.trim()} data-testid="save-code-restore" onClick={() => {
+            const restored = decodeSaveCode(restoreCode, friendId);
+            if (restored.ok) { updateProgress(() => restored.progress); setRestoreCode(""); setRestoreNote("Progress restored from your save code."); } else setRestoreNote(restored.reason);
+          }}>Restore</button>
+          {restoreNote && <p role="status" data-testid="save-code-note">{restoreNote}</p>}
+          <p className="pk-note">Save codes hold progression only (never RF, balls or $GBOOT: those always come from the chain).</p>
+        </div>
       </div>}
 
       {menu === "results" && summary && <Results summary={summary} onModes={() => { setMenu(null); setSession(null); setScreen("modes"); }}
