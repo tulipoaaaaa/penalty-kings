@@ -67,7 +67,7 @@ await testGame("./games/penalty-kings", {
       void home;
       fk.push(await kick(`free kick ${i}`, { fromY: 262, dx: i === 1 ? 0.25 : -0.3, steps: 10, step: 14, bow: i === 3 ? 30 : 0 }));
     }
-    for (const result of fk) assert.match(result, /GOAL!|SAVED!|OFF THE POST!|OVER THE BAR!|WIDE!|BLOCKED!/);
+    for (const result of fk) assert.match(result, /GOAL!|SCREAMER!|SAVED!|TIPPED OVER!|OFF THE POST!|OFF THE BAR!|OVER THE BAR!|WIDE!|BLOCKED!/);
     await game.getByTestId("results").waitFor();
     await button("Modes").click();
 
