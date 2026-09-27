@@ -308,7 +308,7 @@ function segmentDistance(p: Point, a: Point, b: Point) {
 
 /**
  * The keeper at time t after the strike (seconds of plan time). Pure and deterministic.
- * Standing: feet on the goal line, arms low. Diving: the body travels and tips towards the plan
+ * Standing: feet on the goal line at x = plan.home (0 unless a free kick), arms low. Diving: the body travels and tips towards the plan
  * point (plan.x, plan.y) so the gloves arrive there at full progress (hands never above maxY), never
  * sinking below the ground. A central plan (|x| < 0.12) stays upright and spreads the arms at the
  * plan height. A teleport (ghost) snaps upright to the point halfway through the dive.
@@ -318,7 +318,7 @@ export function keeperFrame(id: KeeperId, plan: KeeperPlan, t: number): KeeperFr
   const raw = Math.min(1, Math.max(0, (t - plan.reaction) / plan.diveTime));
   const p = plan.teleport ? (raw > 0.5 ? 1 : 0) : 1 - (1 - raw) ** 2;
   const aim = { x: plan.x, y: Math.min(plan.y, plan.maxY) * GOAL_ASPECT };
-  const start = { x: 0, y: g.h / 2 };
+  const start = { x: plan.home ?? 0, y: g.h / 2 };
   const dx = aim.x - start.x, dy = aim.y - start.y;
   // A central plan (|dx| < 0.12) is a stand-up block: shuffle across, arms spread sideways at the shot height ("make yourself big").
   const upright = !plan.teleport && Math.abs(dx) < 0.12;
@@ -341,9 +341,9 @@ export function keeperFrame(id: KeeperId, plan: KeeperPlan, t: number): KeeperFr
   };
   let leg: KeeperFrame["leg"] = null;
   if (plan.leg && !plan.teleport && tip !== 0 && p > 0) {
-    // The trailing leg: from the hip back towards the middle of the goal, along the grass.
+    // The trailing leg: from the hip back towards where he stood (the middle for penalties), along the grass.
     const hip = toWorld({ x, y, rotate }, { x: 0, y: -g.h * 0.35 });
-    const target = { x: -Math.sign(aim.x) * 0.02, y: LEG_RADIUS };
+    const target = { x: start.x - Math.sign(dx) * 0.02, y: LEG_RADIUS };
     const vx = target.x - hip.x, vy = target.y - hip.y, length = Math.hypot(vx, vy) || 1, k = Math.min(1, (g.h * 1.25) / length) * p;
     leg = { hip, foot: { x: hip.x + vx * k, y: hip.y + vy * k } };
   }
@@ -352,7 +352,7 @@ export function keeperFrame(id: KeeperId, plan: KeeperPlan, t: number): KeeperFr
 
 /**
  * Which part of the keeper (if any) the ball touches: a disc of radius r at `ball` (iso units).
- * The ONLY save test for penalties: the same shapes the Stage draws.
+ * The ONLY save test for penalties and free kicks: the same shapes the Stage draws.
  */
 export function keeperTouch(frame: KeeperFrame, ball: Point, r = BALL_RADIUS): KeeperPart | null {
   if (frame.wall && boxDistance(ball, [Math.max(-1, frame.wall[0]), 0, Math.min(1, frame.wall[1]), GOAL_ASPECT]) <= r) return "wall";

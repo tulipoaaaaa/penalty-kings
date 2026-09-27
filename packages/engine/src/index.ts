@@ -121,6 +121,8 @@ export type KeeperPlan = Readonly<{
   armScale?: number;
   /** This dive leaves a trailing leg across the middle (drawn, and it saves only what it touches). */
   leg?: boolean;
+  /** Goal-x the keeper stands on before the dive (free kicks start off-centre, away from the wall); 0 when absent. */
+  home?: number;
 }>;
 
 /** Keeper dive decision. Seeded + context, so the same inputs always dive the same way. */
@@ -167,7 +169,7 @@ export function keeperPlan(profile: KeeperProfile, seed: number, target: { x: nu
   }
 }
 
-/** Keeper hand position at time t after the strike (free kicks; penalties use keeperFrame). */
+/** Rough keeper hand position at time t after the strike (legacy helper; saves use keeperFrame + keeperTouch). */
 export function keeperAt(plan: KeeperPlan, t: number) {
   const raw = clamp((t - plan.reaction) / plan.diveTime, 0, 1);
   const progress = plan.teleport ? (raw > 0.5 ? 1 : 0) : 1 - (1 - raw) ** 2;
