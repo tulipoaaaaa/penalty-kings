@@ -305,7 +305,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const current = live.current, frozen = current.paused || document.hidden;
       // Target Practice: the 60 s clock also stops while a shot plays (round 6 C8).
       if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
-      const dt = frozen ? 0 : Math.min(0.05, (time - last) / 1000); last = time;
+      // Clamped at 0: the first rAF timestamp can be earlier than the performance.now() above, and a negative dt
+      // made Stage.time negative (keeper sway phase −1 → missing sprite frame → the render loop threw and stopped).
+      const dt = frozen ? 0 : Math.max(0, Math.min(0.05, (time - last) / 1000)); last = time;
       latest.current.tickAim(dt);
       reel.current?.update(dt);
       scene.update(dt);
