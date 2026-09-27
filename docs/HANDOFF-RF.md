@@ -70,7 +70,7 @@ site/ (built)                   the public static preview: Park /, Pro /pro/, Ch
 | `npm run test:game` · `test:flow` · `test:modes` · `qa:90s` | The buy → open → reveal → Bag → kick → redeem flow; awkward interleavings, 2–5 s randomness waits and speed; every mode; the first 90 s with reduced motion on and off |
 | `npm run test:phone` · `npm run test:practice` | Phone layouts at 360×800, 390×844, 800×360 and 844×390 (fit, ≥ 11 px text, tap targets, a real touch swipe); the free practice page (5 kicks → CTA, no wallet or RPC requests) |
 | `npm run sim:difficulty` · `npm run verify:odds` | Goal-rate band 55–65%; exact odds and a 90.00% return |
-| `cd contracts && forge test` | The $GBOOT upgrade package + BallVault (undeployed) |
+| `cd contracts && forge test --no-match-contract Fork` | The $GBOOT upgrade package + BallVault (undeployed), offline; the `Fork` suites need `--match-contract Fork --fork-url $ROBINHOOD_RPC_URL` |
 | `npm run secret-scan` | No keys or personal data in tracked files (also a pre-commit hook) |
 
 ## 4. Known gaps

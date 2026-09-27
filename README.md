@@ -111,7 +111,7 @@ If port 5199 is taken, run `PORT=5200 npm run play:dev` and use that port instea
 | `npm run test:flow` · `npm run test:modes` · `npm run qa:90s` | 13 awkward interleavings (double release, key + mouse, walkout, pack reveal, resize mid-swipe, speed); every free mode; the 90-second first-session QA |
 | `npm run test:practice` | The free practice page in Chromium at 844×390, 360×640 and 1280×800 (and with storage blocked): 5 swipes → 5 results → the "Get your Friend" card; only same-origin GETs, no RPC or provider request; text ≥ 11 px (after `npm run build:site`) |
 | `npm run test:real-gate` | The real SDK ownership gate against Robinhood mainnet: read-only, no mocks, needs network |
-| `cd contracts && forge test` | Contract unit tests. The `Fork` suites run against a mainnet fork in CI |
+| `cd contracts && forge test --no-match-contract Fork` | Contract unit, fuzz and invariant tests, offline (needs the root `npm install`: the BallVault tests compile the SDK ChanceGame from `node_modules`). A plain `forge test` also runs the `Fork` suites, which need an RPC: `forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL` (CI runs both) |
 | `npm run secret-scan` | No mnemonics or private keys in tracked files (also a pre-commit hook) |
 
 All of these run in GitHub Actions ([ci.yml](.github/workflows/ci.yml)).

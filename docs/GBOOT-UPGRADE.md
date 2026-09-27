@@ -22,7 +22,7 @@
 | `BallVault.sol` | Tradeable "Vault Balls" backed 1:1 by RF; a free-price escrow market; enforced edition scarcity |
 | `script/Launch.s.sol` | The whole launch wiring (the ONE default: plain pool, 1% LP fee, no hook, `LiquidityLock` and `EdgeSplitter` paying the Cup pot `CUP_POT`), rehearsed on a mainnet fork in CI |
 
-**Tests:** 198 Foundry unit/fuzz/invariant tests plus 7 mainnet-fork tests (`cd contracts && forge test`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
+**Tests:** 201 Foundry unit/fuzz/invariant tests (`cd contracts && forge test --no-match-contract Fork`, offline) plus 7 mainnet-fork tests (`forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
 
 ## Recorded defaults (owner-approved design)
 
