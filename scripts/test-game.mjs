@@ -62,6 +62,27 @@ await testGame("./games/penalty-kings", {
       return hits;
     };
 
+    // C3c: the title carries the pot (not the HUD banner), the Cup draw countdown, the Champions Night strip and
+    // last week's winners, all labelled SIMULATED in the preview. C3b: outside Champions Night the stadium looks like its tier.
+    {
+      const counter = game.getByTestId("pot-counter");
+      if (await game.getByTestId("skip-intro").isVisible()) {
+        assert.equal(await counter.isVisible(), false, "B8: the cold open stays decluttered");
+        await game.getByTestId("skip-intro").click();
+      }
+      await counter.waitFor();
+      assert.equal(await counter.getAttribute("data-place"), "title");
+      assert.equal(await counter.getAttribute("data-tag"), "SIMULATED");
+      assert.match(await counter.innerText(), /GOLDEN BOOT CUP[\s\S]*🏆 [\d,]+ RF[\s\S]*SIMULATED/);
+      assert.match(await game.getByTestId("cup-draw").innerText(), /^Cup draw in (\d+d \d+h|\d+h \d+m|\d+m)$/);
+      assert.match(await game.getByTestId("champions-night").innerText(), /^(Champions Night in (\d+d \d+h|\d+h \d+m|\d+m)|CHAMPIONS NIGHT · double Cup points · ends in .+)$/);
+      assert.equal(await game.getByTestId("pot").isVisible(), false, "the HUD pot banner waits for play (the title has its own pot line)");
+      const winners = await game.getByTestId("winners").innerText();
+      assert.match(winners, /LAST WEEK[\s\S]*SIMULATED/); assert.match(winners, /#1 Friend #\d{4}\s+[\d,]+ RF/);
+      const now = new Date(), night = now.getUTCDay() === 6 && now.getUTCHours() >= 19 && now.getUTCHours() < 21;
+      assert.equal((await game.locator("body").evaluate(() => window.__pkStats())).stadium, night ? "champions" : "park", "the Park look outside Champions Night");
+      console.log(`title pot line: ${(await counter.innerText()).replace(/\s+/g, " ")}`);
+    }
     // Title → modes → Penalties (first time = tutorial).
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     await game.getByTestId("pot").waitFor();
@@ -136,8 +157,11 @@ await testGame("./games/penalty-kings", {
     assert.match(await game.getByTestId("unlock-card").textContent(), /New rival scouted: Octavia!/);
     assert.match(await game.getByTestId("teaser").textContent(), /Free Kicks/);
     // SIO-4: the Scouting Book's Discovery meter.
+    // C3c: Results shows the pot and "Your Cup entries this week" (preview: from the simulated race table).
+    assert.equal(await game.getByTestId("results").getByTestId("pot-counter").getAttribute("data-place"), "results");
+    assert.match(await game.getByTestId("cup-entries").innerText(), /^Your Cup entries this week: [\d,]+ · .+ SIMULATED$/);
     await game.getByTestId("open-book").click();
-    const meter = await game.getByTestId("discovery").textContent();
+    const meter =await game.getByTestId("discovery").textContent();
     assert.match(meter, /^Seen \d+\/60 moments · \d+\/12 keepers · 1\/3 stadiums$/);
     assert.ok(Number(/Seen (\d+)/.exec(meter)[1]) >= 1 && Number(/(\d+)\/12 keepers/.exec(meter)[1]) >= 3, `discovery after the first session: ${meter}`);
     console.log(`scouting book: ${meter}`);
@@ -155,6 +179,19 @@ await testGame("./games/penalty-kings", {
     assert.match(first, /RF: Rare Friends money\. Buy balls with it; cash balls back into it\./);
     assert.match(first, /Burn: spent \$GBOOT is gone forever\./);
     assert.doesNotMatch(first, /coins?/i);
+    // C3b: Pro and Champions are working choices: one line of Cup points per ball, and "Play at …" asks the host page
+    // (outside the allow-scripts sandbox) to open that stadium's own page; the preview labels it SIMULATED.
+    assert.match(await game.getByTestId("race-park").innerText(), /^Cup points ×1 per ball/);
+    assert.match(await game.getByTestId("race-pro").innerText(), /^Cup points ×(100|200) per ball/);
+    assert.match(await game.getByTestId("race-champions").innerText(), /^Cup points ×(1,000|2,000) per ball/);
+    assert.match(await game.getByTestId("stadium-rule").innerText(), /same Golden Boot Cup/);
+    assert.equal(await game.getByTestId("go-park").count(), 0, "no button for the stadium you are in");
+    assert.match(await game.getByTestId("go-champions").innerText(), /Play at Champions[\s\S]*\/champions\/ · SIMULATED/);
+    await page.evaluate(() => { window.__pkAsked = []; addEventListener("message", event => { if (event.data?.type === "penalty-kings:open-stadium") window.__pkAsked.push(event.data.stadium); }); });
+    await game.getByTestId("go-pro").click();
+    await page.waitForFunction(() => window.__pkAsked.length > 0);
+    assert.deepEqual(await page.evaluate(() => window.__pkAsked), ["pro"], "the game asked its host page for the Pro page");
+    assert.match(await game.locator(".pk-warn").first().innerText(), /Opening the Pro stadium page \(simulated preview\)/);
     await game.getByTestId("pack-2").click();
     // D21: the odds are printed on every pack (shop and opening), and they are the definition's exact chances.
     const oddsText = await game.getByTestId("odds-line").first().textContent();

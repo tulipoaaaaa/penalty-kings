@@ -47,6 +47,8 @@ const RUNTIME_COPY = [
 const LANDING_CLIP = "site-src/landing/play.webm"; // 6 s of real play from docs/media/judge-path.webm (384 × 240, VP8, muted)
 
 const TIERS = [["park", "Park · 10 RF"], ["pro", "Pro · 1,000 RF"], ["champions", "Champions · 10,000 RF"]];
+/** Must equal STADIUM_MESSAGE in games/penalty-kings/economy.ts (tests/game/weekly.test.ts checks it). */
+const STADIUM_MESSAGE = "penalty-kings:open-stadium";
 const liveTiers = new Set();
 
 /** Trusted host page only (outside the game sandbox): links between stadium builds. */
@@ -74,9 +76,14 @@ async function addStadiumBar(outdir, tier, live) {
   const challenge = `<section class="pk-challenge" aria-label="Challenge from a friend" hidden><p><b>A friend challenged you!</b> Choose your Friend, then paste this code under <b>Modes → Got a challenge code?</b></p><input readonly aria-label="Challenge code" data-testid="host-challenge-code"></section>`
     + `<script>(()=>{const box=document.currentScript.previousElementSibling,code=(new URLSearchParams(location.search).get("challenge")||"").trim().toLowerCase();if(!/^pkc1(\\.[0-9a-z]{1,14}){5}\\.[0-9a-f]{8}$/.test(code))return;const input=box.querySelector("input");input.value=code;input.addEventListener("focus",()=>input.select());box.hidden=false})()</script>`;
   const challengeStyle = "<style>.pk-challenge{max-width:var(--rf-game-max-width,960px);margin:0 auto 8px;padding:8px 16px;display:grid;gap:6px;font:14px/1.4 ui-monospace,monospace;background:#ccff00;border:2px solid #111}.pk-challenge[hidden]{display:none}.pk-challenge p{margin:0}.pk-challenge input{min-height:44px;padding:4px 8px;font:14px ui-monospace,monospace;border:2px solid #111;background:#fff;color:#111}</style>";
+  // C3b: the Ball shop's "Play at Pro / Champions" buttons. The game runs in an allow-scripts sandbox (it cannot
+  // navigate this page), so it posts STADIUM_MESSAGE (games/penalty-kings/economy.ts); this trusted page opens that
+  // stadium's page, by the same relative links as the bar, only for a message from a frame on this page.
+  const pages = Object.fromEntries(TIERS.filter(([id]) => id !== tier && (!live || liveTiers.has(id))).map(([id]) => [id, href(id)]));
+  const opener = `<script>(()=>{const pages=${JSON.stringify(pages)};addEventListener("message",event=>{const data=event.data;if(!data||data.type!==${JSON.stringify(STADIUM_MESSAGE)}||typeof data.stadium!=="string"||!Object.hasOwn(pages,data.stadium))return;if(![...document.querySelectorAll("iframe")].some(frame=>frame.contentWindow===event.source))return;location.assign(pages[data.stadium])})})()</script>`;
   const file = `${outdir}/index.html`;
   const html = await readFile(file, "utf8");
-  await writeFile(file, html.replace("<body>", `<body>${style}${landingStyle}${challengeStyle}${bar}${challenge}${landing}`));
+  await writeFile(file, html.replace("<body>", `<body>${style}${landingStyle}${challengeStyle}${bar}${challenge}${landing}${opener}`));
 }
 
 for (const tier of ["park", "pro", "champions"]) if (await exists(`${GAME}/deployments/${tier}.json`)) liveTiers.add(tier);

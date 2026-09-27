@@ -736,3 +736,43 @@
 .pk-reduce-motion .pk-perfect { animation: pk-perfect-still 0.7s steps(1) forwards; }
 @keyframes pk-perfect-still { 0% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .pk-perfect { animation: pk-perfect-still 0.7s steps(1) forwards; } }
+/* ── C3b/C3c: the pot on title, modes and Results (count-up + glow), the Cup draw countdown, Champions Night,
+   last week's winners (simulated), and the Ball shop's stadium buttons. ── */
+.pk[data-screen="title"] .pk-pot, .pk[data-screen="modes"] .pk-pot { display: none; } /* title and modes carry their own pot line */
+.pk-potline { display: grid; justify-items: center; gap: 2px; box-sizing: border-box; max-width: 100%; margin: 0; padding: 4px 10px; background: #3d2600f0; border: 2px solid var(--pk-gold);
+  box-shadow: 2px 2px 0 #000; color: var(--pk-gold); font-size: clamp(11px, 1.4cqw, 14px); line-height: 1.25; text-align: center; }
+.pk-potline-main b[data-testid="pot-counter-value"] { font-size: 1.2em; }
+.pk-potline-usd { color: var(--pk-paper); }
+.pk-potline-sub { color: var(--pk-paper); font-size: max(11px, 0.9em); }
+.pk-night[data-active="true"] { color: var(--pk-ink); background: var(--pk-gold); padding: 0 0.3em; font-weight: 700; }
+.pk-nighttag { background: var(--pk-paper); color: var(--pk-ink); padding: 0 0.4em; font-size: max(11px, 0.85em); white-space: nowrap; }
+.pk-potline[data-glow], .pk .pk-pot[data-glow] { box-shadow: 0 0 0 2px var(--pk-gold), 0 0 14px 4px #ffd23fb3, 2px 2px 0 #000; }
+@media (prefers-reduced-motion: no-preference) { .pk:not(.pk-reduce-motion) :is(.pk-potline, .pk-pot)[data-glow] { animation: pk-pot-glow 1.5s ease-out; } }
+@keyframes pk-pot-glow { 0% { box-shadow: 0 0 0 2px #fff, 0 0 24px 8px #ffd23f, 2px 2px 0 #000; } 100% { box-shadow: 0 0 0 2px var(--pk-gold), 0 0 14px 4px #ffd23fb3, 2px 2px 0 #000; } }
+.pk-winners { display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: min(100%, 560px); overflow: hidden; padding: 2px 8px; font-size: 11px; line-height: 18px;
+  color: var(--pk-paper); background: #0b0d1ae6; border: 1px solid var(--pk-line, #2a3160); }
+.pk-winners-head { flex: none; color: var(--pk-gold); font-weight: 700; white-space: nowrap; }
+.pk-winners-track { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.pk-winners-run { display: inline-flex; white-space: nowrap; animation: pk-marquee 28s linear infinite; }
+.pk-winners-set { display: inline-flex; gap: 16px; padding-right: 16px; }
+.pk-winner { display: inline-flex; align-items: center; gap: 4px; }
+.pk-winner b { color: var(--pk-gold); }
+.pk-badge-px { flex: none; image-rendering: pixelated; }
+@keyframes pk-marquee { to { transform: translateX(-50%); } }
+.pk-winners[data-still] .pk-winners-run, .pk-reduce-motion .pk-winners-run { animation: none; }
+.pk-winners[data-still] .pk-winners-run, .pk-winners[data-still] .pk-winners-set { white-space: normal; flex-wrap: wrap; row-gap: 0; }
+@media (prefers-reduced-motion: reduce) { .pk-winners-run { animation: none; } }
+.pk-attract-top .pk-potline { margin-top: 4px; }
+.pk-modescreen { padding-top: 8px; }
+.pk-modescreen .pk-winners { flex: none; }
+.pk-resultcup { display: grid; justify-items: center; gap: 4px; margin: 8px 0; }
+.pk-entries { margin: 0; font-weight: 700; }
+.pk .rf-frame-menu-body .pk-simtag { color: var(--pk-ink); } /* menu bodies colour <b> gold: keep the tag readable */
+/* Landscape phones: the modes screen keeps its old height budget (one compact pot row; the winners ticker stays on the title). */
+@container (orientation: landscape) and (max-height: 519px) {
+  .pk-modescreen .pk-winners { display: none; }
+  .pk-modescreen .pk-potline { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 8px; padding: 2px 8px; }
+}
+.pk .rf-frame-menu-body .pk-tiercard .pk-tierrace { color: var(--pk-gold); }
+.pk .rf-frame-menu-body .pk-tiercard .pk-tiergo { display: grid; justify-items: start; align-content: center; min-height: 44px; margin: 4px 8px 0; padding: 2px 8px; text-align: left; font-weight: 700; }
+.pk .rf-frame-menu-body .pk-tiercard .pk-tiergo small { padding: 0; font-weight: 400; }

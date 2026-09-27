@@ -243,7 +243,7 @@ export type SessionSummary = { title: string; kicks: number; goals: number; poin
   /** First session: the keeper-unlock card that flips into the Scouting Book, plus the next-mode teaser. */
   scouted?: { keeper: KeeperId; card: string; teaser: string };
   match?: { rf: string; gboot: string; race: string; toTop10: string } };
-export function Results({ summary, onAgain, onModes, next, onBook }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null; onBook?: () => void }) {
+export function Results({ summary, onAgain, onModes, next, onBook, cup }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null; onBook?: () => void; /** C3c: the Cup pot and your entries this week. */ cup?: ReactNode }) {
   const hasNext = Boolean(next && "onNext" in next);
   return <div className="pk-roundcard" data-testid="results">
     <h3>{summary.title}</h3>
@@ -269,6 +269,7 @@ export function Results({ summary, onAgain, onModes, next, onBook }: { summary: 
       {onBook && <button type="button" className="pk-link" onClick={onBook} data-testid="open-book">Open the Scouting Book</button>}
     </div>}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
+    {cup}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
     <div className="pk-buyrow">
       {next && "onNext" in next && <button type="button" className="pk-primary" onClick={next.onNext} autoFocus data-testid="next-level">Next level</button>}

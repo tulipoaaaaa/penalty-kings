@@ -180,3 +180,49 @@ await testGame("./games/penalty-kings", {
 });
 assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);
 console.log(`PASS every free mode played at ${width}px`);
+
+// C3b Champions Night: the page clock pinned inside the Saturday 19:00–21:00 UTC window. On the Park build: the
+// Champions look, the "double Cup points" strip, the special intro line, the HUD night tag. C3c: the simulated pot
+// ticks up (count-up, glow) as simulated rivals buy balls.
+const NIGHT = Date.UTC(2026, 9, 3, 19, 30); // Saturday 3 Oct 2026, 19:30 UTC
+await testGame("./games/penalty-kings", {
+  width, timeout: 90_000,
+  check: async ({ page, game }) => {
+    await playInPortraitIfAsked(game);
+    page.on("pageerror", error => errors.push(String(error)));
+    await page.clock.install({ time: NIGHT });
+    const stats = () => game.locator("body").evaluate(() => window.__pkStats());
+    const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
+    if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
+    const strip = game.getByTestId("champions-night");
+    await game.locator('[data-testid="champions-night"][data-active="true"]').waitFor({ timeout: 5000 });
+    assert.match(await strip.innerText(), /^CHAMPIONS NIGHT · double Cup points · ends in 1h \d+m$/);
+    assert.equal(await game.locator("section.pk").getAttribute("data-night"), "true");
+    await game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkStats().stadium === "champions" ? resolve(true) : Date.now() - start > 5000 ? reject(new Error("no Champions look")) : setTimeout(poll, 50)); poll(); }));
+    console.log(`champions night: ${await strip.innerText()} · stadium ${(await stats()).stadium}`);
+    // The simulated pot ticks up: a simulated rival's ball every 15 s → the counter counts up and glows.
+    const value = game.getByTestId("pot-counter-value");
+    assert.match(await value.innerText(), /500,000 RF/);
+    await game.locator('[data-testid="pot-counter"][data-glow]').waitFor({ timeout: 20_000 }); // the rivals' interval runs on real time
+    await game.getByTestId("pot-counter-value").filter({ hasText: "500,027 RF" }).waitFor({ timeout: 5000 });
+    console.log(`pot ticked up: ${await value.innerText()}`);
+    // Tutorial (keeps its first-walkout line), then Penalties: the Champions Night intro line and the HUD tag.
+    await game.getByTestId("play").click();
+    for (let i = 1; i <= 3; i++) {
+      await waitShootable(); await game.getByTestId("quick").click();
+      await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+      await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+    }
+    await game.getByTestId("results").waitFor();
+    assert.match(await game.getByTestId("results").getByTestId("champions-night").innerText(), /^CHAMPIONS NIGHT/);
+    await game.getByRole("button", { name: "Modes", exact: true }).click();
+    await game.getByTestId("mode-penalties").click();
+    await waitShootable();
+    assert.equal((await stats()).stadium, "champions", "the Park build plays in the Champions look tonight");
+    assert.ok((await stats()).contexts.includes("champions-night"), "the commentator opens with the Champions Night line");
+    assert.match(await game.getByTestId("night-tag").innerText(), /NIGHT ×2/);
+    console.log("champions night: intro line said, HUD tag shown");
+  },
+});
+assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`);
+console.log(`PASS Champions Night at ${width}px`);

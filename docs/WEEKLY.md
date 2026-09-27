@@ -11,6 +11,17 @@ node scripts/cup/weekly.mjs --plan --week <n> --edge-rf <RF>    # offline: the v
 `--send` flag. The payments it plans are separate, rehearsed transactions, each logged in
 [TX-LOG.md](TX-LOG.md): `EmissionVault.release`, `EdgeSplitter.split` and the Cup payouts.
 
+## The weekly clock in the game (C3b / C3c)
+
+- **Cup draw:** Monday 00:00 UTC. Title, modes and Results show "Cup draw in 2d 4h" next to the pot.
+- **Champions Night:** every Saturday 19:00–21:00 UTC (`CHAMPIONS_NIGHT` in `games/penalty-kings/game/weekly.ts`;
+  UTC, so daylight saving never moves it). Every stadium wears the Champions look and the commentator opens with a
+  Champions Night line. In the **simulated preview** race points are doubled during the window. The live Cup weights
+  in `scripts/cup/compute.mjs` (1 / 100 / 1,000) are **not** changed by this; live stadiums show the golden night
+  only and never claim double points.
+- **Last week's winners** on the title is a SIMULATED ticker (generic "Friend #NNNN" numbers, original pixel badges).
+  Live winners come from this report.
+
 ## What each weekly report contains (tokenomics v2)
 
 1. **The drop base.** `min(schedule, 2% × ball price ÷ TWAP ÷ 2.15)` per stadium. The schedule
