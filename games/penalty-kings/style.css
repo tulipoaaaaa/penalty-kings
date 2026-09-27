@@ -75,6 +75,14 @@
 .pk-title h2 { margin: 0; color: var(--pk-volt); font-size: 1.2em; }
 .pk-title > .pk-primary { font-size: 1.4em; padding: 0.4em 2em; min-height: 48px; }
 .pk-modescreen { justify-content: flex-start; overflow: auto; }
+/* Attract mode: the showreel plays behind; title at the top, action at the bottom, clear middle. */
+.pk-attract { background: none; justify-content: space-between; padding: 4cqh 4cqw 13cqh; pointer-events: none; }
+.pk-attract > div { pointer-events: auto; display: grid; justify-items: center; gap: 0.6cqh; }
+.pk-attract-top { background: linear-gradient(#0b0d1ae6, #0b0d1a99); padding: 1cqh 3cqw 1.4cqh; box-shadow: 3px 3px 0 #000; }
+.pk-attract-top p { margin: 0; color: var(--pk-paper); }
+.pk-attract h1 { font-size: clamp(24px, 7cqw, 72px); }
+.pk-attract-bottom { background: #0b0d1ae6; border: 2px solid var(--pk-gold); box-shadow: 3px 3px 0 #000; padding: 1.2cqh 3cqw; max-width: 70cqw; }
+.pk-attract-bottom p { margin: 0; }
 .pk-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1cqw; width: min(92cqw, 900px); }
 .pk-mode { display: grid; gap: 2px; text-align: left; padding: 0.7em 0.8em; min-height: 56px; }
 .pk-mode strong { color: var(--pk-volt); font-size: 1.1em; }

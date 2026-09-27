@@ -29,40 +29,61 @@ export function fkProject(setup: FreeKickSetup, point: { x: number; y: number; z
 }
 export const fkBall = (setup: FreeKickSetup) => fkProject(setup, { x: Math.sin(setup.angle) * setup.distance, y: 0.11, z: 0 });
 
-const WALL_CAST: KeeperId[] = ["sumo", "robot", "octopus", "mime", "disco", "squirrel", "sloth", "peacock", "mouse", "chameleon", "ghost"];
+// ── The wall: pixel-art footballers (one team kit, cast-style animal heads) ──────────────
+/** Heads 10 × 9 ('#' outline, 'a' main, 'b' secondary, 'e' eye, 'w' white, 'n' nose/mouth). */
+const WALL_HEADS: ReadonlyArray<{ rows: string[]; palette: Record<string, string> }> = [
+  { rows: [".##....##.", "#aa#..#aa#", "#aaaaaaaa#", "#aaaaaaaa#", "#aewaawea#", "#aaaaaaaa#", "#aaabbaaa#", ".#aannaa#.", "..######.."], palette: { a: "#8d5a2b", b: "#d9a066", e: "#111111", w: "#ffffff", n: "#3b2414" } }, // bear
+  { rows: ["#a#....#a#", "#aa#..#aa#", "#aaaaaaaa#", "#aaaaaaaa#", "#aeaaaaea#", "#aaaaaaaa#", "#aaanaaaa#", ".#abbbba#.", "..######.."], palette: { a: "#f2a33a", b: "#fff2d6", e: "#1f7a1f", w: "#ffffff", n: "#ff8fab" } }, // cat
+  { rows: [".##....##.", "#we#..#we#", "#aaaaaaaa#", "#aaaaaaaa#", "#aaaaaaaa#", "#annnnnna#", "#aaaaaaaa#", ".#bbbbbb#.", "..######.."], palette: { a: "#4caf50", b: "#a5d66f", e: "#111111", w: "#ffffff", n: "#1b5e20" } }, // frog
+  { rows: ["....##....", "...#bb#...", ".########.", "#aaaaaaaa#", "#awwwwwwa#", "#aweewewa#", "#aaaaaaaa#", "#abababa.#", ".########."], palette: { a: "#9aa3ad", b: "#ff5a6e", e: "#ff5a6e", w: "#0b0d1a", n: "#111111" } }, // robot
+  { rows: ["##......##", "#b#....#b#", "#aa####aa#", "#aaaaaaaa#", "#aewaawea#", "#aaaaaaaa#", "#aaaanaaa#", ".#aaaaaa#.", "..######.."], palette: { a: "#b9c2cc", b: "#ff8fab", e: "#111111", w: "#ffffff", n: "#ff5a6e" } }, // mouse
+  { rows: ["#b#....#b#", "#bb#..#bb#", "#aaaaaaaa#", "#aaaaaaaa#", "#aeaaaaea#", "#aaaaaaaa#", "#aaannaaa#", ".#aawwaa#.", "..######.."], palette: { a: "#c9a36b", b: "#6b4a2b", e: "#111111", w: "#ff8fab", n: "#111111" } }, // dog
+];
+/** Bodies 10 wide: 'k' shirt, 'K' shirt shade, 'c' crest, 's' shorts, 'o' socks, 'b' boots, 'h' hands, '#' outline. */
+const BODY_PROTECT = [
+  "..######..", ".#kkkkkk#.", "#kkkkkkkk#", "#kKkkkkck#", "#kKkkkkkk#", "#kKkkkkkk#", "#kK#hh#kk#", ".#k#hh#k#.",
+  ".#ssssss#.", ".#ssssss#.", ".#ss##ss#.", "..#o##o#..", "..#o##o#..", "..#o##o#..", "..#o##o#..", ".#bb##bb#.", ".########.",
+];
+const BODY_JUMP = [
+  "#h######h#", "#k#kkkk#k#", "#k#kkkk#k#", "#kkkkkkck#", "#kKkkkkkk#", ".#Kkkkkk#.", ".#kkkkkk#.", ".#ssssss#.",
+  ".#ssssss#.", "#ss#..#ss#", "#oo#..#oo#", "#bb#..#bb#", "####..####",
+];
+const KITS: Record<string, { k: string; K: string; c: string; s: string; o: string; b: string }> = {
+  park: { k: "#d62839", K: "#9e1b2a", c: "#ffd23f", s: "#ffffff", o: "#d62839", b: "#111111" },
+  pro: { k: "#16181f", K: "#0b0d12", c: "#ccff00", s: "#16181f", o: "#ccff00", b: "#ffffff" },
+  champions: { k: "#1d3557", K: "#12233b", c: "#ffd23f", s: "#ffffff", o: "#1d3557", b: "#111111" },
+};
+function wallSprite(head: number, jumping: boolean, kit: string) {
+  const h = WALL_HEADS[head % WALL_HEADS.length], k = KITS[kit] ?? KITS.park;
+  const rows = [...h.rows.map(row => row.replace(/[abewn]/g, ch => ({ a: "1", b: "2", e: "3", w: "4", n: "5" })[ch]!)), ...(jumping ? BODY_JUMP : BODY_PROTECT)];
+  const palette = { "#": "#0b0d1a", "1": h.palette.a, "2": h.palette.b, "3": h.palette.e, "4": h.palette.w, "5": h.palette.n, k: k.k, K: k.K, c: k.c, s: k.s, o: k.o, b: k.b, h: h.palette.a };
+  return sprite(`wall-${head}-${jumping ? "j" : "p"}-${kit}`, rows, palette);
+}
 
 /**
- * The wall: 3–5 original characters shoulder to shoulder, each exactly one player-width slot
- * (0.62 m) and 1.85 m tall at the wall's depth. Heads come from the keeper cast; bodies wear
- * that keeper's colours. They jump on the engine's timing (arms up); shadows stay on the grass.
+ * The wall: 3–5 players shoulder to shoulder in one team kit, 1.85 m tall at the wall's depth,
+ * drawn at an integer pixel scale. They jump on the engine's timing (arms up, knees tucked) while
+ * their shadows stay on the grass.
  */
-export function drawWall(c: CanvasRenderingContext2D, setup: FreeKickSetup, wall: { x: number; halfWidth: number } | null, sinceStrike: number | null, reduced: boolean) {
+export function drawWall(c: CanvasRenderingContext2D, setup: FreeKickSetup, wall: { x: number; halfWidth: number } | null, sinceStrike: number | null, reduced: boolean, kit = "park") {
   if (!wall) return;
   const depth = Math.cos(setup.angle) * setup.distance, z = depth * (WALL_DISTANCE / setup.distance);
   const jump = sinceStrike !== null && sinceStrike >= setup.wallJumpAt ? Math.sin(clamp01((sinceStrike - setup.wallJumpAt) / 0.5) * Math.PI) * 0.38 : 0;
-  const slot = (wall.halfWidth * 2) / setup.wallSize;
-  for (let i = 0; i < setup.wallSize; i++) {
+  const slot = (wall.halfWidth * 2) / setup.wallSize, jumping = jump > 0.06 && !reduced;
+  const ground0 = fkProject(setup, { x: wall.x, y: 0, z }), head0 = fkProject(setup, { x: wall.x, y: 1.85, z });
+  const standing = wallSprite(0, false, kit);
+  const scale = Math.max(1, Math.round((ground0.y - head0.y) / standing.height));
+  c.imageSmoothingEnabled = false;
+  // Draw outer players first so the middle ones overlap them (a tight, organised wall).
+  const order = Array.from({ length: setup.wallSize }, (_, i) => i).sort((a, b) => Math.abs(b - (setup.wallSize - 1) / 2) - Math.abs(a - (setup.wallSize - 1) / 2));
+  for (const i of order) {
     const wx = wall.x - wall.halfWidth + slot * (i + 0.5);
-    const ground = fkProject(setup, { x: wx, y: 0, z }), feet = fkProject(setup, { x: wx, y: jump, z }), top = fkProject(setup, { x: wx, y: 1.85 + jump, z });
-    const left = fkProject(setup, { x: wx - slot / 2, y: 0, z }), right = fkProject(setup, { x: wx + slot / 2, y: 0, z });
-    const w = Math.max(4, right.x - left.x - 1), h = feet.y - top.y, x = Math.round(feet.x - w / 2);
-    const id = WALL_CAST[(setup.seed + i * 3) % WALL_CAST.length], design = KEEPER_DESIGNS[id], palette = design.palette;
-    c.fillStyle = "#00000044"; c.beginPath(); c.ellipse(ground.x, ground.y, w * 0.6, 2, 0, 0, Math.PI * 2); c.fill();
-    const y0 = Math.round(top.y), head = Math.round(h * 0.3);
-    // Legs, shorts, shirt (keeper colours), outline.
-    c.fillStyle = "#111"; c.fillRect(x - 1, y0 + head - 1, w + 2, h - head + 1);
-    c.fillStyle = palette["6"] ?? "#222"; c.fillRect(x + 1, Math.round(feet.y - h * 0.22), Math.max(1, w / 2 - 2), Math.round(h * 0.22)); c.fillRect(x + Math.ceil(w / 2) + 1, Math.round(feet.y - h * 0.22), Math.max(1, w / 2 - 2), Math.round(h * 0.22));
-    c.fillStyle = palette["1"] ?? "#333"; c.fillRect(x, Math.round(feet.y - h * 0.36), w, Math.round(h * 0.14));
-    c.fillStyle = palette["2"] ?? "#888"; c.fillRect(x, y0 + head, w, Math.round(h * 0.36));
-    c.fillStyle = palette["3"] ?? palette["4"] ?? "#bbb"; c.fillRect(x + Math.round(w / 2) - 1, y0 + head + 2, 2, Math.round(h * 0.3));
-    // Head: the top of the keeper sprite, fitted to the slot.
-    const body = sprite(`keeper-${id}`, design.rows, design.palette), crop = Math.round(body.height * 0.55);
-    c.imageSmoothingEnabled = false;
-    c.drawImage(body, 0, 0, body.width, crop, x - 1, y0, w + 2, head + 2);
-    // Arms: protecting low, or up when airborne.
-    c.fillStyle = design.arm;
-    if (jump > 0.05 && !reduced) { c.fillRect(x - 2, y0 - 3, 2, head + 2); c.fillRect(x + w, y0 - 3, 2, head + 2); }
-    else { c.fillRect(x + 1, Math.round(feet.y - h * 0.42), w - 2, 2); }
+    const ground = fkProject(setup, { x: wx, y: 0, z }), lift = jumping ? Math.round((fkProject(setup, { x: wx, y: 0, z }).y - fkProject(setup, { x: wx, y: jump, z }).y)) : 0;
+    const image = wallSprite((setup.seed + i * 5) % WALL_HEADS.length, jumping, kit); // step 5 ⟂ 6 heads: all different
+    const w = image.width * scale, h = image.height * scale;
+    const shadow = 1 - Math.min(0.5, lift / 40);
+    c.fillStyle = "#00000055"; c.beginPath(); c.ellipse(Math.round(ground.x), Math.round(ground.y), (w / 2) * shadow, Math.max(1, scale * 1.2) * shadow, 0, 0, Math.PI * 2); c.fill();
+    c.drawImage(image, Math.round(ground.x - w / 2), Math.round(ground.y - h - lift), w, h);
   }
 }
 

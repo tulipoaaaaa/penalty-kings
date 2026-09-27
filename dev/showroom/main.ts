@@ -2,7 +2,8 @@
 // It renders the SAME Stage the game uses; outcomes are produced by the real engine
 // (resolveShot), searched until the requested result comes up, so nothing is faked visually.
 import { createFriendReader, spriteFrame, type GenerationSprites } from "@rarefriends/friendsdk/sprites";
-import { KEEPERS, keeperById, resolveShot, type KeeperId, type ShotResult, type ShotOutcome } from "@penalty-kings/engine";
+import { KEEPERS, keeperById, resolveShot, resolveFreeKick, freeKickSetup, isKnuckle, type KeeperId, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickShot } from "@penalty-kings/engine";
+import { spawnTargets, targetAt } from "../../games/penalty-kings/game/target.js";
 import { Stage, CELEBRATIONS, RARITY_NAMES } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H, FrameMeter } from "../../games/penalty-kings/gfx/core.js";
 import { THEMES, type StadiumId, type Weather } from "../../games/penalty-kings/gfx/stadium.js";
@@ -56,7 +57,44 @@ function select<T extends string>(id: string, options: readonly { value: T; labe
   element.onchange = () => onChange(element.value as T);
 }
 
-for (const result of ["goal", "save", "post", "over", "wide"] as const) button("#outcomes", result.toUpperCase(), () => shoot(result));
+for (const result of ["goal", "save", "post", "over", "wide"] as const) button("#outcomes", result.toUpperCase(), () => { toPenalty(); shoot(result); });
+
+// ── Set pieces (free kicks with the engine's physics, the wall, wind; target practice) ─────
+let setup: FreeKickSetup = freeKickSetup(42, { distance: 24, angle: 0.2, wallSize: 4, maxWind: 3 });
+let targetTimer = 0;
+function toPenalty() { stage.kind = "penalty"; stage.freeKick = null; stage.targets = []; window.clearInterval(targetTimer); }
+function useSetup(next: FreeKickSetup) {
+  setup = next; stage.kind = "freekick"; stage.targets = []; window.clearInterval(targetTimer);
+  stage.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(stage.keeper)).wall };
+  $("#setpiece-info").textContent = `${setup.distance} m · angle ${(setup.angle * 57.3).toFixed(0)}° · wall of ${setup.wallSize} · wind ${setup.wind} m/s`;
+}
+function freeKick(want: "goal" | "wall" | "save" | "knuckle" | "curler") {
+  if (stage.kind !== "freekick") useSetup(setup);
+  for (let i = 0; i < 6000; i++) {
+    const shot: FreeKickShot = want === "knuckle" ? { aimX: Math.random() * 1.6 - 0.8, lift: Math.random(), power: 0.8 + Math.random() * 0.2, spin: (Math.random() - 0.5) * 0.2, top: Math.random() * 0.1 }
+      : { aimX: Math.random() * 2 - 1, lift: Math.random(), power: Math.random(), spin: want === "curler" ? (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.4) : Math.random() * 2 - 1, top: Math.random() };
+    const outcome = resolveFreeKick({ ...setup, seed: setup.seed + i }, shot, keeperById(stage.keeper));
+    const ok = want === "knuckle" ? isKnuckle(shot) && outcome.result === "goal" : want === "curler" ? outcome.result === "goal" : outcome.result === want;
+    if (ok) { stage.playFreeKick(outcome); log(`free kick → ${outcome.result}${outcome.knuckle ? " (knuckle)" : ""} spin ${shot.spin.toFixed(2)} top ${shot.top.toFixed(2)}`); return; }
+  }
+  log(`engine never produced a ${want} free kick from this setup`);
+}
+button("#setpieces", "FK: goal", () => freeKick("goal"));
+button("#setpieces", "FK: curler", () => freeKick("curler"));
+button("#setpieces", "FK: knuckleball", () => freeKick("knuckle"));
+button("#setpieces", "FK: blocked by wall", () => freeKick("wall"));
+button("#setpieces", "FK: saved", () => freeKick("save"));
+button("#setpieces", "FK: new setup", () => useSetup(freeKickSetup(Math.floor(Math.random() * 1e6), { maxWind: 5 })));
+for (const distance of [18, 25, 32]) button("#setpieces", `FK ${distance} m`, () => useSetup(freeKickSetup(Math.floor(Math.random() * 1e6), { distance, maxWind: 3 })));
+button("#setpieces", "Wind ←5", () => useSetup({ ...setup, wind: -5 }));
+button("#setpieces", "Wind 5→", () => useSetup({ ...setup, wind: 5 }));
+button("#setpieces", "Wall jump preview", () => { useSetup({ ...setup, wallJumpAt: 0 }); freeKick("wall"); });
+button("#setpieces", "Target practice", () => {
+  toPenalty(); stage.kind = "target"; const targets = spawnTargets(7, 0), start = performance.now();
+  targetTimer = window.setInterval(() => { const t = (performance.now() - start) / 1000; stage.targets = targets.map(target => ({ ...targetAt(target, t), r: target.r, value: target.value })); }, 33);
+});
+button("#setpieces", "Zone hints on/off", () => { stage.hints = stage.hints ? 0 : 1; });
+button("#setpieces", "Back to penalties", () => toPenalty());
 for (const celebration of CELEBRATIONS) button("#celebrations", celebration.name, () => { stage.celebration = celebration.id as CelebrationId; stage.startCelebration(celebration.id as CelebrationId); });
 for (const kind of ["miss", "save", "post"] as const) button("#reactions", `React: ${kind}`, () => stage.react(kind));
 RARITY_NAMES.slice(0, 7).forEach((name, index) => button("#rarities", name, () => stage.showReveal(revealPlan(index + 1))));

@@ -153,3 +153,31 @@ test("free-kick swipe: longer swipes lift, a late flick adds topspin, a bow adds
   const bowed = swipeToFreeKick([{ x: 240, y: 300, t: 0 }, { x: 190, y: 220, t: 100 }, { x: 240, y: 140, t: 200 }], size)!;
   assert.ok(Math.abs(bowed.spin) > 0.3);
 });
+
+import { MatchDirector } from "../../games/penalty-kings/game/director.ts";
+import { COMMENTARY_COUNT, commentary, commentaryContexts } from "../../games/penalty-kings/gfx/commentary.ts";
+test("Match Director: the specific line wins, waves are rationed, keepers rotate", () => {
+  const d = new MatchDirector(3);
+  const base = { kind: "penalty" as const, zone: "corner" as const, x: 0.8, y: 0.3, streak: 1, misses: 0 };
+  assert.equal(d.afterKick({ ...base, result: "goal", zone: "bin", y: 0.8 }).say, "top-bin");
+  assert.equal(d.afterKick({ ...base, result: "goal", postIn: true }).say, "post-in");
+  assert.equal(d.afterKick({ ...base, result: "goal", zone: "centre", x: 0, y: 0.7 }).say, "panenka");
+  assert.equal(d.afterKick({ ...base, kind: "freekick", result: "wall" }).say, "wall");
+  assert.equal(d.afterKick({ ...base, kind: "freekick", result: "goal", knuckle: true }).say, "knuckle");
+  assert.equal(d.afterKick({ ...base, result: "save", misses: 3 }).say, "cold-streak");
+  const waves = Array.from({ length: 12 }, () => d.afterKick({ ...base, result: "goal", streak: 3 }).wave).filter(Boolean).length;
+  assert.ok(waves >= 1 && waves <= 3, `waves rationed (${waves} in 12 streak goals)`);
+  const keepers = new Set(Array.from({ length: 6 }, () => d.keeperForRound(["mouse", "squirrel"], "sloth")));
+  assert.ok(keepers.has("sloth") && keepers.size >= 2, "rematches rotate in");
+  assert.ok(new Set([0, 1, 2, 3].map(k => d.keeperForKick(["mouse"], "squirrel", k))).size >= 2, "free kicks rotate keepers");
+  assert.ok(MatchDirector.SHOWREEL.every(beat => !/reveal/.test(beat)), "the showreel never shows paid reveals");
+});
+
+test("commentary: 150+ lines, every context non-empty, no repeat until the pool is used", () => {
+  assert.ok(COMMENTARY_COUNT >= 150, `${COMMENTARY_COUNT} lines`);
+  const names = { friend: "Friend #1", keeper: "Keeper" };
+  for (const context of commentaryContexts()) assert.ok(commentary(context, names).length > 3, context);
+  // The pool cycles: 12 draws span at most one cycle boundary, so at most one line can repeat.
+  const seen = new Set(Array.from({ length: 12 }, () => commentary("goal", names)));
+  assert.ok(seen.size >= 11, `${seen.size} distinct goal lines in 12 draws`);
+});

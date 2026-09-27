@@ -56,6 +56,10 @@ export class Stage {
   clock: { left: number; total: number } | null = null;
   /** Jumbotron text (Pro / Champions), from game/prizes.ts jumbotronSlides. */
   jumbotron = "";
+  /** The Match Director's line for the next resolve (else the plain result line). */
+  cue: CommentaryContext | null = null;
+  /** What the viewer actually saw (the 90-second QA reads this). */
+  stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0 };
 
   private mode: "idle" | "shot" | "celebrate" | "react" | "walkout" = "idle";
   private modeTime = 0;
@@ -86,17 +90,26 @@ export class Stage {
   get busy() { return this.mode !== "idle" || Boolean(this.reveal); }
 
   // ── Moments ───────────────────────────────────────────────────────────────
-  say(context: CommentaryContext) { this.said = { text: commentary(context, { friend: this.friendName, keeper: keeperById(this.keeper).name }), t: 0 }; }
+  say(context: CommentaryContext) {
+    const text = commentary(context, { friend: this.friendName, keeper: keeperById(this.keeper).name });
+    this.said = { text, t: 0 }; this.stats.lines.add(text); this.stats.contexts.add(context);
+  }
+  /** A keeper taunt bubble with its signature sound. */
+  taunt() {
+    const taunts = KEEPER_TAUNTS[this.keeper]; this.bubble = { text: taunts[Math.floor(Math.random() * taunts.length)], t: 0 };
+    this.stats.taunts++; this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
+  }
 
   /** Play the whole choreographed shot for an already-resolved outcome. */
   play(outcome: ShotOutcome, curl: number, flightOverride?: number) {
     this.timeline.reset(); this.mode = "shot"; this.modeTime = 0; this.ballVisible = true; this.reticle = null; this.clock = null; this.preview = null;
+    this.stats.shots++; if (this.kind !== "target") this.stats.keepers.add(this.keeper);
     if (flightOverride === undefined) this.fk = null;
     const flight = flightOverride ?? Math.max(0.45, outcome.target.time * 1.6);
     this.shot = { outcome, curl, flight, strikeAt: 1.2 };
     this.crowd.react("tense");
     this.camera.targetZoom = this.reduced ? 1 : 1.06; this.camera.targetY = H / 2 - 6;
-    this.sfx("heartbeat"); this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
+    this.sfx("heartbeat"); if (!this.said || this.said.t > 1.5) this.say(keeperById(this.keeper).boss ? "boss" : "buildup");
     this.timeline
       .at(0.35, () => this.sfx("heartbeat"))
       .at(0.6, () => this.sfx("whistle"))
@@ -130,14 +143,15 @@ export class Stage {
     const shot = this.shot!, result = shot.outcome.result, end = toScreen(shot.outcome.target.x, shot.outcome.target.y);
     if (this.fk?.result === "wall") {
       const hit = fkProject(this.freeKick!.setup, this.fk.path[this.fk.path.length - 1]);
-      this.crowd.react("ooh"); this.say("wall"); this.onEvent("resolved", "wall"); this.streak = 0; this.reaction = "save";
+      this.crowd.react("ooh"); this.say(this.cue ?? "wall"); this.cue = null; this.stats.saves++; this.onEvent("resolved", "wall"); this.streak = 0; this.reaction = "save";
       this.camera.addTrauma(0.3); this.camera.hitStop = 2 / 60; this.sfx("glove"); this.sfx("ooh");
       this.particles.emit("dust", hit.x, hit.y, 12, { color: ["#ffffff", "#c8b99a"], speed: 60, spread: Math.PI * 2, life: 0.4 });
       this.scoreFlip = { from: this.score, t: 0 };
       return;
     }
     this.crowd.react(result === "goal" ? "cheer" : result === "post" || result === "over" ? "ooh" : "groan");
-    this.say(result);
+    this.say(this.cue ?? result); this.cue = null;
+    if (result === "goal") this.stats.goals++; else if (result === "save") this.stats.saves++; else if (result === "post") this.stats.woodwork++;
     this.onEvent("resolved", result);
     this.camera.targetZoom = 1; this.camera.targetY = H / 2;
     if (this.kind === "target") {
@@ -150,13 +164,13 @@ export class Stage {
       this.particles.emit("confetti", end.x, end.y - 10, 60, { color: THEMES[this.stadium].confetti, speed: 140, spread: Math.PI * 1.2, gravity: 70, life: 2.4 });
       this.particles.emit("thread", end.x, end.y, 8, { color: "#ffffff", speed: 60, life: 0.5, gravity: 60 });
       this.sfx("net"); this.sfx("roar");
-      this.streak += 1; if (this.streak >= 2) this.crowd.startWave(); if (this.streak >= 2) this.sfx("chant");
+      this.streak += 1; if (this.streak >= 2) this.sfx("chant");
     } else {
       this.streak = 0; this.reaction = result === "post" ? "post" : result === "save" ? "save" : "miss";
       if (result === "save") {
         this.particles.emit("spark", end.x, end.y, 16, { color: ["#ffffff", "#ffd23f"], speed: 90, spread: Math.PI * 2, life: 0.4, gravity: 0 });
         if (this.keeper === "octopus") this.particles.emit("ink", end.x, end.y, 20, { color: "#1a0f2e", speed: 40, spread: Math.PI * 2, life: 1, gravity: 20, size: 2 });
-        const taunts = KEEPER_TAUNTS[this.keeper]; this.bubble = { text: taunts[Math.floor(Math.random() * taunts.length)], t: 0 };
+        const taunts = KEEPER_TAUNTS[this.keeper]; this.bubble = { text: taunts[Math.floor(Math.random() * taunts.length)], t: 0 }; this.stats.taunts++;
         this.camera.hitStop = 0.07; this.camera.addTrauma(0.3); this.sfx("glove"); this.sfx("groan"); this.sfx(KEEPER_DESIGNS[this.keeper].sfx as Sfx);
       } else if (result === "post") {
         this.postWobble = 1.4; this.camera.addTrauma(0.45); this.sfx("clang"); this.sfx("ooh");
@@ -167,21 +181,21 @@ export class Stage {
     this.scoreFlip = { from: this.score, t: 0 };
   }
 
-  startCelebration(id: CelebrationId) { this.celebration = id; this.mode = "celebrate"; this.modeTime = 0; this.ballVisible = false; this.crowd.react("cheer"); }
+  startCelebration(id: CelebrationId) { this.celebration = id; this.mode = "celebrate"; this.modeTime = 0; this.ballVisible = false; this.crowd.react("cheer"); this.stats.celebrations.add(id); }
   react(kind: "miss" | "save" | "post") { this.reaction = kind; this.mode = "react"; this.modeTime = 0; }
-  walkout() { this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say("walkout"); }
+  walkout() { this.stats.walkouts++; this.mode = "walkout"; this.modeTime = 0; this.crowd.react("cheer"); this.sfx("chant"); this.say("walkout"); }
   /** ETHICS: the reveal is driven ONLY by a RevealPlan built from the settled outcome (game/reveal.ts). */
   showReveal(plan: RevealPlan) {
-    this.reveal = { rarity: plan.rarity, t: 0, plan }; this.rarity = plan.rarity;
+    this.reveal = { rarity: plan.rarity, t: 0, plan }; this.rarity = plan.rarity; this.stats.reveals++;
     this.onEvent("reveal", plan); this.sfx(plan.fullScreen ? "reveal-top" : "reveal");
     if (plan.rarity >= 5) this.say(plan.fullScreen ? "rarity-top" : "rarity-high");
     if (plan.fullScreen) { this.crowd.react("cheer"); this.sfx("roar"); }
   }
-  wave() { this.crowd.startWave(); this.crowd.react("cheer"); }
+  wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; this.say("wave"); }
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
   private finish() { this.mode = "idle"; this.shot = null; this.ballVisible = false; this.onEvent("done"); }
   private dust(x: number, y: number) { this.particles.emit("dust", x, y, 5, { color: ["#c8b99a", "#a89878"], speed: 25, spread: 1.6, life: 0.5, gravity: -10 }); }
-  private sfx(name: Sfx) { this.onEvent("sfx", name); }
+  private sfx(name: Sfx) { this.stats.sfx++; this.onEvent("sfx", name); }
 
   // ── Update ────────────────────────────────────────────────────────────────
   update(realDt: number) {
@@ -239,7 +253,7 @@ export class Stage {
       const { setup, wall } = this.freeKick, since = this.shot && this.mode === "shot" ? this.modeTime - this.shot.strikeAt : null;
       const beyond = this.fk && since !== null && since >= 0 && pathAt(this.fk.path, since).z > Math.cos(setup.angle) * WALL_DISTANCE;
       if (beyond && !ballBehind) this.drawBallLayer(c);
-      drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced);
+      drawWall(c, setup, wall, since !== null && since >= 0 ? since : null, this.reduced, this.stadium);
       if (this.preview && this.mode === "idle") drawPreview(c, setup, this.preview.path, this.preview.alpha);
       if (!beyond && !ballBehind) this.drawBallLayer(c);
       drawWind(c, setup.wind, this.time, this.reduced);

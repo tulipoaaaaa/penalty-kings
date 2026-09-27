@@ -26,6 +26,8 @@ import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target 
 import { revealPlan } from "./game/reveal.js";
 import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, type KeyAim } from "./game/input.js";
+import { MatchDirector, type KickFacts } from "./game/director.js";
+import { CELEBRATIONS } from "./gfx/friend.js";
 import { BallCase, OddsTable, StadiumPrices, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, rungName, type SessionSummary } from "./ui.js";
 import liveConfig from "./live.json" with { type: "json" };
 import "@rarefriends/friendsdk/frame.css";
@@ -50,6 +52,7 @@ const RULE = "Your kick never changes what you win. Ball rarity is decided by on
 const RIVALS = ["Rival Friend A", "Rival Friend B", "Rival Friend C", "Rival Friend D", "Rival Friend E", "Rival Friend F", "Rival Friend G", "Rival Friend H", "Rival Friend I", "Rival Friend J", "Rival Friend K"];
 const SIM_RACE = [2400, 1900, 1500, 1210, 1000, 820, 640, 500, 360, 240, 120];
 const SIM_SKILL = [9350, 7900, 6120, 4600, 3800];
+const LADDER_SHOWCASE: readonly KeeperId[] = ["squirrel", "peacock", "octopus", "mime", "disco", "sumo", "robot", "ghost", "finalwall"];
 const LABELS: Record<ShotResult | "wall", string> = { goal: "GOAL!", save: "SAVED!", post: "OFF THE POST!", over: "OVER THE BAR!", wide: "WIDE!", wall: "BLOCKED!" };
 const vibrate = (pattern: number | number[]) => { try { navigator.vibrate?.(pattern); } catch { /* iPhone Safari: unsupported, skip */ } };
 
@@ -92,6 +95,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const keyAim = useRef<KeyAim & { charging: boolean; chargeStart: number }>({ aimX: 0.5, loft: 0, lift: 0.55, curl: 0, top: 0, power: 0, charging: false, chargeStart: 0 });
   const aimStarted = useRef(0);
   const pendingKick = useRef<{ record: KickRecord; result: ShotResult | "wall" } | null>(null);
+  const director = useRef(new MatchDirector(Number(friendId % 997n)));
+  const pendingWave = useRef(false);
   const progressRef = useRef(progress); progressRef.current = progress;
   /** Every progress change goes through here so later reads in the same tick see it. */
   const updateProgress = (change: (p: Progress) => Progress) => { const next = change(progressRef.current); progressRef.current = next; setProgress(next); };
@@ -168,6 +173,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (!node || !context) return;
     const scene = new Stage({ stadium: tier.id, weather: weatherForDay(), keeper: "squirrel" });
     stage.current = scene;
+    // Read-only viewer stats for the 90-second QA harness (counts only; no game state is writable).
+    (window as unknown as { __pkStats?: () => unknown }).__pkStats = () => Object.fromEntries(Object.entries(scene.stats).map(([key, value]) => [key, value instanceof Set ? [...value] : value]));
     scene.rows = (facing, walking, frame) => (sprites.current ? spriteFrame(sprites.current, facing, walking, frame, "right").frame.rows : null);
     scene.friendName = `Friend #${friendId}`;
     scene.onEvent = (event, data) => {
@@ -194,6 +201,47 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return () => { cancelAnimationFrame(frame); window.removeEventListener("blur", stopKeys); stage.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+
+  // Attract mode: a showreel of SKILL moments behind the title (engine-resolved shots, never paid reveals).
+  useEffect(() => {
+    if (screen !== "title" || !ready) return;
+    let beat = 0;
+    const run = () => {
+      const scene = stage.current;
+      if (!scene || live.current.paused || scene.busy) return;
+      const step = MatchDirector.SHOWREEL[beat++ % MatchDirector.SHOWREEL.length];
+      if (step !== "celebration" && step !== "wave") scene.keeper = LADDER_SHOWCASE[(beat + (Number(friendId) % 5)) % LADDER_SHOWCASE.length]; // every shot brings the next keeper
+      scene.kind = "penalty"; scene.freeKick = null; scene.hints = 0;
+      const find = (want: ShotResult) => {
+        for (let i = 0; i < 3000; i++) {
+          const shot = { aimX: Math.random() * 2.6 - 1.3, loft: 0, power: 0.35 + Math.random() * 0.6, curl: Math.random() * 1.6 - 0.8 };
+          const outcome = resolveShot(shot, keeperById(scene.keeper), Math.floor(Math.random() * 2 ** 31));
+          if (outcome.result === want && (want !== "goal" || outcome.zone === "bin" || outcome.zone === "corner")) return { outcome, curl: shot.curl };
+        }
+        return null;
+      };
+      if (step === "walkout") scene.walkout();
+      else if (step === "celebration") scene.startCelebration(CELEBRATIONS[beat % CELEBRATIONS.length].id);
+      else if (step === "wave") scene.wave();
+      else if (step === "taunt") { scene.say(`intro:${scene.keeper}`); scene.taunt(); }
+      else if (step === "freekick") {
+        const setup = freeKickSetup(beat * 7919, { maxWind: 3 }), keeper = keeperById(scene.keeper);
+        scene.kind = "freekick"; scene.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeper).wall };
+        for (let i = 0; i < 3000; i++) {
+          const outcome = resolveFreeKick({ ...setup, seed: setup.seed + i }, { aimX: Math.random() * 1.8 - 0.9, lift: Math.random(), power: Math.random(), spin: Math.random() * 2 - 1, top: Math.random() }, keeper);
+          if (outcome.result === "goal") { scene.cue = "curler"; scene.playFreeKick(outcome); break; }
+        }
+      } else {
+        const found = find(step === "penalty-save" ? "save" : step === "post" ? "post" : "goal");
+        if (found) { if (step === "penalty-goal") scene.cue = found.outcome.zone === "bin" ? "top-bin" : "goal"; scene.play(found.outcome, found.curl); }
+      }
+      if (beat === 1) scene.say("showreel");
+    };
+    run();
+    const id = window.setInterval(run, 1200);
+    return () => { window.clearInterval(id); const scene = stage.current; if (scene) { scene.kind = "penalty"; scene.freeKick = null; scene.cue = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, ready]);
 
   // Keep the Stage in sync with settings, cosmetics and prize displays.
   useEffect(() => { stage.current?.setReduced(reducedMotion); }, [reducedMotion, ready]);
@@ -273,7 +321,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const ladder = nextRung(progress);
     const base: Session = { mode, kind: "penalty", keeper: ladder, seed: (Date.now() ^ Number(friendId % 100000n)) >>> 0, total: 5, kicks: [], points: 0, streak: 0, rung: progress.difficulty, earned: { rf: 0n, gboot: 0, race: 0 } };
     if (mode === "tutorial") return { ...base, keeper: "mouse", total: 3, ...extra };
-    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4 }), ...extra };
+    if (mode === "freekicks") return { ...base, kind: "freekick", total: 3, keeper: director.current.keeperForKick(progress.stamps, ladder, 0), setup: freeKickSetup(base.seed, { maxWind: tier.id === "champions" ? 0 : 4 }), ...extra };
+    if (mode === "penalties") return { ...base, keeper: director.current.keeperForRound(progress.stamps, ladder), ...extra };
     if (mode === "target") return { ...base, kind: "target", total: 0, target: { startedAt: performance.now(), round: 0, targets: spawnTargets(base.seed, 0), combo: 0, hits: 0 }, ...extra };
     if (mode === "skill") return { ...base, keeper: "finalwall", ...extra };
     if (mode === "match") return { ...base, keeper: progress.stamps.includes(ladder) ? ladder : ladder, ...extra };
@@ -289,7 +338,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.freeKick = next.kind === "freekick" && next.setup ? { setup: next.setup, wall: resolveFreeKick(next.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(next.keeper)).wall } : null;
       scene.targets = []; scene.preview = null;
       scene.rarity = next.mode === "match" ? scene.rarity : 7;
-      scene.say(next.kind === "freekick" ? "freekick" : next.kind === "target" ? "target" : keeperById(next.keeper).boss ? "boss" : "keeper");
+      scene.streak = 0; scene.cue = null;
+      if (next.mode === "tutorial") scene.walkout();
+      else scene.say(next.kind === "freekick" ? "freekick" : next.kind === "target" ? "target" : director.current.roundIntro(next.keeper, scene.weather, next.mode));
     }
     if (next.mode === "match") { setPhase("idle"); return; }
     startAim(next);
@@ -326,6 +377,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       scene.ballVisible = true;
       if (current.kind !== "target") {
         const index = current.kicks.length;
+        if (current.mode === "tutorial") { scene.hints = 1; window.setTimeout(() => stage.current?.say(`tutorial-${Math.min(3, index + 1)}` as "tutorial-1"), index === 0 ? 2600 : 300); }
+        else if (index > 0 || current.mode === "match") { const pre = director.current.beforeKick(index, current.streak); if (pre.say) scene.say(pre.say); if (pre.taunt) scene.taunt(); }
         scene.tell = keeperPlan(keeperById(current.keeper), kickSeed(current.seed, index, current.keeper), { x: 0, y: 0.5 }, { kickIndex: index, history: current.kicks.map(kick => kick.x) });
       }
     }
@@ -357,6 +410,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const ballMult = current.mode === "match" && current.ball ? RARITIES[current.ball.outcomeId - 1].dropMult : 1;
     const points = outcome.result === "goal" ? goalPoints(profile, ballMult, current.streak + 1, Boolean(current.suddenDeath), outcome.zone, outcome.postIn) : 0;
     pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, postIn: outcome.postIn, x: outcome.target.x, y: outcome.target.y }, result: outcome.result };
+    direct(current, pendingKick.current.record);
     scene.play(outcome, shot.curl);
     setPhase("shooting");
   }
@@ -371,9 +425,19 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const outcome = resolveFreeKick({ ...current.setup, seed: kickSeed(current.seed, current.kicks.length, profile.id) }, shot, profile, difficulty);
     const points = outcome.result === "goal" ? goalPoints(profile, 1, current.streak + 1, false, outcome.zone) * (outcome.knuckle ? 2 : 1) : 0;
     pendingKick.current = { record: { result: outcome.result, zone: outcome.zone, points, x: outcome.target.x, y: outcome.target.y, spin: shot.spin, knuckle: outcome.knuckle }, result: outcome.result };
-    if (outcome.knuckle) scene.say("knuckle");
+    direct(current, pendingKick.current.record);
     scene.playFreeKick(outcome);
     setPhase("shooting");
+  }
+
+  /** Tell the Match Director what just happened; it picks the line (and maybe a wave) the Stage plays on resolve. */
+  function direct(current: Session, record: KickRecord) {
+    const scene = stage.current; if (!scene) return;
+    let misses = 0; for (let i = current.kicks.length - 1; i >= 0 && current.kicks[i].result !== "goal"; i--) misses++;
+    const goal = record.result === "goal";
+    const facts: KickFacts = { kind: current.kind, result: record.result, zone: record.zone, postIn: record.postIn, x: record.x, y: record.y, spin: record.spin, knuckle: record.knuckle, streak: goal ? current.streak + 1 : 0, misses: goal ? 0 : misses + 1 };
+    const cue = director.current.afterKick(facts);
+    scene.cue = current.kind === "target" ? null : cue.say; pendingWave.current = cue.wave;
   }
 
   function timeout() {
@@ -390,6 +454,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     const current = live.current.session, kick = pendingKick.current;
     if (!current || !kick) return;
     const record = kick.record, goal = record.result === "goal";
+    if (pendingWave.current) { pendingWave.current = false; stage.current?.wave(); }
     if (goal && haptics) vibrate([40, 30, 40]);
     const streak = goal ? current.streak + 1 : 0;
     const kicks = [...current.kicks, record], points = current.points + record.points;
@@ -432,7 +497,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     // Free kicks: a new setup for every kick (except levels/daily with a fixed setup).
     if (current.mode === "freekicks") {
       const setup = freeKickSetup((current.seed + current.kicks.length * 101) >>> 0, { maxWind: tier.id === "champions" ? 0 : 4 });
-      const updated = { ...current, setup };
+      const keeper = director.current.keeperForKick(progressRef.current.stamps, nextRung(progressRef.current), current.kicks.length);
+      const updated = { ...current, setup, keeper };
+      if (stage.current) { stage.current.keeper = keeper; if (keeper !== current.keeper) stage.current.say(`intro:${keeper}`); }
       setSession(updated);
       if (stage.current) stage.current.freeKick = { setup, wall: resolveFreeKick(setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(current.keeper)).wall };
       startAim(updated); return;
@@ -445,7 +512,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const before = levelFromXp(p.xp).level, after = levelFromXp(p.xp + amount).level;
       if (after > before) {
         const opened = MODES.filter(mode => mode.level > before && mode.level <= after).map(mode => mode.name);
-        setMessage(`Level ${after}!${opened.length ? ` Unlocked: ${opened.join(", ")}.` : ""}`);
+        setMessage(`Level ${after}!${opened.length ? ` Unlocked: ${opened.join(", ")}.` : ""}`); stage.current?.say("level-up");
       }
       return { ...p, xp: p.xp + amount };
     });
@@ -464,7 +531,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.mode !== "match" && current.mode !== "skill") updated = { ...updated, difficulty: rung, matches: p.matches + 1 };
       if (current.mode === "tutorial") { updated.tutorialDone = true; xp += XP.tutorial; result.title = "Tutorial complete! Level 2: Free Kicks, World Tour, Daily and Target Practice unlocked"; }
       if ((current.mode === "penalties" || current.mode === "tutorial") && goals >= 3 && !p.stamps.includes(current.keeper)) {
-        updated.stamps = [...p.stamps, current.keeper]; xp += XP.stamp; result.stamp = keeperById(current.keeper).name;
+        updated.stamps = [...p.stamps, current.keeper]; xp += XP.stamp; result.stamp = keeperById(current.keeper).name; stage.current?.say("stamp");
       }
       if (current.mode === "penalties") updated.best = { ...updated.best, penalties: Math.max(p.best.penalties, current.points) };
       if (current.mode === "freekicks") updated.best = { ...updated.best, freekicks: Math.max(p.best.freekicks, current.points) };
@@ -653,12 +720,16 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {(error || message) && phase !== "shooting" && screen === "play" && <p className="pk-toast" role={error ? "alert" : "status"}>{error || message}</p>}
     </div>
 
-    {screen === "title" && !menu && <div className="pk-title" role="dialog" aria-label="Penalty Kings">
-      <h1>PENALTY KINGS</h1>
-      <p>Easy to play. Hard to master. Your Friend #{friendId.toString()} is the striker.</p>
-      <button type="button" className="pk-primary" autoFocus onClick={() => { setScreen("modes"); void unlockAudio(); stage.current?.walkout(); }} data-testid="play">Play</button>
-      <p className="pk-rule">{RULE}</p>
-      {simulated && <p className="pk-note">Public preview: the economy (RF, balls, rewards, $GBOOT, Cup) is SIMULATED. Wallet and Friend ownership are real.</p>}
+    {screen === "title" && !menu && <div className="pk-title pk-attract" role="dialog" aria-label="Penalty Kings">
+      <div className="pk-attract-top">
+        <h1>PENALTY KINGS</h1>
+        <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
+      </div>
+      <div className="pk-attract-bottom">
+        <button type="button" className="pk-primary" autoFocus onClick={() => { void unlockAudio(); if (progress.tutorialDone) setScreen("modes"); else startMode("penalties"); }} data-testid="play">{progress.tutorialDone ? "Play" : "Kick off"}</button>
+        <p className="pk-rule">{RULE}</p>
+        {simulated && <p className="pk-note">Public preview: the economy (RF, balls, rewards, $GBOOT, Cup) is SIMULATED. Wallet and Friend ownership are real.</p>}
+      </div>
     </div>}
 
     {screen === "modes" && !menu && <div className="pk-title pk-modescreen" role="dialog" aria-label="Choose a mode">

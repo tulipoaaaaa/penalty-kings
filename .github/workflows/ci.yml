@@ -53,6 +53,10 @@ jobs:
         run: npm run test:smoke
       - name: Interaction test (buy → place → reveal → shoot → HUD)
         run: npm run test:game
+      - name: Every free mode played in the real runtime (tutorial, free kicks, target, tour, daily)
+        run: npm run test:modes
+      - name: 90-second first-session QA (what the viewer sees, with minimums)
+        run: npm run qa:90s
       - name: REAL ownership gate on Robinhood mainnet (read-only, no mocks)
         env:
           ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}

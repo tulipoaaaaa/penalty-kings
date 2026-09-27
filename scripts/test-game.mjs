@@ -55,8 +55,7 @@ await testGame("./games/penalty-kings", {
     };
 
     // Title → modes → Penalties (first time = tutorial).
-    await button("Play").click();
-    await game.getByTestId("mode-penalties").click();
+    await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     await game.getByTestId("pot").waitFor();
     assert.equal(await game.getByTestId("pot").getAttribute("data-tag"), "SIMULATED", "pot banner is tagged SIMULATED in the preview");
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");

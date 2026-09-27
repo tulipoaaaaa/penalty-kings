@@ -39,8 +39,7 @@ await testGame("./games/penalty-kings", {
     };
 
     // Tutorial (unlocks level 2).
-    await button("Play").click();
-    await game.getByTestId("mode-penalties").click();
+    await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     for (let i = 1; i <= 3; i++) await kick(`tutorial ${i}`, { dx: i === 2 ? -0.4 : 0.4 });
     await game.getByTestId("results").waitFor();
     assert.match(await game.getByTestId("results").textContent(), /Level 2/);
