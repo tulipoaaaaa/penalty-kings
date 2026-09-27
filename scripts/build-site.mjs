@@ -9,6 +9,7 @@ import { cp, rm, mkdir, writeFile, readFile, access, copyFile } from "node:fs/pr
 import { buildGame, readGameDeployment } from "@rarefriends/friendsdk/build";
 import { buildClubhouse } from "./build-clubhouse.mjs";
 import { buildPractice } from "./build-practice.mjs";
+import { stadiumNav } from "./lib/stadium-nav.mjs";
 
 const GAME = "games/penalty-kings", WORK = ".build", SITE = "site";
 const exists = path => access(path).then(() => true, () => false);
@@ -46,21 +47,14 @@ const RUNTIME_COPY = [
 ];
 const LANDING_CLIP = "site-src/landing/play.webm"; // 6 s of real play from docs/media/judge-path.webm (384 × 240, VP8, muted)
 
-const TIERS = [["park", "Park · 10 RF"], ["pro", "Pro · 1,000 RF"], ["champions", "Champions · 10,000 RF"]];
 /** Must equal STADIUM_MESSAGE in games/penalty-kings/economy.ts (tests/game/weekly.test.ts checks it). */
 const STADIUM_MESSAGE = "penalty-kings:open-stadium";
 const liveTiers = new Set();
 
 /** Trusted host page only (outside the game sandbox): links between stadium builds. */
 async function addStadiumBar(outdir, tier, live) {
-  const depth = (tier === "park" ? 0 : 1) + (live ? 1 : 0);
-  const root = depth ? "../".repeat(depth) : "./";
-  const base = live ? `${root}live/` : root;
-  const href = id => (id === "park" ? base : `${base}${id}/`);
-  const links = TIERS.map(([id, label]) => id === tier ? `<strong aria-current="page">${label}</strong>` : `<a href="${href(id)}">${label}</a>`).join(" ");
-  const other = live ? `<a href="${root}">Simulated preview</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : liveTiers.size ? `<a href="${root}live/">Live — real RF</a> <a href="${root}live/clubhouse/">Clubhouse (live)</a>` : "";
-  const practice = `<a class="practice" href="${root}practice/">Try a free practice kick</a>`;
-  const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : "SIMULATED preview"}</span> ${links} ${other} ${practice}</nav>`;
+  const { root, bar: links, pages } = stadiumNav({ tier, live, liveTiers, clubhouse: await exists(`${GAME}/deployments/live.json`) });
+  const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : "SIMULATED preview"}</span> ${links}</nav>`;
   // BQ-P1-10: the links are 44px tap targets (they were 14px-tall text links).
   const style = "<style>.pk-stadiums{max-width:var(--rf-game-max-width,960px);margin:0 auto;padding:0 8px;display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;font:12px ui-monospace,monospace}.pk-stadiums a{color:#111;display:inline-flex;align-items:center;min-height:44px}.pk-stadiums span{padding:2px 6px;font-weight:700}.pk-stadiums .sim{background:#ffd23f}.pk-stadiums .live{background:#ff5a6e;color:#fff}.pk-stadiums .practice{margin-left:auto;font-weight:700}</style>";
   // BQ-P1-8: without a browser wallet the SDK can only say "No browser wallet found"; the host page offers the
@@ -79,7 +73,6 @@ async function addStadiumBar(outdir, tier, live) {
   // C3b: the Ball shop's "Play at Pro / Champions" buttons. The game runs in an allow-scripts sandbox (it cannot
   // navigate this page), so it posts STADIUM_MESSAGE (games/penalty-kings/economy.ts); this trusted page opens that
   // stadium's page, by the same relative links as the bar, only for a message from a frame on this page.
-  const pages = Object.fromEntries(TIERS.filter(([id]) => id !== tier && (!live || liveTiers.has(id))).map(([id]) => [id, href(id)]));
   const opener = `<script>(()=>{const pages=${JSON.stringify(pages)};addEventListener("message",event=>{const data=event.data;if(!data||data.type!==${JSON.stringify(STADIUM_MESSAGE)}||typeof data.stadium!=="string"||!Object.hasOwn(pages,data.stadium))return;if(![...document.querySelectorAll("iframe")].some(frame=>frame.contentWindow===event.source))return;location.assign(pages[data.stadium])})})()</script>`;
   const file = `${outdir}/index.html`;
   const html = await readFile(file, "utf8");

@@ -27,6 +27,8 @@ jobs:
       - run: npm run typecheck
       - name: Site builds with no dev-only code (mock wallet, Showroom)
         run: npm run build:site && npm run check:no-dev
+      - name: Stadium links resolve for every combination of live deployments (no /live/ 404)
+        run: npm run test:site-links
       - name: Hand-written selectors match their signatures
         run: npm run check:selectors
       - name: Odds (sum 10000 bps, EV 90.00% for every tier)

@@ -2,6 +2,7 @@
 // Run after `npm run build:site`. Used by CI and by the Pages workflow before upload.
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { brokenLinks } from "./lib/site-links.mjs";
 
 const MARKERS = ["isPenaltyKingsDevWallet", "DEV mock wallet", "DEV SHOWROOM", "dev/showroom", "mock-wallet"];
 if (!existsSync("site")) { console.error("site/ missing: run npm run build:site first"); process.exit(1); }
@@ -16,5 +17,7 @@ const walk = dir => {
   }
 };
 walk("site");
-if (hits.length) { console.error(`DEV CODE IN site/\n${hits.join("\n")}`); process.exit(1); }
-console.log("PASS check-no-dev: site/ contains no dev-only code");
+// BQ-P2 (/live/ 404): every internal link of every page resolves to a file in site/.
+for (const link of brokenLinks("site")) hits.push(`broken internal link: ${link}`);
+if (hits.length) { console.error(`NOT PUBLISHABLE: site/\n${hits.join("\n")}`); process.exit(1); }
+console.log("PASS check-no-dev: site/ contains no dev-only code, and every internal link resolves");

@@ -48,6 +48,7 @@
     "play:dev": "node dev/server.mjs",
     "test:dev-server": "node scripts/test-dev-server.mjs",
     "check:no-dev": "node scripts/check-no-dev.mjs",
+    "test:site-links": "node scripts/test-site-links.mjs",
     "sim:difficulty": "node --experimental-strip-types scripts/difficulty-sim.ts",
     "test:game-logic": "node scripts/test-game-logic.mjs",
     "test:modes": "node scripts/test-modes.mjs --out ./artifacts/modes",
