@@ -5,7 +5,7 @@
  * curl. Free kicks add a flick-at-the-end topspin and SOLVE the lift so an unspun, windless shot
  * crosses at the aimed height. Keyboard and mouse produce the same inputs.
  */
-import { swipeToShot, solveLift, clamp, RELEASE_BUFFER_MS, type SwipePoint, type SwipeOptions, type ShotInput, type FreeKickShot, type FreeKickSetup } from "@penalty-kings/engine";
+import { swipeToShot, solveLift, clamp, kickSeed, RELEASE_BUFFER_MS, type KeeperId, type SwipePoint, type SwipeOptions, type ShotInput, type FreeKickShot, type FreeKickSetup } from "@penalty-kings/engine";
 
 export function swipeToFreeKick(points: readonly SwipePoint[], options: SwipeOptions, setup: FreeKickSetup): FreeKickShot | null {
   const base = swipeToShot(points, options);
@@ -26,3 +26,10 @@ export function keyFreeKick(aim: KeyAim, setup: FreeKickSetup): FreeKickShot {
   const aimX = clamp(aim.aimX, -1.3, 1.3);
   return { aimX, lift: solveLift(setup, { aimX, aimY: aim.aimY, power: aim.power, top: aim.top }), power: aim.power, spin: aim.curl, top: aim.top };
 }
+
+/**
+ * The setup a free kick is actually struck with: the session's setup with this kick's seed. The trajectory
+ * preview and the strike both use it, so the knuckleball wobble the preview draws is the one the ball flies.
+ */
+export const kickSetup = (setup: FreeKickSetup, sessionSeed: number, kickIndex: number, keeper: KeeperId): FreeKickSetup =>
+  ({ ...setup, seed: kickSeed(sessionSeed, kickIndex, keeper) });

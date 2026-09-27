@@ -1,7 +1,7 @@
 /**
  * The Director's line bank: original one-liners for the commentator, tagged by context.
  * A context is a colon path, most specific first when picked (see commentator.ts):
- *   goal:<zone | post-in | panenka | curler | knuckle>, goal:vs:<keeper>, save:by:<keeper>, tell:<keeper>,
+ *   goal:<zone | post-in | panenka | curler | knuckle | screamer>, goal:vs:<keeper>, save:by:<keeper>, tell:<keeper>,
  *   save / post / crossbar / over / wide / wall / near-miss, streak:<2|3|5>, cold,
  *   glow:<high|top>, first:<event>, time:<of day>, stadium:<id>, buildup, banter, moment:<moment id>.
  * Placeholders: {friend}, {keeper}, {number} (the Friend's token number).
@@ -20,6 +20,7 @@ export const LINE_BANK: Readonly<Record<string, readonly string[]>> = {
   "goal:panenka": ["A chip down the middle! {friend} has ice for blood!", "The Panenka! Pure theatre!", "Floated in while {keeper} lay in the grass. Outrageous.", "The softest, cheekiest goal you'll see today."],
   "goal:curler": ["Whipped round the wall like a boomerang!", "The bend on that! It went round a corner!", "Curled it in with the outside of the boot. Show-off.", "That swung in like a pendulum!"],
   "goal:knuckle": ["That ball was dancing! Nobody could read it!", "No spin, all wobble, all goal!", "A knuckler! It changed its mind three times in the air!"],
+  "goal:screamer": ["From all of THIRTY yards! What a SCREAMER!", "Hit from the next postcode and it still dipped in!", "A screamer! The net is asking for a lie-down.", "Long range, no fear, top drawer. Take a bow, {friend}!", "They'll be showing that one at Christmas. What a hit!"],
   // ── Keeper-specific: beaten and saves ───────────────────────────────────────
   "goal:vs:mouse": ["Squeak jumped as high as a mouse can. Not high enough."],
   "goal:vs:squirrel": ["Nibbles was gone before the ball was struck!"],
@@ -71,6 +72,7 @@ export const LINE_BANK: Readonly<Record<string, readonly string[]>> = {
   "first:post-in": ["First goal in off the post! Lucky? Talented? Both."],
   "first:knuckle": ["{friend}'s first knuckleball! It had a mind of its own!"],
   "first:curler": ["First curler round the wall! Bend it, {friend}!"],
+  "first:screamer": ["{friend}'s first SCREAMER! From that far out? Outrageous!"],
   "first:beat": ["First time anyone's seen {friend} beat {keeper}!", "{keeper} beaten for the first time. That one's going in the scrapbook."],
   "first:save": ["First save against you, {friend}. Welcome to the big leagues."],
   // ── Time of day and stadium ─────────────────────────────────────────────────

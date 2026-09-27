@@ -1,7 +1,7 @@
 /**
  * The Match Director: decides WHAT the player sees and hears so every session feels like a
  * broadcast — keeper rotation between rounds, keeper intros, weather lines, pre-kick taunts,
- * the right line for the right goal (top bin, post-in, Panenka, curler, knuckleball), crowd waves
+ * the right line for the right goal (top bin, post-in, Panenka, curler, knuckleball, long-range screamer), crowd waves
  * on streaks (rationed), consolation on cold streaks, and the attract-mode showreel. Pure logic:
  * it never touches outcomes (the engine and on-chain randomness decide those).
  */
@@ -14,7 +14,7 @@ import type { Stage, Sfx } from "../gfx/stage.js";
 export type KickFacts = {
   kind: "penalty" | "freekick" | "target";
   result: "goal" | "save" | "post" | "over" | "wide" | "wall";
-  zone: Zone; postIn?: boolean; y: number; x: number; spin?: number; knuckle?: boolean; streak: number; misses: number;
+  zone: Zone; postIn?: boolean; y: number; x: number; spin?: number; knuckle?: boolean; screamer?: boolean; streak: number; misses: number;
 };
 export type Cue = { say: CommentaryContext | null; wave: boolean };
 export type ShowreelBeat = "walkout" | "penalty-goal" | "penalty-save" | "celebration" | "wave" | "freekick" | "taunt" | "post";
@@ -59,6 +59,7 @@ export class MatchDirector {
     let say: CommentaryContext;
     if (facts.result === "wall") say = "wall";
     else if (goal && facts.postIn) say = "post-in";
+    else if (goal && facts.screamer && facts.kind === "freekick") say = "screamer";
     else if (goal && facts.knuckle) say = "knuckle";
     else if (goal && facts.zone === "bin") say = "top-bin";
     else if (goal && facts.zone === "centre" && facts.y >= 0.55) say = "panenka";

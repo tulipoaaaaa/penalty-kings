@@ -337,7 +337,7 @@ export class GameDirector {
     const first = (event: string) => { if (this.firsts.has(event)) return; this.firsts.add(event); out.push(`first:${event.startsWith("beat:") ? "beat" : event}`); };
     if (facts.kind === "target") return [goal ? "cheer" : "miss"];
     if (goal) {
-      const special = facts.postIn ? "post-in" : facts.knuckle ? "knuckle" : facts.kind === "penalty" && facts.zone === "centre" && facts.y >= 0.55 ? "panenka" : facts.kind === "freekick" && Math.abs(facts.spin ?? 0) >= 0.45 ? "curler" : null;
+      const special = facts.postIn ? "post-in" : facts.screamer && facts.kind === "freekick" ? "screamer" : facts.knuckle ? "knuckle" : facts.kind === "penalty" && facts.zone === "centre" && facts.y >= 0.55 ? "panenka" : facts.kind === "freekick" && Math.abs(facts.spin ?? 0) >= 0.45 ? "curler" : null;
       first("goal"); if (facts.zone === "bin") first("bin"); if (special) first(special); first(`beat:${keeper}`);
       if (special) out.push(`goal:${special}`);
       const mixed = [`goal:${facts.zone}`, this.streak >= 5 ? "streak:5" : this.streak >= 3 ? "streak:3" : this.streak === 2 ? "streak:2" : "", `goal:vs:${keeper}`].filter(Boolean);

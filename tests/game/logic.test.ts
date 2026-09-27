@@ -252,6 +252,7 @@ test("Match Director: the specific line wins, waves are rationed, keepers rotate
   assert.equal(d.afterKick({ ...base, result: "goal", zone: "centre", x: 0, y: 0.7 }).say, "panenka");
   assert.equal(d.afterKick({ ...base, kind: "freekick", result: "wall" }).say, "wall");
   assert.equal(d.afterKick({ ...base, kind: "freekick", result: "goal", knuckle: true }).say, "knuckle");
+  assert.equal(d.afterKick({ ...base, kind: "freekick", result: "goal", screamer: true, knuckle: true }).say, "screamer");
   assert.equal(d.afterKick({ ...base, result: "save", misses: 3 }).say, "cold-streak");
   const waves = Array.from({ length: 12 }, () => d.afterKick({ ...base, result: "goal", streak: 3 }).wave).filter(Boolean).length;
   assert.ok(waves >= 1 && waves <= 3, `waves rationed (${waves} in 12 streak goals)`);

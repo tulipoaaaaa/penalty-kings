@@ -113,3 +113,16 @@ test("keeper banter, first-time lines and the boss cameo", () => {
   assert.equal(banter.lines.length, 2);
   assert.deepEqual(banter.lines.map(l => l.by), ["commentator", "keeper"]);
 });
+
+test("a long-range free-kick goal is a SCREAMER line (first time, then the screamer bank)", () => {
+  const director = newDirector(21);
+  director.startSession({ mode: "freekicks", stadium: "pro", keeper: "squirrel" });
+  director.afterKick({ kind: "freekick", result: "goal", zone: "side", x: 0.5, y: 0.5 }); // the first goal line is used up
+  director.beforeKick();
+  const first = director.afterKick({ kind: "freekick", result: "goal", zone: "corner", x: 0.8, y: 0.4, screamer: true });
+  assert.equal(first.lines[0].context, "first:screamer");
+  director.beforeKick();
+  const next = director.afterKick({ kind: "freekick", result: "goal", zone: "corner", x: -0.8, y: 0.4, screamer: true, now: 100 });
+  assert.equal(next.lines[0].context, "goal:screamer");
+  assert.ok(LINE_BANK["goal:screamer"].length >= 4);
+});
