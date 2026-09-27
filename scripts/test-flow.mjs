@@ -22,6 +22,154 @@ const editSaveCode = (code, friendId, change) => {
   return `${prefix}.${next}.${crc32(`${friendId}:${next}`)}`;
 };
 
+// UI Bug Quest P2 (a fresh visit: 20 simulated RF, an empty Bag). `--p2-only` stops after this run.
+await testGame("./games/penalty-kings", {
+  width, timeout: 90_000,
+  check: async ({ page, game }) => {
+    await playInPortraitIfAsked(game);
+    page.on("pageerror", error => errors.push(String(error)));
+    const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable: " + JSON.stringify(window.__pkFlow?.()))) : setTimeout(poll, 50)); poll(); }));
+    const stats = () => game.locator("body").evaluate(() => window.__pkStats());
+    const quickKick = async () => { await waitShootable(); await game.getByTestId("quick").click(); await game.locator(".pk-banner").waitFor({ timeout: 10_000 }); const text = await game.locator(".pk-banner strong").textContent(); await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }); return text; };
+    const hold = async (key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
+    if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
+    // The pot line opens the odds (how the pot works) on the title, the modes screen and the HUD alike; closing goes back.
+    const potOpensOdds = async (pot, where, back) => {
+      await pot.click();
+      await game.getByRole("heading", { name: "Odds", exact: true }).waitFor({ timeout: 3000 });
+      await game.getByRole("button", { name: "Close Odds" }).click();
+      await back.waitFor({ timeout: 3000 });
+      console.log(`  pot line → Odds → Close: ${where}`);
+    };
+    await potOpensOdds(game.getByTestId("pot-counter"), "title", game.getByTestId("play"));
+
+    // BQ-X7: the tutorial's net-cam replay of the best goal is never under the coaching toast. Kick 1 goes top right
+    // against the mouse (he never saves a top bin), so there is a goal to replay after kick 3.
+    await game.getByTestId("play").click();
+    await waitShootable();
+    await hold("ArrowRight", 250); await hold("ArrowUp", 600);
+    const tutorial = [await quickKick(), await quickKick()];
+    await waitShootable();
+    await potOpensOdds(game.getByTestId("pot"), "HUD", game.getByTestId("quick"));
+    const replaysBefore = (await stats()).replays; console.log(`  tutorial: ${tutorial.join(", ")}`);
+    await waitShootable(); await game.getByTestId("quick").click();
+    await game.locator("body").evaluate((_, before) => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkStats().replays > before ? resolve(true) : Date.now() - start > 8000 ? reject(new Error("no net-cam replay")) : setTimeout(poll, 20)); poll(); }), replaysBefore);
+    assert.equal(await game.locator(".pk-toast").isVisible(), false, "no coaching toast over the net-cam replay");
+    await game.getByTestId("results").waitFor({ timeout: 15_000 });
+    ok("BQ-X7: the tutorial's net-cam replay plays with no coaching toast over it");
+    await game.getByRole("button", { name: "Modes", exact: true }).click();
+
+    // The Kit shop and the Rules are one tap from the modes screen (≥ 44 px targets).
+    const modes = game.locator(".pk-modescreen");
+    for (const name of ["Kit shop", "Rules"]) {
+      assert.equal(await modes.getByRole("button", { name, exact: true }).count(), 1, `${name} on the modes screen`);
+      const box = await modes.getByRole("button", { name, exact: true }).boundingBox();
+      assert.ok(box && box.width >= 44 && box.height >= 44, `${name} on the modes screen, ≥ 44 px (${box && `${box.width}×${box.height}`})`);
+    }
+    ok("Kit shop and Rules on the modes screen, ≥ 44 px");
+
+    // A menu opened from the modes screen closes back to it (Close or Escape), also after a pack opened from the
+    // Ball shop has sent the player to the Bag (it used to leave an empty pitch with no session).
+    const screen = () => game.locator("section.pk").getAttribute("data-screen");
+    const backOnModes = async where => { await modes.waitFor({ timeout: 3000 }); assert.equal(await screen(), "modes", `${where}: back on the modes screen`); };
+    for (const name of ["Kit shop", "Ball shop", "Settings", "Scouting Book", "Rules"]) {
+      await modes.getByRole("button", { name, exact: true }).click();
+      await game.getByRole("button", { name: `Close ${name}` }).click();
+      await backOnModes(`${name} → Close`);
+    }
+    await modes.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await backOnModes("Settings → Escape");
+    await game.getByTestId("ball-shop").click();
+    await game.getByTestId("pack-1").click();
+    await game.getByTestId("buy-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByText("1 ball bought.").waitFor();
+    await game.getByTestId("open-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByTestId("reveal-all").click();
+    await game.getByTestId("to-bag").click();
+    await game.getByRole("button", { name: "Close My Bag" }).click();
+    await backOnModes("Ball shop → pack → My Bag → Close");
+    ok("menus opened from the modes screen close back to it (also after opening a pack)");
+    await potOpensOdds(modes.getByTestId("pot-counter"), "modes", modes);
+    ok("the pot line opens the odds on the title, the modes screen and the HUD");
+
+    // Big Match with the pack's ball (aimed wide: few goals, so sudden death ends quickly), to Results.
+    const flow = () => game.locator("body").evaluate(() => window.__pkFlow());
+    const playMatch = async () => {
+      await waitShootable();
+      await hold("ArrowRight", 1500);
+      for (let kick = 0; kick < 30; kick++) {
+        await game.getByTestId("quick").click();
+        await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+        if (await game.locator("body").evaluate(() => new Promise(resolve => { const poll = () => { const f = window.__pkFlow(); if (f.menu) resolve(true); else if (f.shootable) resolve(false); else setTimeout(poll, 50); }; poll(); }))) break;
+      }
+      await game.getByTestId("results").waitFor({ timeout: 5000 });
+      return game.getByTestId("results").innerText();
+    };
+    await game.getByTestId("mode-match").click();
+    await waitShootable();
+    const ball = (await flow()).ball;
+    assert.ok(ball, "Big Match kicks with the pack's ball");
+    // Results count the packs opened for this match (the fixture's rolls are 0 RF Scuffed Balls: still a pack).
+    const first = await playMatch();
+    assert.match(first, /You opened 1 pack \(1 ball\) this session, worth 0 RF/, "Results list the pack opened");
+    assert.doesNotMatch(first, /No packs opened/);
+    await game.getByRole("button", { name: "Play again", exact: true }).click();
+    await waitShootable();
+    const again = await flow();
+    assert.equal(again.match, true, "Play again starts another Big Match");
+    assert.equal(again.ball, ball, "Play again kicks with the same ball");
+    assert.equal(await game.getByTestId("change-ball").textContent(), "Change ball");
+    ok("Big Match Results 'Play again' reuses the ball the player kicked with");
+    const second = await playMatch();
+    assert.match(second, /No packs opened this session/, "the next match's Results start from zero");
+    assert.match(second, /\$GBOOT dropped by your packs this session: \+0 /);
+    ok("Big Match Results show the packs opened (and their RF, $GBOOT, Cup points) for that match only");
+
+    // Settings "Reduce motion": the device's setting turns it on (and the label says so); with no device preference
+    // the player's own choice turns it on, and a device change never undoes that choice.
+    await game.getByRole("button", { name: "Modes", exact: true }).click();
+    await modes.getByRole("button", { name: "Settings", exact: true }).click();
+    const reduce = game.locator(".pk-settings label").filter({ hasText: "Reduce motion" }), box = reduce.locator("input");
+    const rooted = () => game.locator("section.pk").evaluate(node => node.classList.contains("pk-reduce-motion"));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await game.locator("section.pk.pk-reduce-motion").waitFor({ state: "attached", timeout: 3000 });
+    assert.equal(await box.isChecked(), true, "the device setting turns it on");
+    assert.equal(await box.isDisabled(), true, "the device setting cannot be overridden here");
+    assert.match(await reduce.innerText(), /your device/i, "the label says the device already asks for it");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await game.locator("section.pk:not(.pk-reduce-motion)").waitFor({ state: "attached", timeout: 3000 });
+    assert.equal(await box.isChecked(), false); assert.equal(await box.isDisabled(), false);
+    assert.doesNotMatch(await reduce.innerText(), /your device/i);
+    await box.check();
+    assert.equal(await rooted(), true, "the setting forces reduced motion with no device preference");
+    await page.emulateMedia({ reducedMotion: "reduce" }); await page.waitForTimeout(200);
+    await page.emulateMedia({ reducedMotion: "no-preference" }); await page.waitForTimeout(200);
+    assert.equal(await box.isChecked(), true, "a device change never undoes the player's choice");
+    assert.equal(await rooted(), true);
+    ok("Reduce motion: forced on by the setting, and the label says when the device already asks for it");
+
+    // With that setting on (no device preference), a pack's cards turn face-up with no flip animation.
+    await game.getByRole("button", { name: "Close Settings" }).click();
+    await game.getByTestId("ball-shop").click();
+    await game.getByTestId("pack-1").click();
+    await game.getByTestId("buy-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByText("1 ball bought.").waitFor();
+    await game.getByTestId("open-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    const card = game.locator('.pk-card[data-revealed="true"]').first();
+    await card.waitFor({ timeout: 10_000 });
+    assert.equal(await card.evaluate(node => getComputedStyle(node).animationName), "none", "no card flip under the Reduce motion setting");
+    await game.getByTestId("to-bag").click({ timeout: 10_000 });
+    ok("pack cards reveal without a flip under the Reduce motion setting");
+  },
+});
+if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
+
 await testGame("./games/penalty-kings", {
   width, timeout: 90_000,
   check: async ({ page, game, friendId }) => {

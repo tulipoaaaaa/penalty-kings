@@ -116,7 +116,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const [menu, setMenu] = useState<Menu>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [message, setMessage] = useState("");
-  const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false), [haptics, setHaptics] = useState(true);
+  const [muted, setMuted] = useState(true), [haptics, setHaptics] = useState(true);
+  /** Reduced motion: the device's prefers-reduced-motion OR the player's own Settings choice (a device change never undoes it). */
+  const [osReduced, setOsReduced] = useState(false), [motionChoice, setMotionChoice] = useState(false), reducedMotion = osReduced || motionChoice;
   const [phase, setPhase] = useState<Phase>("idle");
   const [session, setSession] = useState<Session | null>(null);
   const [banner, setBanner] = useState<{ text: string; sub: string; tone: string } | null>(null);
@@ -152,7 +154,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   /** The chosen ball; starts as the last ball kicked with (remembered on this device when allowed). */
   const [selectedBall, setSelectedBall] = useState<string | null>(() => loadLastBall());
   const [carousel, setCarousel] = useState(false);
-  const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0 });
+  /** What the packs opened since the last Big Match Results earned (that Results card lists it, then it starts again). */
+  const [earned, setEarned] = useState({ rf: 0n, gboot: 0, race: 0, packs: 0, balls: 0 });
   /** Whether this browser keeps progress by itself (false inside the SDK sandbox: use a save code). */
   const [persistent] = useState(() => canPersist());
   /** Title screen: the cold-open showreel plays once per visit, then the shorter attract loop (owner's SHOW IT OFF). */
@@ -291,7 +294,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, [simulated]);
   // C3b Champions Night (Saturday 19:00-21:00 UTC): the Champions look on every tier; double Cup points in the preview's race.
   const night = championsNight(now), nightLine = championsNightLine(now, simulated), drawLine = cupDrawLine(now);
-  const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} />;
+  const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} onOpen={place === "results" ? undefined : () => { if (may("open-menu")) setMenu("odds"); }} />;
   // BQ-P1-11: the commentator strip (canvas) drops below the DOM pot banner whenever they would overlap.
   const potRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -339,7 +342,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     createFriendReader().read(friendId).then(value => { if (version === epoch.current) { sprites.current = value; setArtStatus(""); } })
       .catch(() => { if (version === epoch.current) setArtStatus("Friend artwork unavailable. Playing with a placeholder."); });
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
+    const update = () => setOsReduced(preference.matches); update(); preference.addEventListener("change", update);
     return () => { epoch.current++; packRoll.current?.abort(); packRoll.current = null; clearPackTimers(); sound.current?.dispose(); crowd.current?.dispose(); preference.removeEventListener("change", update); };
   }, [client, friendId]);
 
@@ -1002,7 +1005,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const best = current.mode === "tutorial" && FIRST_SESSION[current.kicks.length - 1]?.replayBest ? bestGoal(tutorialShots.current) : null;
       if (best && stage.current) {
         const finished = current, epochAt = sessionEpoch.current;
-        setPhaseNow("idle");
+        setPhaseNow("idle"); setMessage(""); // BQ-X7: the coaching toast never sits over the replay
         replayDone.current = () => { replayDone.current = null; if (sessionEpoch.current === epochAt) endSession(finished); };
         stage.current.replay(best.outcome, best.curl, best.keeper);
         return;
@@ -1119,11 +1122,12 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
         result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
         result.match = {
-          rf: earned.rf > 0n ? `The balls you opened this session are worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
+          rf: earned.packs > 0 ? `You opened ${earned.packs} pack${earned.packs === 1 ? "" : "s"} (${earned.balls} ball${earned.balls === 1 ? "" : "s"}) this session, worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
           gboot: `$GBOOT dropped by your packs this session: +${formatNumber(earned.gboot)}${simulated ? " (simulated)" : " (estimate, paid weekly)"}.`,
           race: `Golden Boot Cup race: +${formatNumber(earned.race)} points this session${tag}.`,
           toTop10: raceRank <= 10 ? `You are #${raceRank} in the race${tag}.` : `You need ${formatNumber(gap)} more points to reach the top 10${tag}.`,
         };
+        setEarned({ rf: 0n, gboot: 0, race: 0, packs: 0, balls: 0 }); // the next match counts its own packs
       }
       if (current.mode === "skill") {
         setSkill(list => [...list, { id: current.seed, name: "Your Friend", score: current.points, mine: true }]);
@@ -1218,7 +1222,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       let drops = 0, race = 0, value = 0n;
       for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight * racePointMultiplier(Date.now()); value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
-      setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race }));
+      setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race, packs: e.packs + 1, balls: e.balls + rarities.length }));
       const best = Math.max(...rarities);
       if (best >= 5) { setLastBigPull(`FRIEND #${friendId} PULLED A ${RARITY_NAMES[best].toUpperCase()}`); director().noteBigPull(); } // the Director only learns "a big pull happened" (intensity), never its value
       updateProgress(p => ({ ...p, pulled: [...new Set([...p.pulled, ...rarities])] }));
@@ -1267,6 +1271,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     stage.current?.cancel(); // ends the sealed pack's wait and any card reveal on the Stage
     live.current = { ...live.current, pack: false }; setPack(null);
   }
+  /** Close a menu. With no session and no pack on the pitch (a pack opened from the modes screen ends in the Bag), back to the modes screen. */
+  function closeMenu() { setMenu(null); if (live.current.screen === "play" && !live.current.session && !live.current.pack) setScreen(progress.tutorialDone ? "modes" : "title"); }
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
   function flipCard(index: number, quiet = false) {
@@ -1423,7 +1429,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, []);
 
   // QA hook (like __pkStats): the action-flow state, so browser tests wait for "shootable" instead of sleeping.
-  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed), replay: Boolean(instantRef.current) }; };
+  (window as unknown as { __pkFlow?: () => unknown }).__pkFlow = () => { const state = flow(); return { ...state, shootable: canShoot(state), timing: timing.current.log, waiting: stage.current?.waitingFor ?? null, sealed: Boolean(live.current.pack && pack?.sealed), replay: Boolean(instantRef.current), ball: live.current.session?.ball?.recordId ?? null }; };
   // QA hook (read-only): the Director's seen moments, the moments played and keepers faced (seconds since load), the Discovery meter.
   (window as unknown as { __pkDirector?: () => unknown }).__pkDirector = () => ({ seen: dir.current?.seenIds() ?? [], discovery: dir.current?.discovery().label ?? "", played: qaLog.current.moments, keepers: qaLog.current.keepers, debug: dir.current?.debugState() ?? null });
   latest.current = { tickAim, tickTargets, onResolved, onKickDone, onStrike, playSfx, shootPenalty, shootFreeKick, startAim: () => startAim(), onWait, haptics };
@@ -1569,7 +1575,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <button type="button" onClick={() => setMenu("book")}>Scouting Book</button>
         <button type="button" onClick={() => setMenu("balls")} data-testid="ball-shop">Ball shop</button>
         <button type="button" onClick={() => setMenu("bag")} data-testid="my-bag">My Bag</button>
+        <button type="button" onClick={() => setMenu("shop")}>Kit shop</button>
         <button type="button" onClick={() => setMenu("cups")}>Cups</button>
+        <button type="button" onClick={() => setMenu("rules")}>Rules</button>
         <button type="button" onClick={() => setMenu("settings")}>Settings</button>
       </div>
       <ChallengeBox onPlay={startChallenge} />
@@ -1578,7 +1586,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     <RotateOverlay onShownChange={setRotating} />
     {paused && <div className="pk-paused" role="status">Paused</div>}
 
-    {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : () => setMenu(null)}>
+    {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : closeMenu}>
       {menu === "hub" && <div className="pk-hub">
         {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
         <button type="button" onClick={() => { leavePack(); cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
@@ -1673,7 +1681,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {menu === "settings" && <div className="pk-settings">
         <button type="button" aria-pressed={!muted} data-sound-toggle onClick={toggleSound}>{muted ? "Sound off" : "Sound on"}</button>
-        <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations)</label>
+        <label><input type="checkbox" checked={reducedMotion} disabled={osReduced} onChange={event => setMotionChoice(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations){osReduced ? ": on, your device's reduce motion setting asks for it" : ""}</label>
         <label><input type="checkbox" checked={haptics} onChange={event => setHaptics(event.target.checked)} /> Vibration (Android)</label>
         <p>Level {playerLevel} · {progress.xp} XP · ★ {Object.values(progress.stars).reduce((a, b) => a + b, 0)} · {progress.stamps.length}/12 keepers stamped</p>
         <p>Best: penalties {formatNumber(progress.best.penalties)} · free kicks {formatNumber(progress.best.freekicks)} · target {formatNumber(progress.best.target)}</p>
@@ -1696,7 +1704,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }
-          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); } else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
+          if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); }
+          else if (last.mode === "match") { live.current = { ...live.current, session: null }; const id = last.ball?.recordId; kickWith(id && bagRef.current.some(ball => ball.id === id && !ball.sample) ? id : lastUsedBall()); } // the same ball, in a new match
+          else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
       {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={sprites.current ? spriteFrame(sprites.current, "down", false, 0, "right").frame.rows : null} halo={ALL_COSMETICS.find(item => item.id === equipped.kit)?.color} login={progress.login} today={today} />; })()}
     </GameMenu>}
   </section>;

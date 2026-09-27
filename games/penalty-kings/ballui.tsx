@@ -131,7 +131,7 @@ export function Bag({ records, definition, simulated, busy, selected, onShoot, o
       {view === "bag" && <label>Sort <select value={sort} onChange={event => setSort(event.target.value as SortKey)}><option value="rarity">rarity</option><option value="value">value</option><option value="newest">newest</option></select></label>}
     </div>
     <p className="pk-note">{BALL_PROMISE}</p>
-    {view === "bag" && (real.length === 0 ? <p>Your Bag is empty. Buy a pack in the Shop.</p>
+    {view === "bag" && (real.length === 0 ? <p>Your Bag is empty. Buy a pack in the Ball shop.</p>
       : <>
         <p className="pk-counts">{RARITY_NAMES.slice(0, 7).map((name, rarity) => { const n = real.filter(r => r.rarity === rarity).length; return n ? <span key={name} data-rarity={rarity}><RarityChip rarity={rarity} />{name.replace(" Ball", "")} ×{n}</span> : null; })}</p>
         <div className="pk-bagrid">{sorted.map(record => <div key={record.id} className="pk-ballcard" data-rarity={record.rarity} data-selected={selected === record.id} data-testid="ball">

@@ -11,7 +11,7 @@ import type { Progress } from "./progress.js";
 /** Owner rule: every idea is one sentence a new player understands (shown in the Rules and the Scouting Book). */
 export const SHOT_RULES = {
   perfect: "Flick at just the right speed, firm but not wild, for a PERFECT strike: a quicker ball and a steadier aim.",
-  streak: "Goals in a row multiply your points: x1.2 from 3, x1.5 from 5 and x2 from 10 (a Skill Zone goal counts twice).",
+  streak: "Goals in a row multiply your points: ×1.2 from 3, ×1.5 from 5 and ×2 from 10 (a Skill Zone goal counts twice).",
   replay: "Great goals (top bins, in off the post, 28 m+ screamers, PERFECT strikes) get a 1.5 s slow-mo replay; tap to skip it.",
   clock: "After your first 3 matches a shot clock gives you 6 s for a penalty and 8 s for a free kick (5 s and 7 s at the very top); if it runs out, the kick is lost.",
 } as const;
