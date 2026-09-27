@@ -151,6 +151,21 @@ await testGame("./games/penalty-kings", {
     assert.equal(await box.isChecked(), true, "a device change never undoes the player's choice");
     assert.equal(await rooted(), true);
     ok("Reduce motion: forced on by the setting, and the label says when the device already asks for it");
+
+    // With that setting on (no device preference), a pack's cards turn face-up with no flip animation.
+    await game.getByRole("button", { name: "Close Settings" }).click();
+    await game.getByTestId("ball-shop").click();
+    await game.getByTestId("pack-1").click();
+    await game.getByTestId("buy-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    await game.getByText("1 ball bought.").waitFor();
+    await game.getByTestId("open-pack").click();
+    await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
+    const card = game.locator('.pk-card[data-revealed="true"]').first();
+    await card.waitFor({ timeout: 10_000 });
+    assert.equal(await card.evaluate(node => getComputedStyle(node).animationName), "none", "no card flip under the Reduce motion setting");
+    await game.getByTestId("to-bag").click({ timeout: 10_000 });
+    ok("pack cards reveal without a flip under the Reduce motion setting");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }

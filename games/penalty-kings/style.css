@@ -211,6 +211,7 @@
 .pk .rf-frame-scrim { padding-bottom: max(40px, 12cqh); }
 
 @media (prefers-reduced-motion: reduce) { .pk-banner, .pk-reveal, .pk-loading-ball, .pk-card { animation: none !important; } }
+.pk-reduce-motion :is(.pk-banner, .pk-reveal, .pk-card) { animation: none !important; } /* the Settings choice too: cards turn face-up in place, their glow still */
 
 /* ── Ball flow: shop, pack opening, bag, collection, carousel, market ─────────────────── */
 .pk-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
