@@ -742,6 +742,7 @@
 .pk-potline { display: grid; justify-items: center; gap: 2px; box-sizing: border-box; max-width: 100%; margin: 0; padding: 4px 10px; background: #3d2600f0; border: 2px solid var(--pk-gold);
   box-shadow: 2px 2px 0 #000; color: var(--pk-gold); font-size: clamp(11px, 1.4cqw, 14px); line-height: 1.25; text-align: center; }
 .pk-potline-main b[data-testid="pot-counter-value"] { font-size: 1.2em; }
+.pk .pk-title button.pk-potline { min-height: 44px; border-color: var(--pk-gold); background: #3d2600f0; color: var(--pk-gold); font-size: clamp(11px, 1.4cqw, 14px); font-weight: 400; line-height: 1.25; } /* tap = the odds */
 .pk-potline-usd { color: var(--pk-paper); }
 .pk-potline-sub { color: var(--pk-paper); font-size: max(11px, 0.9em); }
 .pk-night[data-active="true"] { color: var(--pk-ink); background: var(--pk-gold); padding: 0 0.3em; font-weight: 700; }

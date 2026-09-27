@@ -291,7 +291,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   }, [simulated]);
   // C3b Champions Night (Saturday 19:00-21:00 UTC): the Champions look on every tier; double Cup points in the preview's race.
   const night = championsNight(now), nightLine = championsNightLine(now, simulated), drawLine = cupDrawLine(now);
-  const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} />;
+  const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} onOpen={place === "results" ? undefined : () => { if (may("open-menu")) setMenu("odds"); }} />;
   // BQ-P1-11: the commentator strip (canvas) drops below the DOM pot banner whenever they would overlap.
   const potRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {

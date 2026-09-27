@@ -45,15 +45,18 @@ export function useGlow(key: number) {
   return on;
 }
 
-/** The pot line: pot, ≈ USD, SIMULATED/LIVE, then the Cup draw countdown and the Champions Night strip. */
-export function PotCounter({ pot, draw, night, nightActive, glow, place }: {
-  pot: PrizeLine; draw: string; night: string; nightActive: boolean; glow: boolean; place: "title" | "modes" | "results";
+/** The pot line: pot, ≈ USD, SIMULATED/LIVE, then the Cup draw countdown and the Champions Night strip. With `onOpen` it is a button (tap = the odds, like the HUD banner). */
+export function PotCounter({ pot, draw, night, nightActive, glow, place, onOpen }: {
+  pot: PrizeLine; draw: string; night: string; nightActive: boolean; glow: boolean; place: "title" | "modes" | "results"; onOpen?: () => void;
 }) {
-  return <div className="pk-potline" data-testid="pot-counter" data-place={place} data-glow={glow || undefined} data-tag={pot.tag} role="group" aria-label="Golden Boot Cup">
-    <div className="pk-potline-main"><span className="pk-potline-label">GOLDEN BOOT CUP</span> <b data-testid="pot-counter-value">🏆 {pot.value}</b> <span className="pk-potline-usd">{pot.usd}</span>{" "}
-      {pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}</div>
-    <div className="pk-potline-sub"><span data-testid="cup-draw">{draw}</span> · <span className="pk-night" data-testid="champions-night" data-active={nightActive}>{night}</span></div>
-  </div>;
+  const data = { className: "pk-potline", "data-testid": "pot-counter", "data-place": place, "data-glow": glow || undefined, "data-tag": pot.tag };
+  const body = <>
+    <span className="pk-potline-main"><span className="pk-potline-label">GOLDEN BOOT CUP</span> <b data-testid="pot-counter-value">🏆 {pot.value}</b> <span className="pk-potline-usd">{pot.usd}</span>{" "}
+      {pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}</span>
+    <span className="pk-potline-sub"><span data-testid="cup-draw">{draw}</span> · <span className="pk-night" data-testid="champions-night" data-active={nightActive}>{night}</span></span>
+  </>;
+  return onOpen ? <button type="button" {...data} onClick={onOpen} title="Tap for the exact odds and the 90% average return">{body}</button>
+    : <div {...data} role="group" aria-label="Golden Boot Cup">{body}</div>;
 }
 
 /** An original 8 × 8 pixel Friend badge (a round head, two eyes, a colour per badge): no real Friend art. */

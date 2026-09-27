@@ -33,6 +33,15 @@ await testGame("./games/penalty-kings", {
     const quickKick = async () => { await waitShootable(); await game.getByTestId("quick").click(); await game.locator(".pk-banner").waitFor({ timeout: 10_000 }); const text = await game.locator(".pk-banner strong").textContent(); await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }); return text; };
     const hold = async (key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
     if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
+    // The pot line opens the odds (how the pot works) on the title, the modes screen and the HUD alike; closing goes back.
+    const potOpensOdds = async (pot, where, back) => {
+      await pot.click();
+      await game.getByRole("heading", { name: "Odds", exact: true }).waitFor({ timeout: 3000 });
+      await game.getByRole("button", { name: "Close Odds" }).click();
+      await back.waitFor({ timeout: 3000 });
+      console.log(`  pot line → Odds → Close: ${where}`);
+    };
+    await potOpensOdds(game.getByTestId("pot-counter"), "title", game.getByTestId("play"));
 
     // BQ-X7: the tutorial's net-cam replay of the best goal is never under the coaching toast. Kick 1 goes top right
     // against the mouse (he never saves a top bin), so there is a goal to replay after kick 3.
@@ -40,6 +49,8 @@ await testGame("./games/penalty-kings", {
     await waitShootable();
     await hold("ArrowRight", 250); await hold("ArrowUp", 600);
     const tutorial = [await quickKick(), await quickKick()];
+    await waitShootable();
+    await potOpensOdds(game.getByTestId("pot"), "HUD", game.getByTestId("quick"));
     const replaysBefore = (await stats()).replays; console.log(`  tutorial: ${tutorial.join(", ")}`);
     await waitShootable(); await game.getByTestId("quick").click();
     await game.locator("body").evaluate((_, before) => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkStats().replays > before ? resolve(true) : Date.now() - start > 8000 ? reject(new Error("no net-cam replay")) : setTimeout(poll, 20)); poll(); }), replaysBefore);
@@ -81,6 +92,8 @@ await testGame("./games/penalty-kings", {
     await game.getByRole("button", { name: "Close My Bag" }).click();
     await backOnModes("Ball shop → pack → My Bag → Close");
     ok("menus opened from the modes screen close back to it (also after opening a pack)");
+    await potOpensOdds(modes.getByTestId("pot-counter"), "modes", modes);
+    ok("the pot line opens the odds on the title, the modes screen and the HUD");
   },
 });
 if (args.includes("--p2-only")) { assert.deepEqual(errors, [], `page errors: ${errors.join("\n")}`); console.log(`PASS UI Bug Quest P2 at ${width}px`); process.exit(0); }
