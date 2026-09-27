@@ -65,3 +65,84 @@ test("the boss has three phases by kick index", () => {
   const boss = keeperById("finalwall");
   assert.deepEqual([0, 2, 4].map(k => resolveShot({ aimX: 0.5, loft: 0, power: 0.7, curl: 0 }, boss, 1, { kickIndex: k, history: [] }).plan.phase), [1, 2, 3]);
 });
+
+import { shotZone, ZONE_MULT, swipeToShot, assistShot, nextDifficultyLevel, DIFFICULTY_LADDER, NEUTRAL, type ShotRecord } from "../src/index.ts";
+
+test("placement zones: centre 1x, side 2x, corner 3x, top bin 5x; in off the post +50%", () => {
+  assert.equal(shotZone({ x: 0.1, y: 0.3 }), "centre");
+  assert.equal(shotZone({ x: -0.5, y: 0.3 }), "side");
+  assert.equal(shotZone({ x: 0.8, y: 0.3 }), "corner");
+  assert.equal(shotZone({ x: -0.85, y: 0.8 }), "bin");
+  assert.deepEqual([ZONE_MULT.centre, ZONE_MULT.corner, ZONE_MULT.bin], [1, 3, 5]);
+  const squirrel = keeperById("squirrel");
+  assert.equal(goalPoints(squirrel, 1, 1, false, "bin"), 500);
+  assert.equal(goalPoints(squirrel, 1, 1, false, "corner", true), 450);
+});
+
+test("low centre shots are usually saved; a chipped centre can beat the trailing leg", () => {
+  const mouse = keeperById("mouse");
+  let lowSaved = 0, chipGoals = 0;
+  for (let seed = 0; seed < 400; seed++) {
+    if (resolveShot({ aimX: 0.05, loft: 0, power: 0.45, curl: 0 }, mouse, seed).result === "save") lowSaved++;
+    if (resolveShot({ aimX: 0.05, loft: 0, power: 0.72, curl: 0 }, mouse, seed).result === "goal") chipGoals++;
+  }
+  assert.ok(lowSaved > 250, `low centre saved ${lowSaved}/400`);
+  assert.ok(chipGoals > 0, `chip scored ${chipGoals}/400`);
+});
+
+test("clipping the inside of the post sometimes goes in (and is flagged), never from outside", () => {
+  const keeper = keeperById("sloth");
+  let inside = 0, outsideIn = 0;
+  for (let seed = 0; seed < 300; seed++) {
+    const a = resolveShot({ aimX: 0.97, loft: 0, power: 0.5, curl: 0 }, keeper, seed);
+    if (a.postIn) { inside++; assert.equal(a.result, "goal"); }
+    if (resolveShot({ aimX: 1.02, loft: 0, power: 0.5, curl: 0 }, keeper, seed).postIn) outsideIn++;
+  }
+  assert.ok(inside > 60 && inside < 240, `inside post-ins ${inside}/300`);
+  assert.equal(outsideIn, 0);
+});
+
+test("difficulty only changes the keeper through its parameters and is deterministic", () => {
+  const shot = { aimX: 0.6, loft: 0, power: 0.6, curl: 0 };
+  for (const keeper of KEEPERS) for (const d of DIFFICULTY_LADDER) {
+    const seed = kickSeed(7, 1, keeper.id);
+    assert.deepEqual(resolveShot(shot, keeper, seed, undefined, d), resolveShot(shot, keeper, seed, undefined, d));
+  }
+  // NEUTRAL is the referee's setting: identical to omitting the argument.
+  assert.deepEqual(resolveShot(shot, keeperById("finalwall"), 9), resolveShot(shot, keeperById("finalwall"), 9, undefined, NEUTRAL));
+});
+
+test("a sloppy swipe still gives the intended shot; taps and downward swipes do nothing", () => {
+  const size = { width: 400, height: 600 };
+  // Clean flick up and to the right.
+  const clean = [{ x: 200, y: 500, t: 0 }, { x: 230, y: 400, t: 60 }, { x: 260, y: 300, t: 120 }, { x: 290, y: 200, t: 180 }];
+  // Same flick with a wobbly last frame sideways.
+  const sloppy = [...clean.slice(0, 3), { x: 330, y: 205, t: 180 }];
+  const a = swipeToShot(clean, size)!, b = swipeToShot(sloppy, size)!;
+  assert.ok(a.aimX > 0.3 && b.aimX > 0.3, "both aim right");
+  assert.ok(Math.abs(a.aimX - b.aimX) < 0.5, `sloppy release stays close (${a.aimX.toFixed(2)} vs ${b.aimX.toFixed(2)})`);
+  assert.equal(swipeToShot([{ x: 1, y: 1, t: 0 }, { x: 2, y: 3, t: 50 }], size), null);
+  assert.equal(swipeToShot([{ x: 200, y: 200, t: 0 }, { x: 200, y: 400, t: 100 }], size), null);
+  // A faster swipe hits harder; a bowed path curls.
+  const slow = swipeToShot(clean.map(p => ({ ...p, t: p.t * 3 })), size)!;
+  assert.ok(a.power > slow.power);
+  const bowed = [{ x: 200, y: 500, t: 0 }, { x: 150, y: 350, t: 90 }, { x: 200, y: 200, t: 180 }];
+  assert.ok(swipeToShot(bowed, size)!.curl > 0.3);
+});
+
+test("aim assist pulls towards zone centres and keeps power under the bar", () => {
+  const assisted = assistShot({ aimX: 0.7, loft: 0, power: 0.98, curl: 0 }, 1);
+  assert.ok(Math.abs(assisted.aimX - 0.8) < Math.abs(0.7 - 0.8));
+  assert.ok(assisted.power <= 0.8 + 1e-9);
+  assert.deepEqual(assistShot({ aimX: 0.7, loft: 0, power: 0.98, curl: 0 }, 0), { aimX: 0.7, loft: 0, power: 0.98, curl: 0 });
+});
+
+test("dynamic difficulty moves one rung between rounds, only with evidence", () => {
+  const goals = (n: number, of: number): ShotRecord[] => Array.from({ length: of }, (_, i) => ({ goal: i < n, zone: "corner" as const }));
+  assert.equal(nextDifficultyLevel(3, goals(3, 4)), 3, "needs 5 shots");
+  assert.equal(nextDifficultyLevel(3, goals(9, 10)), 4);
+  assert.equal(nextDifficultyLevel(3, goals(2, 10)), 2);
+  assert.equal(nextDifficultyLevel(3, goals(6, 10)), 3);
+  assert.equal(nextDifficultyLevel(DIFFICULTY_LADDER.length - 1, goals(10, 10)), DIFFICULTY_LADDER.length - 1);
+  assert.equal(nextDifficultyLevel(0, goals(0, 10)), 0);
+});

@@ -33,6 +33,8 @@ jobs:
         run: npm run verify:odds
       - name: Engine unit tests
         run: npm run test:engine
+      - name: Dynamic difficulty keeps every bot profile at 55–65 % goals
+        run: npm run sim:difficulty
       - name: Economy simulator smoke
         run: node scripts/economy-sim.mjs --smoke
       - name: Weekly Cup computation tests (drops, race, wildcards)

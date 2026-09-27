@@ -41,22 +41,24 @@ export type KeeperProfile = Readonly<{
   body: number;
   /** Highest point the hands can reach (1 = crossbar). */
   maxY: number;
+  /** Probability the keeper reads the shot and dives the right way (0 … 1). */
+  read: number;
   boss?: boolean;
 }>;
 
 export const KEEPERS: readonly KeeperProfile[] = [
-  { id: "mouse", name: "Squeak the Mouse", bio: "Tiny, brave and very fast. Cannot reach the top corners, however hard he jumps.", tell: "Top corners are always open.", mult: 0.75, reaction: 0.04, diveTime: 0.3, reach: 0.26, body: 0.1, maxY: 0.58 },
-  { id: "squirrel", name: "Nibbles the Squirrel", bio: "Too much coffee, not enough patience. Always goes early.", tell: "Leans towards the side he will dive during your run-up.", mult: 1, reaction: 0, diveTime: 0.36, reach: 0.3, body: 0.12, maxY: 1 },
-  { id: "sloth", name: "Snooze the Sloth", bio: "Barely moves, but those arms go on forever. Yawns between saves.", tell: "Hardly dives at all — power beats him.", mult: 1, reaction: 0.28, diveTime: 0.95, reach: 0.62, body: 0.16, maxY: 0.95 },
-  { id: "peacock", name: "Peacock Pete", bio: "Showboat. Fans his tail one way and loves to go the other.", tell: "His tail fans towards the side he is faking.", mult: 1.25, reaction: 0.02, diveTime: 0.4, reach: 0.3, body: 0.12, maxY: 1 },
-  { id: "octopus", name: "Octavia the Octopus", bio: "Four arms, one zone, total commitment. Inks the ball on a save.", tell: "Commits to one third of the goal — and covers all of it.", mult: 1.25, reaction: 0.12, diveTime: 0.46, reach: 0.46, body: 0.14, maxY: 1 },
-  { id: "mime", name: "Marcel the Mime", bio: "Builds an invisible wall across part of the goal. Takes his art very seriously.", tell: "A faint shimmer shows where the wall is.", mult: 1.25, reaction: 0.2, diveTime: 0.6, reach: 0.2, body: 0.12, maxY: 1 },
-  { id: "disco", name: "Disco Dee", bio: "Dives on the beat. Left on the one, right on the two.", tell: "Listen to the music: the beat tells you his side.", mult: 1.25, reaction: 0.08, diveTime: 0.4, reach: 0.34, body: 0.12, maxY: 1 },
-  { id: "sumo", name: "Big Bento", bio: "Fills the middle of the goal on his own. Stomps shake the stadium.", tell: "Nothing gets through the centre. Corners take him an age.", mult: 1.25, reaction: 0.12, diveTime: 0.7, reach: 0.34, body: 0.34, maxY: 0.9 },
-  { id: "chameleon", name: "Chroma the Chameleon", bio: "Blends into the net until you strike. You never quite know where she is.", tell: "Invisible until the kick — trust your aim.", mult: 1.5, reaction: 0.14, diveTime: 0.42, reach: 0.34, body: 0.13, maxY: 1 },
-  { id: "robot", name: "K-33P", bio: "A goalkeeping unit that learns. Remembers your favourite corner.", tell: "A scan-line sweeps the side it has learned.", mult: 1.5, reaction: 0.1, diveTime: 0.4, reach: 0.34, body: 0.13, maxY: 1 },
-  { id: "ghost", name: "Boo the Ghost", bio: "Blinks between the posts. Reads your eyes, then appears where you aimed.", tell: "Flickers when it has read you.", mult: 2, reaction: 0.22, diveTime: 0.1, reach: 0.3, body: 0.12, maxY: 1 },
-  { id: "finalwall", name: "THE FINAL WALL", bio: "The Skill Cup boss. Three phases, no mercy, and a very dramatic entrance.", tell: "Phase 1 guards the middle, phase 2 reads you, phase 3 covers everything.", mult: 2.5, reaction: 0.12, diveTime: 0.42, reach: 0.34, body: 0.2, maxY: 1, boss: true },
+  { id: "mouse", name: "Squeak the Mouse", bio: "Tiny, brave and very fast. Cannot reach the top corners, however hard he jumps.", tell: "Top corners are always open.", mult: 0.75, reaction: 0.04, diveTime: 0.3, reach: 0.26, body: 0.1, maxY: 0.58, read: 0.1 },
+  { id: "squirrel", name: "Nibbles the Squirrel", bio: "Too much coffee, not enough patience. Always goes early.", tell: "Leans towards the side he will dive during your run-up.", mult: 1, reaction: 0, diveTime: 0.36, reach: 0.3, body: 0.12, maxY: 1, read: 0.12 },
+  { id: "sloth", name: "Snooze the Sloth", bio: "Barely moves, but those arms go on forever. Yawns between saves.", tell: "Hardly dives at all — power beats him.", mult: 1, reaction: 0.28, diveTime: 0.95, reach: 0.62, body: 0.16, maxY: 0.95, read: 0.05 },
+  { id: "peacock", name: "Peacock Pete", bio: "Showboat. Fans his tail one way and loves to go the other.", tell: "His tail fans towards the side he is faking.", mult: 1.25, reaction: 0.02, diveTime: 0.4, reach: 0.3, body: 0.12, maxY: 1, read: 0.15 },
+  { id: "octopus", name: "Octavia the Octopus", bio: "Four arms, one zone, total commitment. Inks the ball on a save.", tell: "Commits to one third of the goal — and covers all of it.", mult: 1.25, reaction: 0.12, diveTime: 0.46, reach: 0.46, body: 0.14, maxY: 1, read: 0.2 },
+  { id: "mime", name: "Marcel the Mime", bio: "Builds an invisible wall across part of the goal. Takes his art very seriously.", tell: "A faint shimmer shows where the wall is.", mult: 1.25, reaction: 0.2, diveTime: 0.6, reach: 0.2, body: 0.12, maxY: 1, read: 0.1 },
+  { id: "disco", name: "Disco Dee", bio: "Dives on the beat. Left on the one, right on the two.", tell: "Listen to the music: the beat tells you his side.", mult: 1.25, reaction: 0.08, diveTime: 0.4, reach: 0.34, body: 0.12, maxY: 1, read: 0.1 },
+  { id: "sumo", name: "Big Bento", bio: "Fills the middle of the goal on his own. Stomps shake the stadium.", tell: "Nothing gets through the centre. Corners take him an age.", mult: 1.25, reaction: 0.12, diveTime: 0.7, reach: 0.34, body: 0.34, maxY: 0.9, read: 0.15 },
+  { id: "chameleon", name: "Chroma the Chameleon", bio: "Blends into the net until you strike. You never quite know where she is.", tell: "Invisible until the kick — trust your aim.", mult: 1.5, reaction: 0.14, diveTime: 0.42, reach: 0.34, body: 0.13, maxY: 1, read: 0.2 },
+  { id: "robot", name: "K-33P", bio: "A goalkeeping unit that learns. Remembers your favourite corner.", tell: "A scan-line sweeps the side it has learned.", mult: 1.5, reaction: 0.1, diveTime: 0.4, reach: 0.34, body: 0.13, maxY: 1, read: 0.25 },
+  { id: "ghost", name: "Boo the Ghost", bio: "Blinks between the posts. Reads your eyes, then appears where you aimed.", tell: "Flickers when it has read you.", mult: 2, reaction: 0.22, diveTime: 0.1, reach: 0.3, body: 0.12, maxY: 1, read: 0.2 },
+  { id: "finalwall", name: "THE FINAL WALL", bio: "The Skill Cup boss. Three phases, no mercy, and a very dramatic entrance.", tell: "Phase 1 guards the middle, phase 2 reads you, phase 3 covers everything.", mult: 2.5, reaction: 0.12, diveTime: 0.42, reach: 0.34, body: 0.2, maxY: 1, read: 0.35, boss: true },
 ];
 
 export const keeperById = (id: KeeperId) => KEEPERS.find(keeper => keeper.id === id)!;
@@ -162,27 +164,79 @@ export function keeperAt(plan: KeeperPlan, t: number) {
   return { x: plan.x * progress, y: Math.min(plan.maxY, 0.45 + (plan.y - 0.45) * progress), progress };
 }
 
+// ── Difficulty ─────────────────────────────────────────────────────────────
+/**
+ * A small parameter set layered on top of a keeper's personality.
+ *  reaction: seconds added to the keeper's reaction (negative = sharper)
+ *  reach:    multiplier on the save radius
+ *  read:     added to the keeper's own read probability
+ *  clock:    shot clock in seconds (0 = off)
+ *  wobble:   aim-wobble amplitude in goal units (grows with the streak)
+ *  assist:   invisible aim assist strength 0 … 1 (assistShot), only on the easiest rungs
+ */
+export type Difficulty = Readonly<{ reaction: number; reach: number; read: number; clock: number; wobble: number; assist: number }>;
+/** Identity: the keeper exactly as designed (the Skill Cup referee uses this). */
+export const NEUTRAL: Difficulty = { reaction: 0, reach: 1, read: 0, clock: 5, wobble: 0, assist: 0 };
+
+// ── Placement zones ───────────────────────────────────────────────────────
+export type Zone = "centre" | "side" | "corner" | "bin";
+/** Score multiplier by where the ball crosses the line. In off the post adds POST_IN_BONUS. */
+export const ZONE_MULT: Readonly<Record<Zone, number>> = { centre: 1, side: 2, corner: 3, bin: 5 };
+export const POST_IN_BONUS = 1.5;
+export function shotZone(target: { x: number; y: number }): Zone {
+  const ax = Math.abs(target.x);
+  if (ax < 0.34) return "centre";
+  if (ax >= 0.66) return target.y >= 0.66 ? "bin" : "corner";
+  return "side";
+}
+
 export type ShotOutcome = Readonly<{
   result: ShotResult;
   target: { x: number; y: number; time: number };
   plan: KeeperPlan;
+  zone: Zone;
+  /** Clipped the inside of the post and went in. */
+  postIn: boolean;
 }>;
 
+/** Independent seeded stream for judgement calls, so the base dive plan never shifts. */
+const judge = (seed: number) => prng((seed ^ 0x9e3779b9) >>> 0);
+
+/** Applies read probability and difficulty to a plan. Pure. */
+function adjustPlan(plan: KeeperPlan, profile: KeeperProfile, target: { x: number; y: number }, roll: () => number, difficulty: Difficulty): KeeperPlan {
+  let next: KeeperPlan = { ...plan, reaction: Math.max(0, plan.reaction + difficulty.reaction), reach: plan.reach * difficulty.reach };
+  const read = clamp(profile.read + difficulty.read, 0, 0.95);
+  // A read: the keeper guesses the right side and height. Walls and teleports already "know".
+  if (!plan.wall && !plan.teleport && Math.abs(target.x) > 0.2 && roll() < read) {
+    next = { ...next, x: Math.sign(target.x) * clamp(Math.abs(target.x), 0.45, 0.9), y: clamp(target.y, 0.15, 0.85) };
+  }
+  return next;
+}
+
 /** Resolve a shot: frame first, then keeper (wall, body, hands), then goal. Pure and deterministic. */
-export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: number, context: KickContext = NO_CONTEXT): ShotOutcome {
+export function resolveShot(shot: ShotInput, profile: KeeperProfile, seed: number, context: KickContext = NO_CONTEXT, difficulty: Difficulty = NEUTRAL): ShotOutcome {
   const target = shotTarget(shot);
-  const plan = keeperPlan(profile, seed, target, context);
+  const roll = judge(seed);
+  const plan = adjustPlan(keeperPlan(profile, seed, target, context), profile, target, roll, difficulty);
+  const zone = shotZone(target);
   const ax = Math.abs(target.x);
   const hitsPost = Math.abs(ax - 1) < BALL_RADIUS + FRAME && target.y < 1 + BALL_RADIUS;
   const hitsBar = Math.abs(target.y - 1) < BALL_RADIUS + FRAME && ax < 1 + BALL_RADIUS;
-  if (hitsPost || hitsBar) return { result: "post", target, plan };
-  if (ax > 1) return { result: "wide", target, plan };
-  if (target.y > 1) return { result: "over", target, plan };
-  if (plan.wall && target.x >= plan.wall[0] && target.x <= plan.wall[1]) return { result: "save", target, plan };
+  const postRoll = roll();
+  if (hitsPost || hitsBar) {
+    // Clipping the inside of the frame deflects in half the time: "in off the post".
+    const inside = ax < 1 - FRAME && target.y < 1 - FRAME;
+    return { result: inside && postRoll < 0.5 ? "goal" : "post", target, plan, zone, postIn: inside && postRoll < 0.5 };
+  }
+  if (ax > 1) return { result: "wide", target, plan, zone, postIn: false };
+  if (target.y > 1) return { result: "over", target, plan, zone, postIn: false };
+  if (plan.wall && target.x >= plan.wall[0] && target.x <= plan.wall[1]) return { result: "save", target, plan, zone, postIn: false };
   const hands = keeperAt(plan, target.time);
   const body = Math.abs(target.x - hands.x * 0.6) < plan.body + 0.04 && target.y < 0.85;
   const reach = Math.hypot(target.x - hands.x, (target.y - Math.min(hands.y, plan.maxY)) * 1.2) < plan.reach && target.y <= plan.maxY + plan.reach * 0.6;
-  return { result: body || reach ? "save" : "goal", target, plan };
+  // Low centre shots usually meet a trailing leg; a chipped centre (Panenka) beats it.
+  const trailingLeg = zone === "centre" && target.y < 0.55 && !plan.teleport && roll() < 0.7;
+  return { result: body || reach || trailingLeg ? "save" : "goal", target, plan, zone, postIn: false };
 }
 
 /** Flight position at progress p (0 … 1), before projection. */
@@ -194,6 +248,86 @@ export function flightAt(target: { x: number; y: number }, curl: number, p: numb
 export const STREAK_CAP = 3;
 export const streakMultiplier = (streak: number) => Math.min(STREAK_CAP, 1 + 0.5 * Math.max(0, streak - 1));
 
-export function goalPoints(keeper: KeeperProfile, ballMult: number, streak: number, suddenDeath: boolean) {
-  return Math.round(100 * keeper.mult * ballMult * streakMultiplier(streak) * (suddenDeath ? 2 : 1));
+export function goalPoints(keeper: KeeperProfile, ballMult: number, streak: number, suddenDeath: boolean, zone: Zone = "centre", postIn = false) {
+  return Math.round(100 * keeper.mult * ballMult * streakMultiplier(streak) * (suddenDeath ? 2 : 1) * ZONE_MULT[zone] * (postIn ? POST_IN_BONUS : 1));
+}
+
+// ── Input: one forgiving swipe ────────────────────────────────────────────
+export type SwipePoint = Readonly<{ x: number; y: number; t: number }>;
+/** Release window: the last ~100 ms before lift-off decide the direction (80–120 ms allowed). */
+export const RELEASE_BUFFER_MS = 100;
+
+/**
+ * Turns a swipe (screen px, ms) into a shot. The RELEASE decides the shot, but the release
+ * direction is blended with the whole swipe's chord so a sloppy last frame still gives the
+ * intended shot. Returns null for a tap or a downward swipe.
+ */
+export function swipeToShot(points: readonly SwipePoint[], size: { width: number; height: number }, bufferMs = RELEASE_BUFFER_MS): ShotInput | null {
+  if (points.length < 2) return null;
+  const first = points[0], last = points[points.length - 1];
+  const up = first.y - last.y;
+  if (up < size.height * 0.05) return null;
+  const window = clamp(bufferMs, 80, 120);
+  const recent = points.filter(point => last.t - point.t <= window);
+  const from = recent.length >= 2 ? recent[0] : points[points.length - 2];
+  const releaseUp = Math.max(1, from.y - last.y), releaseDx = last.x - from.x;
+  const chordDx = last.x - first.x;
+  const slope = 0.5 * (releaseDx / releaseUp) + 0.5 * (chordDx / up);
+  const seconds = Math.max(0.05, (last.t - first.t) / 1000);
+  const speed = up / size.height / seconds;
+  // Curl: how far the path's middle bows away from the straight chord.
+  const middle = points[Math.floor(points.length / 2)];
+  const along = (middle.y - first.y) / (last.y - first.y || 1);
+  const chordX = first.x + chordDx * along;
+  const length = Math.hypot(chordDx, up) || 1;
+  return {
+    aimX: clamp(slope * 1.6, -1.4, 1.4),
+    loft: 0,
+    power: clamp(0.25 + 0.75 * Math.min(1, speed / 2.2), 0, 1),
+    curl: clamp(-((middle.x - chordX) / length) * 4, -1, 1),
+  };
+}
+
+/** Aim assist (tutorial, first matches, Park): pulls the aim towards a zone centre and keeps power on target. */
+export function assistShot(shot: ShotInput, strength: number): ShotInput {
+  const k = clamp(strength, 0, 1);
+  if (k === 0) return shot;
+  const anchors = [-0.8, -0.5, 0, 0.5, 0.8];
+  const nearest = anchors.reduce((best, x) => (Math.abs(x - shot.aimX) < Math.abs(best - shot.aimX) ? x : best), anchors[0]);
+  return { ...shot, aimX: shot.aimX + (nearest - shot.aimX) * 0.6 * k, power: shot.power + (clamp(shot.power, 0.35, 0.8) - shot.power) * k };
+}
+
+/** Aim wobble at release time t (seconds): a smooth, readable sway you learn to time. */
+export function aimWobble(t: number, amplitude: number) {
+  return amplitude * (0.6 * Math.sin(t * 2.1) + 0.4 * Math.sin(t * 3.7 + 1));
+}
+/** Pressure: wobble grows with the streak (capped). */
+export const wobbleFor = (difficulty: Difficulty, streak: number) => difficulty.wobble * (1 + 0.2 * Math.min(5, Math.max(0, streak)));
+
+// ── Invisible dynamic difficulty ──────────────────────────────────────────
+/** Easiest → hardest. Chosen so every bot skill profile settles at ~55–65 % goals (docs/DIFFICULTY.md). */
+export const DIFFICULTY_LADDER: readonly Difficulty[] = [
+  { reaction: 0.3, reach: 0.55, read: -0.3, clock: 5, wobble: 0, assist: 0.9 },
+  { reaction: 0.22, reach: 0.65, read: -0.2, clock: 5, wobble: 0.02, assist: 0.6 },
+  { reaction: 0.15, reach: 0.75, read: -0.1, clock: 5, wobble: 0.04, assist: 0.3 },
+  { reaction: 0.08, reach: 0.85, read: 0, clock: 5, wobble: 0.06, assist: 0 },
+  { reaction: 0.03, reach: 0.95, read: 0.05, clock: 5, wobble: 0.08, assist: 0 },
+  { reaction: 0, reach: 1, read: 0.1, clock: 5, wobble: 0.1, assist: 0 },
+  { reaction: -0.03, reach: 1.1, read: 0.2, clock: 4.5, wobble: 0.12, assist: 0 },
+  { reaction: -0.06, reach: 1.2, read: 0.3, clock: 4, wobble: 0.14, assist: 0 },
+  { reaction: -0.1, reach: 1.3, read: 0.4, clock: 4, wobble: 0.16, assist: 0 },
+];
+export const TARGET_BAND = [0.55, 0.65] as const;
+export type ShotRecord = Readonly<{ goal: boolean; zone: Zone }>;
+
+/**
+ * Called ONLY between rounds (never mid-shot). Looks at the last 10 shots and moves at most one
+ * rung: above the band → harder, below → easier. Needs 5 shots of evidence.
+ */
+export function nextDifficultyLevel(level: number, history: readonly ShotRecord[]): number {
+  const recent = history.slice(-10);
+  if (recent.length < 5) return clamp(level, 0, DIFFICULTY_LADDER.length - 1);
+  const rate = recent.filter(shot => shot.goal).length / recent.length;
+  const step = rate > TARGET_BAND[1] ? 1 : rate < TARGET_BAND[0] ? -1 : 0;
+  return clamp(level + step, 0, DIFFICULTY_LADDER.length - 1);
 }
