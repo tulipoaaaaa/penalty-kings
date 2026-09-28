@@ -810,6 +810,13 @@
 .pk-winners[data-still] .pk-winners-run, .pk-reduce-motion .pk-winners-run { animation: none; }
 .pk-winners[data-still] .pk-winners-run, .pk-winners[data-still] .pk-winners-set { white-space: normal; flex-wrap: wrap; row-gap: 0; }
 @media (prefers-reduced-motion: reduce) { .pk-winners-run { animation: none; } }
+/* Polish: on phones the ticker is still, the top three wrapped inside the title card. A marquee in a 180-400 px
+   track cut names at both edges ("#3 Friend #74") and the run spilled past the card. */
+@container (orientation: portrait) or ((orientation: landscape) and (max-height: 519px)) {
+  .pk-winners .pk-winners-run { animation: none; }
+  .pk-winners .pk-winners-run, .pk-winners .pk-winners-set { white-space: normal; flex-wrap: wrap; row-gap: 0; }
+  .pk-winners .pk-winners-set[aria-hidden], .pk-winners .pk-winner:nth-child(n+4) { display: none; }
+}
 .pk-attract-top .pk-potline { margin-top: 4px; }
 .pk-modescreen { padding-top: 8px; }
 .pk-modescreen .pk-winners { flex: none; }

@@ -76,6 +76,31 @@ async function titleClear(game, where) {
   for (const text of [".pk-attract-top h1", "[data-testid=pot-counter]"]) assert.ok(!hit(boxes[".pk-title-sound"], boxes[text]), `${where}: the sound toggle covers ${text} ${JSON.stringify(boxes)}`);
 }
 
+/** Polish: on a phone the title's "Last week" winners ticker fits inside the title card, and no winner is cut at the
+ *  track's edges ("#3 Friend #74" at 844x390: a marquee in a 180-400 px track). Checked with reduced motion (the
+ *  harness default) AND full motion (the marquee), sampled over 3 s; every shown winner is whole. */
+async function winnersFit(page, game, where) {
+  for (const motion of ["reduce", "no-preference"]) {
+    await page.emulateMedia({ reducedMotion: motion });
+    await game.getByTestId("winners").waitFor();
+    for (let sample = 0; sample < 6; sample++) {
+      const r = await game.locator("body").evaluate(() => {
+        const box = node => { const r = node.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; };
+        const card = box(document.querySelector(".pk-attract-top")), ticker = document.querySelector("[data-testid=winners]"), track = box(ticker.querySelector(".pk-winners-track"));
+        const shown = [...ticker.querySelectorAll(".pk-winner")].filter(n => n.checkVisibility()).map(n => ({ text: n.textContent, ...box(n) }))
+          .filter(w => w.x2 > track.x1 + 0.5 && w.x1 < track.x2 - 0.5 && w.y2 > track.y1 + 0.5 && w.y1 < track.y2 - 0.5); // not wholly scrolled out
+        return { card, ticker: box(ticker), track, shown };
+      });
+      const inside = (a, b) => a.x1 >= b.x1 - 0.5 && a.x2 <= b.x2 + 0.5 && a.y1 >= b.y1 - 0.5 && a.y2 <= b.y2 + 0.5;
+      assert.ok(inside(r.ticker, r.card), `${where} (${motion}): the winners ticker crosses the title card's border ${JSON.stringify(r)}`);
+      assert.ok(r.shown.length >= 1, `${where} (${motion}): at least one winner shows ${JSON.stringify(r)}`);
+      for (const w of r.shown) assert.ok(inside(w, r.track), `${where} (${motion}): "${w.text}" is cut by the ticker's edge ${JSON.stringify(w)} in ${JSON.stringify(r.track)}`);
+      await page.waitForTimeout(500);
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" }); // back to the harness default
+}
+
 /** QA-3: while aiming, the tutorial coaching toast (when shown) never covers the player's Friend (its drawn box, from
  *  the Stage), the ball, the goal mouth or the commentator strip (logical top at canvas[data-commentary-top], 22 px
  *  tall + its rule, up to 260 px wide, centred). Returns whether a toast was up. Rects in the game frame's px. */
@@ -316,6 +341,7 @@ for (const [width, height] of SIZES) {
         await reachable(game.getByTestId("skip-intro"), "Skip intro");
         await game.getByTestId("skip-intro").click();
         await titleClear(game, `${label} title (attract)`); checked.push("title:clear");
+        await winnersFit(page, game, `${label} title (attract)`); checked.push("title:winners-fit");
         await fonts("title (attract)");
         await targets("title (attract)");
         await reachable(game.getByTestId("play"), "Kick off");
