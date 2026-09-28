@@ -16,6 +16,10 @@
  *   └──────────────┴─────────────────────────────────────────┴─────────────────────────────────────────┘
  *
  * Wallets, payments and sign-up never enter the game: the SDK runtime owns them outside the sandbox.
+ *
+ * NOTE for the fork: the shell does not consume `Platform` yet. index.tsx calls loadProgress() in its `progress`
+ * useState initialiser and saveProgress() in the effect after it, and picks randomness in randomnessSource().
+ * Wiring Nakama means routing those two calls through remoteProgressStore (async load) (docs/HANDOFF-RF.md).
  */
 import type { Progress } from "./progress.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./savecode.js";

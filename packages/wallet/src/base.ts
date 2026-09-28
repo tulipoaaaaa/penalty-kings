@@ -32,6 +32,9 @@ export abstract class ProviderBase {
   }
 
   // ── The simulated economy (RF top-ups, Friend loan, hardwire): identical for every provider in the test app ──
+  // SDK v0.2.1 INTEGRATION POINT: buyRF (payments), loanFriend / claimOwnedFriend (the loaned Friend) and hardwire are
+  // simulated here for every provider. loanFriend, claimOwnedFriend and hardwire are NOT on the WalletProvider interface
+  // (types.ts); a v0.2.1 provider must supply them (apps/mobile/web/src/app.tsx calls them). docs/HANDOFF-RF.md.
   async getBalance(): Promise<Balance> { return { rf: this.economy.balance(this.requireAddress()), simulated: true }; }
   async buyRF(amountUsd: number) { return this.economy.buyRF(this.requireAddress(), amountUsd); }
   loanFriend(): Promise<FriendRef> { return this.economy.loanFriend(this.requireAddress()); }
