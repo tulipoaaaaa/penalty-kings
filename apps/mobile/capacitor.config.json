@@ -1,0 +1,35 @@
+{
+  "appId": "com.penaltykings.test",
+  "appName": "Penalty Kings (Test)",
+  "webDir": "../../dist-test-app",
+  "backgroundColor": "#0b0d1a",
+  "loggingBehavior": "debug",
+  "android": {
+    "backgroundColor": "#0b0d1a",
+    "allowMixedContent": false,
+    "captureInput": false
+  },
+  "ios": {
+    "backgroundColor": "#0b0d1a",
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK",
+      "hidden": true
+    },
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "launchAutoHide": true,
+      "backgroundColor": "#0b0d1a",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    }
+  }
+}

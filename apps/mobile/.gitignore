@@ -1,0 +1,11 @@
+# Native test-app shells: never commit signing material or build outputs.
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.b64
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+out/
