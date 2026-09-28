@@ -158,6 +158,10 @@ export class Stage {
   season: "S0" | "S1" = "S1";
   /** The Match Director's line for the next resolve (else the plain result line). */
   cue: CommentaryContext | null = null;
+  /** In-play call-outs on the pitch (the keeper's trailing-leg "leg!" telegraph). The cold-open reel turns them off. */
+  callouts = true;
+  /** Where the crowd's text banners were drawn last frame, in logical screen px (the reel keeps its titles off them). */
+  crowdText: ReadonlyArray<{ x1: number; y1: number; x2: number; y2: number }> = [];
   /** DEV (Showroom): draw the keeper hitbox and the ball at arrival over the scene. */
   debugHitbox = false;
   /** What the viewer actually saw (the 90-second QA reads this). */
@@ -546,6 +550,7 @@ export class Stage {
     c.save();
     c.imageSmoothingEnabled = false;
     c.fillStyle = "#0b0d1a"; c.fillRect(0, 0, W, H);
+    const screen = c.getTransform().inverse(); // device px → logical screen px (the crowd's banner rects)
     this.camera.apply(c, this.time);
     const pan = (this.camera.x - W / 2) * 2;
     const wind = this.kind === "freekick" && this.freeKick ? this.freeKick.setup.wind : 0;
@@ -559,6 +564,8 @@ export class Stage {
     const backdropEvents = { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind, drop, reduced: this.reduced };
     drawBackdrop(c, this.stadium, this.weather, this.time, pan, backdropEvents);
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
+    this.crowdText = this.crowd.textRects.map(r => { const p = screen.transformPoint({ x: r.x1, y: r.y1 }), q = screen.transformPoint({ x: r.x2, y: r.y2 }); return { x1: p.x, y1: p.y, x2: q.x, y2: q.y }; })
+      .filter(r => [r.x1, r.y1, r.x2, r.y2].every(Number.isFinite));
     this.drawFan(c);
     this.feel.drawChant(c, 72, this.time, this.reduced, this.stadium === "pro" ? "#ccff00" : "#ffd23f");
     drawBoards(c, this.stadium, this.time, pan, this.boardText ?? undefined);
@@ -740,7 +747,7 @@ export class Stage {
     }
     // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
     const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
-    if (frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
+    if (this.callouts && frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
       const foot = artPoint(frame.leg.foot), made = legMade;
       c.font = "10px PixelifySans, monospace"; c.textAlign = "center";
       c.fillStyle = made ? "#0b0d1a" : "#0b0d1a99"; c.fillText(made ? "LEG!" : "leg!", foot.x + 1, foot.y - 8);

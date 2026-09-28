@@ -319,6 +319,8 @@ export class Crowd {
   startWave() { this.wave = 0.001; }
   /** Wind (m/s, + blows to the right): flags stream with it. */
   wind = 0;
+  /** The text banners drawn this frame, in the context's device px (the Stage maps them to screen: Stage.crowdText). */
+  readonly textRects: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
   /** What the stands hold right now (Showroom readout). */
   get census() {
     const l = this.layout;
@@ -480,6 +482,7 @@ export class Crowd {
       drawMosaic(c, ox + m.x, oy + m.y + TOP, this.mood, t, reduced);
     }
     for (const banner of layout.banners) { banner.lift = -9; banner.n = 0; }
+    this.textRects.length = 0;
     layout.rows.forEach((row, r) => {
       c.drawImage(this.strips[r], ox, oy + row.y - STRIP_UP);
       for (const f of row.fans) {
@@ -496,6 +499,8 @@ export class Crowd {
       // Banners held up just above this row's heads (clear of the highest hop), rising with the holders.
       for (const b of layout.banners) if (b.banner.row === r && b.n) {
         const cloth = bannerCloth(b.banner), bx = ox + b.banner.x, by = b.y - b.lift - cloth.height - 1;
+        { const m = c.getTransform(), p = m.transformPoint({ x: bx, y: by - 1 }), q = m.transformPoint({ x: bx + cloth.width, y: by + cloth.height + 1 });
+          if ([p.x, p.y, q.x, q.y].every(Number.isFinite)) this.textRects.push({ x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y) }); }
         if (reduced) c.drawImage(cloth, bx, by);
         else for (let k = 0; k < cloth.width; k += 4) c.drawImage(cloth, k, 0, 4, cloth.height, bx + k, by + Math.round(Math.sin(time * 3 - k * 0.12 + r) * 0.6), 4, cloth.height);
       }

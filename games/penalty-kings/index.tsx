@@ -448,7 +448,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     window.addEventListener("keydown", skip);
     return () => {
       window.clearInterval(watch); window.removeEventListener("keydown", skip);
-      reel.current = null; scene.camera.targetZoom = 1;
+      reel.current = null; scene.camera.targetZoom = 1; scene.callouts = true; // the reel turned the "leg!" call-out off
       if (scene.stadium !== lookFor()) scene.setStadium(lookFor());
       // Only reset the scene if we are still on the title (a session may have just started its walkout).
       if (live.current.screen === "title") { scene.cancel(); scene.weather = weatherForDay(); scene.keeper = "squirrel"; }
