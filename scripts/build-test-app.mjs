@@ -6,6 +6,8 @@
 //   WALLET=privy PRIVY_APP_ID=… npm run build:test-app   Privy embedded wallet (App ID from env, never committed)
 //   WALLET=injected npm run build:test-app       browser wallet (desktop testing)
 //   TEST_APP_OUT=dir  BUILD_NUMBER=n             output directory / build number shown in Settings
+//   Needs apps/mobile's own packages first:  npm ci --prefix apps/mobile   (Capacitor, pinned; docs/ANDROID-INSTALL.md)
+//   The same output is the web bundle of the native shells (apps/mobile/capacitor.config.json webDir).
 //
 // Output (relative URLs only, so it can be hosted under any base path, e.g. a GitHub Pages project site):
 //   index.html  app.js (+chunks)  app.css  sw.js  manifest.webmanifest  icons/  game/ (the SDK child frame)
@@ -22,6 +24,8 @@ import { createArtworkFixture } from "../node_modules/@rarefriends/friendsdk/scr
 const ROOT = new URL("..", import.meta.url).pathname;
 const OUT = join(ROOT, process.env.TEST_APP_OUT ?? "dist-test-app"), WORK = join(ROOT, ".build-test-app");
 const APP = join(ROOT, "apps/mobile/web");
+// The shell's native bridge imports @capacitor/core from apps/mobile (its own pinned package.json + lockfile).
+try { await stat(join(ROOT, "apps/mobile/node_modules/@capacitor/core/package.json")); } catch { throw new Error("build-test-app: run 'npm ci --prefix apps/mobile' first (Capacitor packages of the native shells)"); }
 const WALLET = process.env.WALLET ?? "dev";
 if (!["dev", "privy", "injected"].includes(WALLET)) throw new Error(`WALLET must be dev, privy or injected (got ${WALLET})`);
 const PRIVY_APP_ID = (process.env.PRIVY_APP_ID ?? "").trim() || null;
@@ -71,7 +75,11 @@ if (!csp || !csp.includes("script-src 'self'") || !csp.includes("font-src 'self'
 let css = (await readFile(join(WORK, "game/game.css"), "utf8")) + (await readFile(join(WORK, "game/game-layout.css"), "utf8"));
 for (const [, path] of css.matchAll(/url\("\.\/(assets\/[^"]+\.woff2)"\)/g)) css = css.replaceAll(`url("./${path}")`, `url("data:font/woff2;base64,${(await readFile(join(WORK, "game", path))).toString("base64")}")`);
 if (/url\("\.\//.test(css)) throw new Error("build-test-app: the child CSS references a file that is not inlined");
-const scripts = [simArt, (await readFile(join(WORK, "game/game.js"), "utf8")).replaceAll("</script", "<\\/script")];
+// The shell bridge (apps/mobile/web/frame-bridge.js): forwards the game's vibration requests to the shell (native
+// haptics in the Capacitor app) and reports the game's screen for the Android back button. Test build only.
+const frameBridge = await readFile(join(APP, "frame-bridge.js"), "utf8");
+if (frameBridge.includes("</script")) throw new Error("build-test-app: frame-bridge.js must not contain </script");
+const scripts = [simArt, frameBridge, (await readFile(join(WORK, "game/game.js"), "utf8")).replaceAll("</script", "<\\/script")];
 const hashes = scripts.map(text => `'sha256-${createHash("sha256").update(text).digest("base64")}'`).join(" ");
 const inlineCsp = csp.replace("script-src 'self'", `script-src ${hashes}`).replace("font-src 'self'", "font-src data:");
 const title = childHtml.match(/<title>[^<]*<\/title>/)?.[0] ?? "<title>Penalty Kings</title>";

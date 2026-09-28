@@ -1,5 +1,6 @@
 // TEST APP checks (owner's test lane; not part of the judged CI job):
-//  1. packages/wallet unit + contract tests, and the test app typecheck;
+//  1. packages/wallet unit + contract tests, the native-bridge unit tests (apps/mobile/web/test: Android back
+//     button state machine, haptics bridge + no-op fallback, deep link), and the test app typecheck;
 //  2. npm run build:test-app (skip with --no-build);
 //  3. Playwright, served under a sub-path (/penalty-kings-app/) to prove relative URLs:
 //     Chromium 390×844 and 844×390 (recorded → docs/media/test-app-onboarding.webm, ≤ 3 MB) and WebKit iPhone 13 /
@@ -22,6 +23,8 @@ const only = args.includes("--only") ? args[args.indexOf("--only") + 1].split(",
 const run = (cmd, argv) => execFileSync(cmd, argv, { cwd: ROOT, stdio: "inherit" });
 
 run("node", ["--experimental-strip-types", "--no-warnings", "--test", ...["dev-simulated", "contract"].map(name => `packages/wallet/test/${name}.test.ts`)]);
+// Native shell bridge: the Android back-button state machine, the haptics bridge (no-op fallback), the deep link.
+run("node", ["--experimental-strip-types", "--no-warnings", "--test", "apps/mobile/web/test/back.test.ts", "apps/mobile/web/test/haptics.test.ts"]);
 run("npx", ["tsc", "-p", "tsconfig.test-app.json"]);
 if (!args.includes("--no-build")) run("node", ["scripts/build-test-app.mjs"]);
 
@@ -165,6 +168,17 @@ async function flow({ name, browser: type, options, record, errors: testErrors, 
   const firstKickMs = Date.now() - started;
   assert.ok(firstKickMs < 60_000, `${name}: first kick at ${firstKickMs} ms (target < 60 s)`);
   assert.match(first, /GOAL!|SAVED!|OFF THE POST!|OVER THE BAR!|WIDE!/);
+  // Haptics bridge: the game's kick vibration request reached the shell (web fallback here, native haptics in the app).
+  const haptics = await page.evaluate(() => window.__pkTestHaptics ?? []);
+  assert.ok(haptics.some(entry => entry.kind === "kick"), `${name}: the kick's haptic request reached the shell (${JSON.stringify(haptics)})`);
+  // Android back button (window.__pkTestBack runs the same handler): mid-match it only ever asks; "Stay" keeps playing.
+  const back = () => page.evaluate(() => window.__pkTestBack());
+  await page.waitForFunction(() => window.__pkTestGame?.screen === "play" && window.__pkTestGame.session === true);
+  assert.equal(await back(), "confirm-leave");
+  await tid("leave-confirm").waitFor();
+  assert.ok(await page.getByTestId("test-badge").first().isVisible(), `${name}: badge visible over the leave-confirm`);
+  await tap("leave-stay");
+  await tid("leave-confirm").waitFor({ state: "detached" });
   await kick(-0.4); await kick(0.4);
   await game.getByTestId("results").waitFor({ timeout: 15_000 });
   await game.getByRole("button", { name: "Modes", exact: true }).click();
@@ -179,10 +193,21 @@ async function flow({ name, browser: type, options, record, errors: testErrors, 
   const rf = text => Number(text.replace(/[^\d.]/g, ""));
   assert.equal(Math.round((rf(before) - rf(after)) * 100) / 100, 20, `${name}: the pack's 20 RF left the simulated wallet (${before} → ${after})`);
   assert.ok(await page.getByTestId("test-badge").first().isVisible(), "badge visible in the game");
-  let extra = "";
+  // Back: the open game menu (Ball shop) closes -> Modes is the root (app to background; a no-op on the web) ->
+  // a new round: back asks "Leave the match?" -> Leave -> Modes.
+  await page.waitForFunction(() => window.__pkTestGame?.overlay === true);
+  assert.equal(await back(), "game-close-overlay");
+  await page.waitForFunction(() => window.__pkTestGame?.overlay === false && window.__pkTestGame.screen === "modes");
+  assert.equal(await back(), "background");
+  await game.getByTestId("mode-penalties").click();
+  await page.waitForFunction(() => window.__pkTestGame?.screen === "play" && window.__pkTestGame.session === true);
+  assert.equal(await back(), "confirm-leave");
+  await tap("leave-yes");
+  await page.waitForFunction(() => window.__pkTestGame?.screen === "modes" && window.__pkTestGame.session === false, null, { timeout: 12_000 });
+  let extra = "back: menu, Modes, leave-confirm · haptics bridged";
 
-  if (testErrors) extra = await errorStates();
-  if (pwa) extra = await pwaChecks(pwa === true);
+  if (testErrors) extra += ` · ${await errorStates()}`;
+  if (pwa) extra += ` · ${await pwaChecks(pwa === true)}`;
 
   assert.deepEqual(external, [], `${name}: requests left the app`);
   assert.deepEqual(pageErrors, [], `${name}: page errors`);

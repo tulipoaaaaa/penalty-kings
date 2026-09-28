@@ -1,0 +1,21 @@
+{
+  "name": "@penalty-kings/test-app-native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penalty Kings (Test): Capacitor shells (Android + iOS) for the owner's test build (com.penaltykings.test). Not the judged build.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@capacitor-community/keep-awake": "8.0.1",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/screen-orientation": "8.0.1",
+    "@capacitor/splash-screen": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}

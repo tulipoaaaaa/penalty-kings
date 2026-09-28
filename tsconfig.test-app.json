@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["apps/mobile/web/src/**/*.ts", "apps/mobile/web/src/**/*.tsx", "packages/wallet/**/*.ts", "games/**/*.d.ts"]
+  "include": ["apps/mobile/web/src/**/*.ts", "apps/mobile/web/src/**/*.tsx", "apps/mobile/web/test/**/*.ts", "packages/wallet/**/*.ts", "games/**/*.d.ts"]
 }

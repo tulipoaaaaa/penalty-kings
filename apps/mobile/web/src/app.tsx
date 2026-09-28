@@ -9,6 +9,9 @@ import { snapshotPrice, rfPriceText, priceAgeLabel } from "../../../../games/pen
 import { CONFIG } from "./config.ts";
 import { FriendArt } from "./friend-art.tsx";
 import { GameScreen } from "./game-screen.tsx";
+import { decideBack, type BackAction, type GameView } from "./back.ts";
+import { AUTH_RETURN_URL } from "./deeplink.ts";
+import { installNative, isNative, listenToGame, setPlaying, tellGame, toBackground } from "./native.ts";
 import { registerServiceWorker } from "./pwa.ts";
 import {
   ERROR_COPY, FIXTURE_FRIEND_ID, WalletError, createProvider, formatRf, readOverride, resolveWalletChoice, shortAddress, writeOverride,
@@ -125,7 +128,8 @@ function DevMenu({ choice, economy, onChoice, onReset, onClose }: { choice: Wall
 export function App({ economy }: { economy: SimEconomy }) {
   const [choice, setChoice] = useState<WalletChoice>(() => resolveWalletChoice({ wallet: CONFIG.wallet, privyAppId: CONFIG.privyAppId, testBuild: true }, readOverride(economy.storage)).choice);
   const banner = useMemo(() => resolveWalletChoice({ wallet: CONFIG.wallet, privyAppId: CONFIG.privyAppId, testBuild: true }, readOverride(economy.storage)).banner, [economy, choice]);
-  const provider = useMemo(() => createProvider(choice, { economy, privyAppId: CONFIG.privyAppId }), [choice, economy]);
+  // Native app: Google OAuth returns through the app's deep link (docs/WALLETS.md), not a web page.
+  const provider = useMemo(() => createProvider(choice, { economy, privyAppId: CONFIG.privyAppId, privy: isNative() ? { redirectUri: () => AUTH_RETURN_URL } : undefined }), [choice, economy]);
   const [step, setStep] = useState<Step>("welcome");
   const [snapshot, setSnapshot] = useState(() => provider.snapshot());
   const [balance, setBalance] = useState(0n);
@@ -141,11 +145,16 @@ export function App({ economy }: { economy: SimEconomy }) {
   const [dev, setDev] = useState(false);
   const [copied, setCopied] = useState(false);
   const [update, setUpdate] = useState<(() => void) | null>(null);
+  const [leave, setLeave] = useState(false);
+  const gameView = useRef<GameView | null>(null);
   const codeResolver = useRef<{ resolve: (code: string) => void; reject: (error: unknown) => void } | null>(null);
   const newAccount = useRef(false);
   const price = useMemo(() => snapshotPrice(), []);
 
   useEffect(() => registerServiceWorker(apply => setUpdate(() => apply)), []);
+  // Native shell: the game frame's state (for the back button) and haptics; landscape + keep-awake while playing.
+  useEffect(() => listenToGame(view => { gameView.current = view; }), []);
+  useEffect(() => { setPlaying(step === "game"); if (step !== "game") { gameView.current = null; setLeave(false); } }, [step]);
   const refresh = useCallback(async () => {
     if (!provider.getAddress()) { setBalance(0n); return; }
     try { setBalance((await provider.getBalance()).rf); } catch { /* shown on next step */ }
@@ -232,6 +241,30 @@ export function App({ economy }: { economy: SimEconomy }) {
     setChoice(resolveWalletChoice({ wallet: CONFIG.wallet, privyAppId: CONFIG.privyAppId, testBuild: true }, next).choice);
   };
 
+  /** Android back button (and the test hook window.__pkTestBack): back.ts decides, this applies it. */
+  const back = (): BackAction["type"] => {
+    const action = decideBack({ step, confirm: leave, dev, sheet: sheet !== null, menu, game: step === "game" ? gameView.current : null });
+    switch (action.type) {
+      case "stay-in-match": setLeave(false); break;
+      case "close-dev": setDev(false); break;
+      case "close-sheet": setSheet(null); break;
+      case "close-menu": setMenu(false); break;
+      case "step": setError(null); setStep(action.to); break;
+      case "cancel-code": cancelCode(); break;
+      case "game-close-overlay": tellGame("close-overlay"); break;
+      case "confirm-leave": setLeave(true); break;
+      case "game-to-modes": tellGame("to-modes"); break;
+      case "background": toBackground(); break;
+    }
+    return action.type;
+  };
+  const backRef = useRef(back);
+  backRef.current = back;
+  useEffect(() => {
+    (globalThis as { __pkTestBack?: () => string }).__pkTestBack = () => backRef.current();
+    return installNative({ onBack: () => void backRef.current() });
+  }, []);
+
   const address = snapshot.address;
   const version = <VersionTap onUnlock={() => setDev(true)} />;
   const errorBox = error && <ErrorBox error={error.error} onRetry={error.retry} onBack={() => setError(null)} />;
@@ -240,6 +273,16 @@ export function App({ economy }: { economy: SimEconomy }) {
     {banner && <div className="pkt-banner" data-testid="provider-banner" role="status">{banner}</div>}
     {sheet !== null && <PaymentSheet usd={sheet} rf={provider.economy.quote(sheet)} handler={PAYMENT_HANDLER[provider.kind]} onPay={() => buy(sheet)} onClose={() => setSheet(null)} />}
     {dev && <DevMenu choice={choice} economy={economy} onChoice={switchProvider} onReset={() => void reset()} onClose={() => setDev(false)} />}
+    {leave && <div className="pkt-sheet-back" role="dialog" aria-modal="true" aria-labelledby="pkt-leave-title">
+      <div className="pkt-sheet" data-testid="leave-confirm">
+        <h2 id="pkt-leave-title">Leave the match?</h2>
+        <p className="pkt-muted">This round ends here and you go back to Modes.</p>
+        <div className="pkt-row">
+          <button className="pkt-btn" data-testid="leave-yes" onClick={() => { setLeave(false); tellGame("to-modes"); }}>Leave</button>
+          <button className="pkt-btn pkt-primary" data-testid="leave-stay" autoFocus onClick={() => setLeave(false)}>Stay</button>
+        </div>
+      </div>
+    </div>}
     {update && <div className="pkt-toast" role="status"><button className="pkt-btn pkt-primary" data-testid="update-toast" onClick={() => update()}>New version — tap to reload</button></div>}
   </>;
 

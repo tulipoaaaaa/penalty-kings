@@ -5,6 +5,9 @@ export type UpdateListener = (apply: () => void) => void;
 /** Registers ./sw.js (relative, so any base path works). Calls onUpdate when a new version is waiting. */
 export function registerServiceWorker(onUpdate: UpdateListener) {
   if (!("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol)) return;
+  // The native app (Capacitor) ships every file inside the APK / .ipa and updates by reinstalling: no service worker
+  // (Android serves the bundle from https://localhost, where a worker would only add a second cache).
+  if ((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()) return;
   let reloading = false;
   const offer = (worker: ServiceWorker) => onUpdate(() => {
     reloading = true;
