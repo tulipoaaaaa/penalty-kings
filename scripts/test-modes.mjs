@@ -167,8 +167,9 @@ await testGame("./games/penalty-kings", {
     assert.match(await game.getByTestId("results").textContent(), /Daily/);
 
     // Save code round-trip (Settings): copy the code, paste it back, progress is restored.
+    // (Closing Results goes to the Modes screen, QA-8, which has its own Settings button.)
     await game.getByRole("button", { name: "Close" }).first().click();
-    await game.getByTestId("menu").click();
+    await game.locator(".pk-modescreen").waitFor();
     await game.getByRole("button", { name: "Settings", exact: true }).click();
     const code = await game.getByTestId("save-code-out").inputValue();
     assert.match(code, /^PK1\./, "a save code is shown");

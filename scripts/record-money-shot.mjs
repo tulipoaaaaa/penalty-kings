@@ -204,8 +204,8 @@ else await testGame("./games/penalty-kings", {
     await game.getByTestId("play").click();
     for (let i = 0; i < 3; i++) await kick(`tutorial ${i + 1}`, { aimX: 0.45, up: 150 });
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
-    await game.getByRole("button", { name: "Close" }).first().click();
-    await game.getByTestId("menu").click();
+    await game.getByRole("button", { name: "Close" }).first().click(); // closing Results goes to the Modes screen (QA-8)
+    await game.locator(".pk-modescreen").waitFor();
     await button("Settings").click();
     const code = await game.getByTestId("save-code-out").inputValue();
     await game.getByTestId("save-code-in").fill(editSaveCode(code, friendId, { difficulty: RUNG, stamps: [] }));
@@ -215,8 +215,7 @@ else await testGame("./games/penalty-kings", {
     note("save code restored: rung 0, no stamps");
 
     // 3. The post: World Tour park-1 (keeper: the Mouse), one swipe at the top of the far post.
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    await game.locator(".pk-modescreen").waitFor();
     await game.getByTestId("mode-tour").click();
     await game.getByTestId("level-park-1").click();
     await button("Kick off").click();

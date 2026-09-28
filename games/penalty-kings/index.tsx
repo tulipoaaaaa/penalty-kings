@@ -1284,7 +1284,13 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     live.current = { ...live.current, pack: false }; setPack(null);
   }
   /** Close a menu. With no session and no pack on the pitch (a pack opened from the modes screen ends in the Bag), back to the modes screen. */
-  function closeMenu() { setMenu(null); if (live.current.screen === "play" && !live.current.session && !live.current.pack) setScreen(progress.tutorialDone ? "modes" : "title"); }
+  function closeMenu() {
+    // QA-8: closing Results (× or Escape) leaves the finished session exactly like its "Modes" button: never a dead pitch.
+    if (menu === "results") { toModes(); return; }
+    setMenu(null); if (live.current.screen === "play" && !live.current.session && !live.current.pack) setScreen(progress.tutorialDone ? "modes" : "title");
+  }
+  /** A finished session → the Modes screen (Results "Modes", and closing Results). */
+  function toModes() { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }
   function clearPackTimers() { for (const id of packTimers.current) window.clearTimeout(id); packTimers.current = []; }
   /** Flip one card: the stage plays the TRUE reveal for that settled outcome (revealPlan). `quiet`: a card flip only (the sequence's lower balls). */
   function flipCard(index: number, quiet = false) {
@@ -1713,7 +1719,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
       {menu === "results" && summary && <Results summary={summary} next={tourNext} reduced={reducedMotion} onTick={index => playSfx(`rarity-${index}`)}
         goal={(() => { const goal = nextGoal(progress, LEVELS, today); return { text: goal.text, mode: goal.mode, onGo: () => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); startMode(goal.mode); } }; })()}
-        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
+        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => setMenu("book")} onModes={toModes}
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }

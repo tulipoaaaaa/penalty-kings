@@ -271,7 +271,9 @@ for (const [width, height] of SIZES) {
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await fonts("results");
       await targets("results");
-      await game.getByRole("button", { name: "Close" }).first().click();
+      // (Closing Results goes to the Modes screen, QA-8; Play again keeps a session on the pitch for the menu hub.)
+      await press(game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }));
+      await waitShootable();
       await reachable(game.getByTestId("menu"), "Menu");
       await press(game.getByTestId("menu"));
       await fonts("menu hub");
@@ -369,7 +371,8 @@ for (const [width, height] of DESKTOP) {
       assert.ok(toasts >= 1, `${label}: the tutorial coaching toast was checked against the Friend`); sizes.push(`toast clear of the Friend/ball/goal/strip x${toasts}`);
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await assertTargets(game, `${label} results`); sizes.push("results");
-      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).click(); // (× goes to Modes, QA-8)
+      await waitShootable();
       await game.getByTestId("menu").click();
       await assertTargets(game, `${label} menu hub`); sizes.push("hub");
       await game.locator(".pk-hub").getByRole("button", { name: "Settings", exact: true }).click();
