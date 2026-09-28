@@ -7,6 +7,7 @@ import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME
 import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont } from "./core.js";
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, glyphCols, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
+import { atmosphereParams, drawAtmosphere, type Atmosphere } from "./atmosphere.js";
 import { Net } from "./net.js";
 import { drawKeeper, drawKeeperFrame, keeperArms, artPoint, KEEPER_DESIGNS, KEEPER_TAUNTS, GLINT_SECONDS, type KeeperPose } from "./keepers.js";
 import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX, flightRadius, ribbonFor, drawRibbon, type RibbonPoint } from "./ball.js";
@@ -396,6 +397,14 @@ export class Stage {
   ballHome() { return this.kind === "freekick" && this.freeKick ? fkBall(this.freeKick.setup) : { x: SPOT.x, y: SPOT.y, scale: 1 }; }
   /** The goal group's placement: identity for penalties, true perspective for free kicks. */
   goalXf() { return this.kind === "freekick" && this.freeKick ? goalTransform(this.freeKick.setup) : PENALTY_GOAL; }
+  private atmos: { key: string; value: Atmosphere } | null = null;
+  /** Static stadium lighting around the goal (gfx/atmosphere.ts): the crowd band behind it and the floodlight pool. Same under reduced motion. */
+  atmosphere(): Atmosphere {
+    const fk = this.kind === "freekick" && this.freeKick, xf = this.goalXf(), grassTop = (fk ? 0 : BACKDROP_DROP) + 102;
+    const key = `${this.stadium}|${this.weather}|${xf.g}|${xf.x}|${xf.y}|${grassTop}`;
+    if (this.atmos?.key !== key) this.atmos = { key, value: atmosphereParams(this.stadium, this.weather, xf, grassTop) };
+    return this.atmos.value;
+  }
   /** A point in goal-art coordinates → screen. */
   goalPoint(p: { x: number; y: number }) { return applyGoal(this.goalXf(), p); }
 
@@ -555,6 +564,7 @@ export class Stage {
     drawPitch(c, this.stadium, this.weather);
     drawStadiumFx(c, this.stadium, this.weather, this.time, pan, backdropEvents); // round 6 E22: stadium set pieces behind the goal
     c.restore();
+    drawAtmosphere(c, this.atmosphere()); // darker crowd band behind the goal + floodlight pool on the goal mouth (pre-rendered, static)
     if (fk) drawPitchMarkings(c, fk.setup, THEMES[this.stadium].lines, fk.wall, this.time);
     else drawPitchMarkings(c, PENALTY_SETUP, THEMES[this.stadium].lines, null, this.time, PENALTY_CAMERA);
     drawHeatShimmer(c, this.reduced ? 0 : [0, 0.55, 0.85, 1][feverTier(this.streak)], this.time); // B6: from 3 in a row
