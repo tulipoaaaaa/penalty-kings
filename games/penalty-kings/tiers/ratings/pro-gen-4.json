@@ -1,0 +1,42 @@
+{
+  "name": "Penalty Kings · Pro · Gen 4 (92.00%)",
+  "consumable": "Ball",
+  "price": "1000000000000000000000",
+  "outcomes": [
+    {
+      "name": "Scuffed Ball",
+      "chanceBps": 3030,
+      "reward": "0"
+    },
+    {
+      "name": "Training Ball",
+      "chanceBps": 2700,
+      "reward": "500000000000000000000"
+    },
+    {
+      "name": "Match Ball",
+      "chanceBps": 2040,
+      "reward": "1000000000000000000000"
+    },
+    {
+      "name": "Pro Ball",
+      "chanceBps": 1140,
+      "reward": "1500000000000000000000"
+    },
+    {
+      "name": "Silver Ball",
+      "chanceBps": 740,
+      "reward": "2500000000000000000000"
+    },
+    {
+      "name": "Gold Ball",
+      "chanceBps": 250,
+      "reward": "5000000000000000000000"
+    },
+    {
+      "name": "Golden Boot Ball",
+      "chanceBps": 100,
+      "reward": "10000000000000000000000"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Penalty Kings · Park · Gen 5 (91.00%)",
+  "consumable": "Ball",
+  "price": "10000000000000000000",
+  "outcomes": [
+    {
+      "name": "Scuffed Ball",
+      "chanceBps": 3090,
+      "reward": "0"
+    },
+    {
+      "name": "Training Ball",
+      "chanceBps": 2700,
+      "reward": "5000000000000000000"
+    },
+    {
+      "name": "Match Ball",
+      "chanceBps": 2020,
+      "reward": "10000000000000000000"
+    },
+    {
+      "name": "Pro Ball",
+      "chanceBps": 1120,
+      "reward": "15000000000000000000"
+    },
+    {
+      "name": "Silver Ball",
+      "chanceBps": 720,
+      "reward": "25000000000000000000"
+    },
+    {
+      "name": "Gold Ball",
+      "chanceBps": 250,
+      "reward": "50000000000000000000"
+    },
+    {
+      "name": "Golden Boot Ball",
+      "chanceBps": 100,
+      "reward": "100000000000000000000"
+    }
+  ]
+}
