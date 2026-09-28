@@ -403,6 +403,17 @@ contract BootroomTest is Test {
         assertApproxEqAbs(room.log2Wad(520_001e18), 18_988_154_872_101_413_000, 1e10); // log2(520001)
     }
 
+    /// Pins the path where log2Wad's integer part `n` is never incremented (x in [1e18, 2e18)):
+    /// the result is the fractional part only, from 0 at x = 1e18 up to just under 1e18.
+    function testLog2WadIntegerPartZeroPath() public view {
+        assertEq(room.log2Wad(1e18), 0, "n = 0, no fractional bits");
+        assertEq(room.log2Wad(1e18 + 1), 0, "below the ~1e-9 precision");
+        assertApproxEqAbs(room.log2Wad(1.5e18), 584_962_500_721_156_181, 2e9); // log2(1.5)
+        uint256 top = room.log2Wad(2e18 - 1);
+        assertLt(top, 1e18, "never reaches the next integer");
+        assertGt(top, 1e18 - 2e9);
+    }
+
     // ------------------------------------------------------------------ fuzz
 
     function testFuzzPerkBounded(uint256 amount, uint256 lockWeeks, uint256 elapsed) public {

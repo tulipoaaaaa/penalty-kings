@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.36;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { GBoot } from "../src/GBoot.sol";
@@ -180,6 +180,22 @@ contract EdgeSplitterTest is Test {
         splitter.split(0);
         assertEq(swapper.calls(), 1);
         assertEq(swapper.lastAmountIn(), 1);
+    }
+
+    /// Pins `bought` on the skipped-swap path (total < 4 wei): 0 $GBOOT reported and burned, the
+    /// $GBOOT supply and the splitter's $GBOOT balance untouched.
+    function testSkippedSwapReportsZeroBought() public {
+        rf.transfer(address(splitter), 3);
+        uint256 gbootSupply = gboot.totalSupply();
+        vm.recordLogs();
+        vm.prank(operator);
+        splitter.split(0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (,, uint256 gbootBurned,) = abi.decode(logs[logs.length - 1].data, (uint256, uint256, uint256, uint256));
+        assertEq(gbootBurned, 0);
+        assertEq(gboot.totalSupply(), gbootSupply);
+        assertEq(gboot.balanceOf(address(splitter)), 0);
+        assertEq(swapper.calls(), 0);
     }
 
     function testFuzzSplitConservation(uint256 total, uint256 rate) public {
