@@ -32,7 +32,7 @@ import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target 
 import { revealPlan } from "./game/reveal.js";
 import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/randomness.js";
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
-import { potBanner, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
+import { potBanner, potHudTail, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
 import { championsNight, championsNightLine, cupDrawLine, cupEntriesLine, racePointMultiplier, isChampionsNight, SIM_TRICKLE_MS } from "./game/weekly.js";
 import { PotCounter, WinnersTicker, useCountUp, useGlow } from "./potui.js";
@@ -1503,7 +1503,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
       <button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} data-glow={potGlow || undefined} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
-        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra">{pot.priceNote} ·</span><span className="pk-pot-extra" data-testid="pot-draw">{drawLine}</span>{night.active && <b className="pk-nighttag" data-testid="night-tag" title={nightLine}>{simulated ? "NIGHT ×2" : "CHAMPIONS NIGHT"}</b>}{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
+        <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra" data-testid="pot-draw">{potHudTail(pot, drawLine).detail}</span>{night.active && <b className="pk-nighttag" data-testid="night-tag" title={nightLine}>{simulated ? "NIGHT ×2" : "CHAMPIONS NIGHT"}</b>}{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
       </button>
 
       {screen === "play" && s && <>
