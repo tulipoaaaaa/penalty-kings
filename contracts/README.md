@@ -6,7 +6,7 @@ SDK package's own source (`node_modules/@rarefriends/friendsdk/contracts/src`), 
 
 | Contract | Purpose | Status |
 |---|---|---|
-| `GBoot.sol` | $GBOOT: 1B fixed supply minted once; holder `burn`; no owner, mint, pause, tax or blacklist | see docs/DEPLOYMENT.md |
+| `GBoot.sol` | $GBOOT: 100M fixed supply minted once; holder `burn`; no owner, mint, pause, tax or blacklist | see docs/DEPLOYMENT.md |
 | `LiquidityLock.sol` | Holds the v4 position NFTs of the plain 1%-fee pool until an immutable unlock time; ANYONE may `collect` the LP fees, split per side 50% burned / 50% to the Cup pot (reentrancy-guarded, fuzz + invariant tested) | not deployed |
 | `GBootFixedPrice.sol` | Launch-default price source for the sinks and rewards: a fixed 0.1 RF per $GBOOT (no hook, so no TWAP) | not deployed |
 | `PoolSwapper.sol` | Exact-input swaps through the PoolManager (unlock / swap / sync / settle / take), used for the launch smoke tests; holds no funds | see docs/DEPLOYMENT.md |
