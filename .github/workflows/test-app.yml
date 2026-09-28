@@ -76,6 +76,9 @@ jobs:
             apps/mobile/android/app/*.gradle*
             apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
       - uses: android-actions/setup-android@v3
+        with:
+          # cmdline-tools 16 no longer ship the legacy 'tools' package (the action's default list)
+          packages: platform-tools
       - run: npm ci
       - run: npm ci --prefix apps/mobile
       - name: Build the web bundle (simulated wallet; bundled into the APK, works offline)
