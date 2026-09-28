@@ -233,7 +233,7 @@ export function ScoutingBook({ progress, discovery }: { progress: Progress; disc
     <ul className="pk-scoring" data-testid="scoring">
       <li><b>Challenge level:</b> {rungName(progress.difficulty)} (it adjusts between rounds to how you play, from Sunday League to Legend).</li>
       <li><b>Where it goes in:</b> centre ×{ZONE_MULT.centre} (and usually saved), side ×{ZONE_MULT.side}, corner ×{ZONE_MULT.corner}, top bin ×{ZONE_MULT.bin}; in off the post +{Math.round((POST_IN_BONUS - 1) * 100)}%; a free-kick knuckleball ×2.</li>
-      <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}; points only, never RF or $GBOOT). <b data-testid="book-best-streak">BEST STREAK: {progress.bestStreak} in a row</b>.</li>
+      {/*EA{ <li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}; points only, never RF). <b data-testid="book-best-streak">BEST STREAK: {progress.bestStreak} in a row</b>.</li> }*/}<li><b>Goals in a row:</b> {streaks} (the most is ×{streakMultiplier(99)}; points only, never RF or $GBOOT). <b data-testid="book-best-streak">BEST STREAK: {progress.bestStreak} in a row</b>.</li>{/*}EA*/}
       <li><b>PERFECT strike:</b> {SHOT_RULES.perfect}</li>
       <li><b>Keepers:</b> each card shows how often the keeper dives the right way (before your challenge level) and the points multiplier for scoring past them.</li>
       <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>

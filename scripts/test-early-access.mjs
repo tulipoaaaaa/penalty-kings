@@ -26,7 +26,7 @@ const GEN = config.previewGeneration, RATING = `${config.generations[GEN].toFixe
 const rated = JSON.parse(await readFile(join(ROOT, `games/penalty-kings/tiers/ratings/park-gen-${GEN}.json`), "utf8"));
 const CHANCES = rated.outcomes.map(outcome => outcome.chanceBps);
 /** Words that name a hidden feature (Golden Boot BALL is a rarity; the Golden Boot CUP is hidden). */
-const HIDDEN = /Free Kicks?\b|World Tour|Target Practice|Skill Cup|Kit shop|Golden Boot Cup|\bCups\b|Champions Night|Keeper of the Week|challenge code|Wildcard|\$GBOOT|Market \(coming soon\)/i;
+const HIDDEN = /Free Kicks\b|World Tour|Target Practice|Skill Cup|Kit shop|Golden Boot Cup|\bCups\b|Champions Night|Keeper of the Week|challenge code|Wildcard|\$GBOOT|Market \(coming soon\)/; // mode and screen names ("a free kick" in a Daily scenario is fine)
 
 // ── 1. The static early access site ─────────────────────────────────────────────────────────────────────────────
 execFileSync(process.execPath, [join(ROOT, "scripts/build-site.mjs")], { cwd: ROOT, env: { ...process.env, PK_PRESET: "early-access" }, stdio: "inherit" });
@@ -197,7 +197,7 @@ async function run(width) {
       await noHidden("My Bag");
       await game.getByTestId("redeem-ball").first().click();
       await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
-      await game.getByText("Redeemed a Match Ball for 10 RF.").waitFor({ timeout: 10_000 });
+      await game.getByText("Redeemed a Match Ball for 10 RF.").first().waitFor({ timeout: 10_000 });
       assert.equal(await game.getByTestId("ball").count(), 1, "the redeemed ball left the Bag");
 
       // Big Match with the other ball: the HUD shows the rating, no Cup pot; the in-game Menu lists only visible screens.

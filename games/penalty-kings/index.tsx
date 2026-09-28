@@ -1728,7 +1728,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
             if (restored.ok) { updateProgress(() => restored.progress); dir.current = null; setRestoreCode(""); setRestoreNote("Progress restored from your save code."); } else setRestoreNote(restored.reason);
           }}>Restore</button>
           {restoreNote && <p role="status" data-testid="save-code-note">{restoreNote}</p>}
-          <p className="pk-note">Save codes hold progression only (never RF, balls or $GBOOT: those always come from the chain).</p>
+          <p className="pk-note">{/*EA{ "Save codes hold progression only (never RF or balls: those always come from the chain)." }*/}Save codes hold progression only (never RF, balls or $GBOOT: those always come from the chain).{/*}EA*/}</p>
         </div>
       </div>}
 
