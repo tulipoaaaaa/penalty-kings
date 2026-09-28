@@ -102,7 +102,7 @@ test("Daily menu share: today's best Daily round as a share round (same card and
   const today = "2026-09-28", scenario = dailyScenario(today);
   const daily = { date: today, attempts: 2, best: 750, played: [today], bestRound: { goals: 3, kicks: scenario.kicks, bestStreak: 2 } };
   const round = dailyShareRound("7730", daily, scenario);
-  const fromResults = shareRoundOf({ friendId: "7730", mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, points: 750, kicks: Array.from({ length: scenario.kicks }, (_, i) => ({ result: i < 3 ? "goal" : "save" })), bestStreak: 2 });
+  const fromResults = shareRoundOf({ friendId: "7730", mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, setup: scenario.setup, points: 750, kicks: Array.from({ length: scenario.kicks }, (_, i) => ({ result: i < 3 ? "goal" : "save" })), bestStreak: 2 });
   assert.deepEqual(round?.replay, fromResults?.replay, "the same challenge (today's keeper and seed) as the Daily Results card");
   assert.deepEqual([round?.score, round?.goals, round?.kicks, round?.bestStreak, round?.friendId], [750, 3, scenario.kicks, 2, "7730"]);
   assert.equal(round?.subtitle, `Daily ${today} · ${fromResults?.subtitle}`);
@@ -115,6 +115,35 @@ test("Daily menu share: today's best Daily round as a share round (same card and
   assert.ok(!shareCardLayout({ name: "Friend #7730", score: 500, scoreLabel: "pts", goals: 0, kicks: 0, bestStreak: 0, link: PUBLIC_URL }).texts.some(text => text.text.includes("goals")), "no made-up goals line");
   const pasted = dailyShareRound("7730", { ...daily, bestRound: { goals: 1e9, kicks: 1e12, bestStreak: -4 } }, scenario); // a pasted save code is not trusted
   assert.deepEqual([pasted?.kicks, pasted?.goals, pasted?.bestStreak], [20, 20, 0]);
+});
+
+test("Daily free-kick challenge: the code carries the Daily's wall, so the friend kicks the identical free kick; old codes still decode", () => {
+  // Days whose Daily is a free kick with a wall other than the 1.65 m default (the wall varies by day).
+  const days = Array.from({ length: 120 }, (_, i) => new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10)).map(dailyScenario).filter(day => day.mode === "freekick" && day.setup && Math.round(day.setup.wallHeight * 100) !== 165);
+  assert.ok(days.length >= 3, `found Daily free kicks with other walls (${days.length})`);
+  for (const scenario of days) {
+    const kicks = [{ result: "goal" }, { result: "save" }, { result: "goal" }];
+    const fromResults = shareRoundOf({ friendId: "7730", mode: "daily", kind: "freekick", keeper: scenario.keeper, seed: scenario.seed, setup: scenario.setup, points: 640, kicks, bestStreak: 1 });
+    const fromMenu = dailyShareRound("7730", { date: scenario.date, best: 640, bestRound: { goals: 2, kicks: 3, bestStreak: 1 } }, scenario);
+    for (const round of [fromResults, fromMenu]) {
+      const code = encodeChallenge({ ...round!.replay!, score: round!.score, from: round!.friendId });
+      assert.match(code, /^pkc1\.f\.[a-z]+\.[0-9a-z]+\.[0-9a-z]+\.[0-9a-z]+\.w1\d\d\.[0-9a-f]{8}$/, `the wall is in the code (${code})`);
+      const decoded = decodeChallenge(code);
+      assert.ok(decoded.ok);
+      const vs = decoded.challenge;
+      assert.equal(vs.keeper, scenario.keeper); assert.equal(vs.seed, scenario.seed); assert.equal(vs.kicks, scenario.kicks);
+      assert.deepEqual(challengeSetup(vs.seed, vs.wall), scenario.setup, `${scenario.date}: the same wall height, distance, angle, wall size, jump and wind as the Daily`);
+      const tampered = code.replace(/\.w(1\d\d)\./, (_, cm) => `.w${Number(cm) + 8}.`);
+      assert.deepEqual(decodeChallenge(tampered), { ok: false, reason: "This challenge code was changed or mistyped." }, "the checksum covers the wall");
+    }
+  }
+  assert.deepEqual(decodeChallenge("pkc1.f.sloth.21i3v9.f0.5yq.w173.f84d6fac"), { ok: true, challenge: { kind: "freekick", keeper: "sloth", seed: 123456789, kicks: 3, score: 540, from: "7730", wall: 1.73 } }, "the wall format is pinned (test-practice uses this code)");
+  // A code made before walls were encoded (7 parts) still decodes, with the 1.65 m wall it always had.
+  const old = decodeChallenge("pkc1.f.sumo.y5kzn8.dw.5yq.1e459126");
+  assert.ok(old.ok); assert.equal(old.challenge.wall, undefined);
+  assert.deepEqual(challengeSetup(old.challenge.seed, old.challenge.wall), freeKickSetup(old.challenge.seed, { maxWind: 3, wallHeight: 1.65 }));
+  assert.equal(encodeChallenge(old.challenge), "pkc1.f.sumo.y5kzn8.dw.5yq.1e459126", "a default-wall code is unchanged");
+  assert.equal(encodeChallenge({ ...sample, wall: 1.73 }), encodeChallenge(sample), "penalties carry no wall");
 });
 
 test("share card layout: the score, best streak, tagline and public link, all inside the card and readable", () => {

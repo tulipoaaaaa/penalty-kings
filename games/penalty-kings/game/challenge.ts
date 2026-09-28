@@ -19,7 +19,17 @@ import { weekKey, LOGIN_TRACK, type LoginTrack } from "./rewards.js";
 export const PUBLIC_URL = "https://tulipoaaaaa.github.io/penalty-kings/";
 export const CHALLENGE_PREFIX = "pkc1";
 export type ChallengeKind = "penalty" | "freekick";
-export type Challenge = Readonly<{ kind: ChallengeKind; keeper: KeeperId; seed: number; kicks: number; score: number; from: string }>;
+/** `wall`: the free-kick wall height in metres when it is not the default CHALLENGE_WALL (a Daily free kick's wall varies by day). */
+export type Challenge = Readonly<{ kind: ChallengeKind; keeper: KeeperId; seed: number; kicks: number; score: number; from: string; wall?: number }>;
+/** The wall of a free-kick challenge whose code carries no wall (every code made before walls were encoded). */
+export const CHALLENGE_WALL = 1.65;
+const WALL_CM = { min: 155, max: 195 }; // the engine's wall range (freeKickSetup clamps to 1.55–1.95 m)
+/** The wall in whole centimetres, or null for the default (so a default-wall code stays the original 7-part code). */
+const wallCm = (challenge: Pick<Challenge, "kind" | "wall">) => {
+  if (challenge.kind !== "freekick" || challenge.wall === undefined || !Number.isFinite(challenge.wall)) return null;
+  const cm = Math.max(WALL_CM.min, Math.min(WALL_CM.max, Math.round(challenge.wall * 100)));
+  return cm === Math.round(CHALLENGE_WALL * 100) ? null : cm;
+};
 /** Kicks per challenge round: the game's own round sizes. */
 export const CHALLENGE_KICKS: Readonly<Record<ChallengeKind, number>> = { penalty: 5, freekick: 3 };
 const MAX_SCORE = 10_000_000;
@@ -36,10 +46,14 @@ function crc32(text: string) {
 const check = (body: string) => crc32(`penalty-kings-challenge:${body}`);
 const keeperIds = new Set<string>(KEEPERS.map(keeper => keeper.id));
 
-/** "pkc1.p.sumo.<seed36>.<score36>.<friend36>.<crc>" — short enough to paste, all lower-case. */
+/**
+ * "pkc1.p.sumo.<seed36>.<score36>.<friend36>.<crc>" — short enough to paste, all lower-case. A free kick with a
+ * non-default wall adds ".w<cm>" before the checksum (covered by it): "pkc1.f.sumo.….w173.<crc>".
+ */
 export function encodeChallenge(challenge: Challenge) {
   const from = /^\d+$/.test(challenge.from) ? BigInt(challenge.from).toString(36) : "0";
-  const body = [CHALLENGE_PREFIX, challenge.kind === "freekick" ? "f" : "p", challenge.keeper, (challenge.seed >>> 0).toString(36), Math.max(0, Math.min(MAX_SCORE, Math.round(challenge.score))).toString(36), from].join(".");
+  const wall = wallCm(challenge);
+  const body = [CHALLENGE_PREFIX, challenge.kind === "freekick" ? "f" : "p", challenge.keeper, (challenge.seed >>> 0).toString(36), Math.max(0, Math.min(MAX_SCORE, Math.round(challenge.score))).toString(36), from, ...(wall === null ? [] : [`w${wall}`])].join(".");
   return `${body}.${check(body)}`;
 }
 
@@ -48,16 +62,18 @@ export function decodeChallenge(raw: string): DecodedChallenge {
   // Accept a whole link too (…?challenge=CODE), and stray spaces or capitals from a chat app.
   const text = raw.trim().replace(/^.*[?&]challenge=/i, "").replace(/[\s&#].*$/, "").toLowerCase();
   const parts = text.split(".");
-  if (parts.length !== 7 || parts[0] !== CHALLENGE_PREFIX) return { ok: false, reason: "That doesn't look like a Penalty Kings challenge code." };
-  const [, mode, keeper, seed36, score36, from36, sum] = parts;
-  if (check(parts.slice(0, 6).join(".")) !== sum) return { ok: false, reason: "This challenge code was changed or mistyped." };
+  if ((parts.length !== 7 && parts.length !== 8) || parts[0] !== CHALLENGE_PREFIX) return { ok: false, reason: "That doesn't look like a Penalty Kings challenge code." };
+  const [, mode, keeper, seed36, score36, from36] = parts, sum = parts[parts.length - 1], wallPart = parts.length === 8 ? parts[6] : null;
+  if (check(parts.slice(0, -1).join(".")) !== sum) return { ok: false, reason: "This challenge code was changed or mistyped." };
+  const cm = wallPart === null ? null : /^w\d{3}$/.test(wallPart) ? Number(wallPart.slice(1)) : NaN;
+  if (cm !== null && (mode !== "f" || !(cm >= WALL_CM.min && cm <= WALL_CM.max))) return { ok: false, reason: "This challenge code is damaged." };
   if ((mode !== "p" && mode !== "f") || !keeperIds.has(keeper) || ![seed36, score36, from36].every(part => /^[0-9a-z]{1,14}$/.test(part))) return { ok: false, reason: "This challenge code is damaged." };
   const seed = parseInt(seed36, 36), score = parseInt(score36, 36);
   if (!Number.isSafeInteger(seed) || seed > 0xffffffff || !Number.isSafeInteger(score) || score > MAX_SCORE) return { ok: false, reason: "This challenge code is damaged." };
   let from = "0";
   for (const char of from36) from = (BigInt(from) * 36n + BigInt(parseInt(char, 36))).toString();
   const kind: ChallengeKind = mode === "f" ? "freekick" : "penalty";
-  return { ok: true, challenge: { kind, keeper: keeper as KeeperId, seed, kicks: CHALLENGE_KICKS[kind], score, from } };
+  return { ok: true, challenge: { kind, keeper: keeper as KeeperId, seed, kicks: CHALLENGE_KICKS[kind], score, from, ...(cm === null ? {} : { wall: cm / 100 }) } };
 }
 
 export const challengeLink = (code: string) => `${PUBLIC_URL}?challenge=${code}`;
@@ -76,8 +92,11 @@ export function challengeVerdict(challenge: Challenge, myScore: number) {
 export const CHALLENGE_RULE = "Send a code; your friend kicks the same kicks against the same keeper and tries to beat your score.";
 export const challengeBrief = (challenge: Challenge) => `${challengerName(challenge)} scored ${points(challenge.score)} in ${challenge.kicks} ${challenge.kind === "freekick" ? "free kicks" : "penalties"} against ${keeperById(challenge.keeper).name}. Beat it!`;
 
-/** The free-kick setup of a challenge: a pure function of the seed (same code, same wall, distance and wind). */
-export const challengeSetup = (seed: number): FreeKickSetup => freeKickSetup(seed >>> 0, { maxWind: 3, wallHeight: 1.65 });
+/**
+ * The free-kick setup of a challenge: a pure function of the seed and the wall (same code, same wall, distance,
+ * angle and wind). The Daily builds its free kick the same way (daily.ts), so a Daily code replays that exact kick.
+ */
+export const challengeSetup = (seed: number, wall = CHALLENGE_WALL): FreeKickSetup => freeKickSetup(seed >>> 0, { maxWind: 3, wallHeight: wall });
 
 // ── The share card's round data ────────────────────────────────────────────
 /** What the Results screen knows about the round that just ended. */
@@ -95,10 +114,11 @@ const CHALLENGE_MODES = new Set(["penalties", "freekicks", "daily", "challenge"]
  * The share data for a finished round, or null (the Big Match and the Skill Cup are paid/ranked: no share card
  * there, so nothing ever sits next to money). Target Practice and the tour share a card without a challenge.
  */
-export function shareRoundOf(session: { friendId: string; mode: string; kind: string; keeper: KeeperId; seed: number; points: number; kicks: readonly { result: string }[]; bestStreak: number; challenge?: { vs: Challenge | null } }): ShareRound | null {
+export function shareRoundOf(session: { friendId: string; mode: string; kind: string; keeper: KeeperId; seed: number; points: number; kicks: readonly { result: string }[]; bestStreak: number; setup?: { wallHeight: number }; challenge?: { vs: Challenge | null } }): ShareRound | null {
   if (session.mode === "match" || session.mode === "skill") return null;
   const kind: ChallengeKind | null = session.kind === "freekick" ? "freekick" : session.kind === "penalty" ? "penalty" : null;
-  const replay = kind && CHALLENGE_MODES.has(session.mode) ? { kind, keeper: session.keeper, seed: session.seed >>> 0, kicks: CHALLENGE_KICKS[kind] } : null;
+  const wall = kind === "freekick" && session.setup ? wallCm({ kind, wall: session.setup.wallHeight }) : null; // the round's own wall (a Daily's varies by day)
+  const replay = kind && CHALLENGE_MODES.has(session.mode) ? { kind, keeper: session.keeper, seed: session.seed >>> 0, kicks: CHALLENGE_KICKS[kind], ...(wall === null ? {} : { wall: wall / 100 }) } : null;
   const goals = session.kicks.filter(kick => kick.result === "goal").length;
   return {
     friendId: session.friendId, score: session.points, goals, kicks: session.kicks.length, bestStreak: session.bestStreak,
@@ -114,12 +134,12 @@ export type DailyBestRound = { goals: number; kicks: number; bestStreak: number 
  * today. Built through shareRoundOf, so the card, the challenge code (today's keeper and seed) and the no-money rule
  * match the Results share. A best stored before rounds were kept (no `bestRound`) shares the score alone (kicks 0).
  */
-export function dailyShareRound(friendId: string, daily: { date: string; best: number; bestRound?: DailyBestRound }, scenario: { date: string; seed: number; mode: "penalty" | "freekick"; keeper: KeeperId }): ShareRound | null {
+export function dailyShareRound(friendId: string, daily: { date: string; best: number; bestRound?: DailyBestRound }, scenario: { date: string; seed: number; mode: "penalty" | "freekick"; keeper: KeeperId; setup?: { wallHeight: number } }): ShareRound | null {
   if (daily.date !== scenario.date || !(daily.best > 0)) return null;
   const count = (value: unknown, max: number) => (typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(max, Math.floor(value))) : 0); // a pasted save code is not trusted
   const total = count(daily.bestRound?.kicks, 20), goals = count(daily.bestRound?.goals, total);
   const kicks = Array.from({ length: total }, (_, index) => ({ result: index < goals ? "goal" : "miss" }));
-  const round = shareRoundOf({ friendId, mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, points: daily.best, kicks, bestStreak: count(daily.bestRound?.bestStreak, total) });
+  const round = shareRoundOf({ friendId, mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, setup: scenario.setup, points: daily.best, kicks, bestStreak: count(daily.bestRound?.bestStreak, total) });
   return round && { ...round, subtitle: `Daily ${scenario.date}${round.subtitle ? ` · ${round.subtitle}` : ""}` };
 }
 

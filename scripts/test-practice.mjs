@@ -251,6 +251,9 @@ try {
     await page.goto(`${server.url}?challenge=${code}`, { waitUntil: "load" });
     assert.equal(await page.getByTestId("host-challenge-code").inputValue(), code, "the host page shows the challenge code");
     assert.deepEqual(await smallTargets(page, ".pk-challenge"), [], "challenge banner tap targets");
+    const walled = "pkc1.f.sloth.21i3v9.f0.5yq.w173.f84d6fac"; // a free kick with its own wall (a Daily's): one part more
+    await page.goto(`${server.url}?challenge=${walled}`, { waitUntil: "load" });
+    assert.equal(await page.getByTestId("host-challenge-code").inputValue(), walled, "the host page shows a code with a wall too");
     await page.goto(`${server.url}?challenge=%3Cimg%20src%3Dx%3E`, { waitUntil: "load" });
     assert.equal(await page.locator(".pk-challenge").isVisible(), false, "a malformed code is ignored");
     report.push({ name: "host challenge banner", results: "code shown; junk ignored", goals: "-", keepers: "-", lines: 0, requests: "-" });

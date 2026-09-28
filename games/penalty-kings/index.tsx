@@ -734,7 +734,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   /** C4: a friend's challenge (their keeper, seed and kick count; no beacon, so the keeper plans are the same) or, with null, a Keeper of the Week round. */
   const challengeSession = (vs: Challenge | null): Session => vs
-    ? newSession("challenge", { kind: vs.kind, keeper: vs.keeper, seed: vs.seed, total: vs.kicks, setup: vs.kind === "freekick" ? challengeSetup(vs.seed) : undefined, challenge: { vs, weekly: false } })
+    ? newSession("challenge", { kind: vs.kind, keeper: vs.keeper, seed: vs.seed, total: vs.kicks, setup: vs.kind === "freekick" ? challengeSetup(vs.seed, vs.wall) : undefined, challenge: { vs, weekly: false } })
     : newSession("challenge", { keeper: keeperOfTheWeek(today), total: 5, challenge: { vs: null, weekly: true } });
   function startChallenge(vs: Challenge | null) { if (!may("start-mode")) return; void unlockAudio(); setError(""); beginSession(challengeSession(vs)); }
 
