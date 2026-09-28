@@ -1,3 +1,7 @@
+> **This branch (`main`) is out of date (Sep 27).** Active development and the judged build live on
+> [`claude/clever-mccarthy-ay7qv7`](https://github.com/tulipoaaaaa/penalty-kings/tree/claude/clever-mccarthy-ay7qv7);
+> judged snapshots are tagged `judging-stable-1` (and `judging-stable-2` at the Sep 29 freeze).
+
 # Penalty Kings
 
 A Rare Friends penalty shootout. Your hardwired Rare Friend is the striker. You buy balls with
