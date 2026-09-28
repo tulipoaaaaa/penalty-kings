@@ -37,7 +37,9 @@ export function createDevHandler({ root, play, showroom, randomnessDelayMs = 0 }
       // The game frame (CSP script-src 'self'): load the dev randomness delay before the game script.
       if (rest === "game.html") body = Buffer.from(body.toString().replace('<script src="./game.js">', '<script src="./pk-dev-randomness.js"></script><script src="./game.js">'));
       if (rest === "index.html") body = Buffer.from(body.toString().replace("<head>", `<head><script>${await readFile(join(root, "dev/mock-wallet.js"), "utf8")}</script>`));
-      res.writeHead(200, { "content-type": types[extname(rest)] ?? "application/octet-stream", "cache-control": "no-store" });
+      // The game frame is sandboxed (opaque origin "null"), so its @font-face loads are CORS requests: without this
+      // header the fonts were blocked and play:dev fell back to system monospace. GitHub Pages sends the same header.
+      res.writeHead(200, { "content-type": types[extname(rest)] ?? "application/octet-stream", "cache-control": "no-store", "access-control-allow-origin": "*" });
       res.end(body);
     } catch {
       // Never write a second head: a response already under way is just ended.

@@ -20,6 +20,7 @@ const play = join(temp, "play"), showroom = join(temp, "showroom");
 await mkdir(play, { recursive: true }); await mkdir(showroom, { recursive: true });
 await writeFile(join(showroom, "app.js"), "console.log('showroom');");
 await writeFile(join(play, "index.html"), "<!doctype html><html><head></head><body>play</body></html>");
+await mkdir(join(play, "assets"), { recursive: true }); await writeFile(join(play, "assets/pixelify-test.woff2"), "wOF2");
 const server = createServer(createDevHandler({ root, play, showroom }));
 await new Promise(done => server.listen(0, "127.0.0.1", done));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -40,6 +41,15 @@ try {
   const index = await get("/");
   assert.equal(index.status, 200);
   assert.match(index.body, /<head><script>/, "the play page still gets the DEV mock wallet");
+  // Polish: the game frame is sandboxed (origin "null"), so its fonts are CORS loads: the play files' fonts are
+  // font/woff2 with Access-Control-Allow-Origin: * (before, play:dev fell back to system monospace).
+  {
+    const font = await fetch(`${base}/assets/pixelify-test.woff2`, { headers: { origin: "null" }, signal: AbortSignal.timeout(3000) });
+    await font.arrayBuffer();
+    assert.equal(font.status, 200, "a font in the play build is served");
+    assert.equal(font.headers.get("content-type"), "font/woff2");
+    assert.equal(font.headers.get("access-control-allow-origin"), "*", "the sandboxed game frame may load the font (CORS)");
+  }
 } finally {
   server.closeAllConnections?.();
   await new Promise(done => server.close(done));
