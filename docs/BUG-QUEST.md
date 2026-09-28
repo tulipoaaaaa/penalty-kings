@@ -111,3 +111,23 @@ forge: 198 → 201 passing offline; 7/7 fork tests.
 | Practice page scrolled 3–33 px on landscape phones | fixed | `2cdcc62` | `test-practice` no-overflow check at 6 sizes |
 | `runtime.js` per stadium | not a duplicate (each carries its tier's price and odds); guarded | `3b5bdbf` | `check:no-dev` |
 | BQ-X10 dev server hung on a missing Showroom file | fixed: read first, 404 | `c7ea46d` | `npm run test:dev-server` |
+
+## Integrated-build QA sweep (after all Part B/C merges, at `b388316`)
+
+A read-only audit played the whole judge path at 1280×800, 844×390 and 390×844 in full and reduced motion. It found no P0s and no page or console errors. Fixes:
+
+| Item | Status | Commit | Test (what failed before) |
+|---|---|---|---|
+| Big Match: 3+ goals then a miss on kick 5 ended the match without sudden death | fixed | `5f073f4` | `tests/game/match.test.ts` |
+| Tutorial Results: "Next up: Free Kicks" contradicted NEXT GOAL | fixed (teaser hidden when NEXT GOAL shows) | `86f68ba` | `test-flow` |
+| Tutorial coaching toast covered the Friend (desktop) and the commentary strip (844×390) | fixed | `a14e312` | `test-phone` toast overlap at 6 sizes |
+| Results tiles scrolled out of view on landscape phones | fixed (sticky button footer) | `5a0928e` | `test-phone --results-only`, both motion modes |
+| "Shot clock pressure!" with no shot clock | fixed | `781677e` | `packages/game-director/test/director.test.ts` |
+| HUD pot said "on-chain snapshot" twice | fixed | `fcf92ff` | `tests/game/pot-hud.test.ts` |
+| Stale SCORE box on the title and pack reveal | fixed | `0aa0f29` | `test-game` |
+| Closing Results (× / Escape) left a dead pitch | fixed (goes to Modes) | `5cbf2f2` | `test-flow` |
+| Discovery toast cut off with "…" on phones | fixed (wraps to 2 lines) | `bce88db` | `test-phone` |
+| "BEST STREAK: 0"; Cups weights wrong on Champions Night | fixed | `dbe9c11` | `tests/game/copy-qa10.test.ts` |
+| Live stadiums would claim "×2 tonight" Cup points on Champions Night, but the weekly Cup report never doubles | fixed: only the simulated preview race doubles | `25ed6da` | `tests/game/weekly.test.ts`, `copy-qa10.test.ts` |
+
+Left as they are (design, or for the owner): Target Practice's clock pauses during flight (R6-C8 design, so a round takes longer than 60 s of real time); canvas commentary is drawn at 8 px on the 480×320 canvas; in Big Match the next kick unlocks while the Friend is still walking back.
