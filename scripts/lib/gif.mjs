@@ -36,10 +36,10 @@ export function decodePng(buffer) {
   return { width, height, rgb };
 }
 
-const key15 = (r, g, b) => ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+export const key15 = (r, g, b) => ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
 
 /** Median cut over a 15-bit colour histogram: up to `size` colours, each the weighted mean of its box. */
-function medianCut(histogram, size) {
+export function medianCut(histogram, size) {
   let boxes = [[...histogram.keys()].filter(key => histogram.get(key) > 0)];
   const channel = (key, c) => (key >> (10 - 5 * c)) & 31;
   while (boxes.length < size) {

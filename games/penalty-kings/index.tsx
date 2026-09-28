@@ -46,7 +46,7 @@ import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
-import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, Count, type SessionSummary } from "./ui.js";
+import { OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, Count, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview, type PackPhase } from "./ballui.js";
 import { RotateOverlay } from "./layout.js";
 import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf } from "./share.js"; // C4 social (own file: other lanes edit ui.tsx)
@@ -1613,9 +1613,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "balls" && <>
-        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} now={now} onStadium={openStadium} />
-        {(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>}
-        <BallCase definition={definition} tag={tag} />
+        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} now={now} onStadium={openStadium}
+          notice={(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>} />
         <StadiumPrices source={prizeSource} now={now} />
         <p className="pk-rule">{RULE}</p>
       </>}

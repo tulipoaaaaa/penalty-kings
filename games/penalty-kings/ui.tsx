@@ -1,5 +1,5 @@
 /** Screens and widgets for the game shell (all state lives in index.tsx). */
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
@@ -57,16 +57,29 @@ export function ballGlow(rarity: number, season: "S0" | "S1" = "S1"): string {
   return `radial-gradient(circle at 50% 38%, ${color}${rarity >= 4 ? "66" : "40"} 0, ${color}00 62%)`;
 }
 
-/** Kit bag display case: each ball on a pedestal with its name, odds and RF value. */
-export function BallCase({ definition, tag }: { definition: GameDefinition; tag: string }) {
-  return <div className="pk-case" role="list">
-    {definition.outcomes.map((outcome, index) => <div className="pk-pedestal" role="listitem" key={outcome.name} data-rarity={index}
-      style={{ backgroundImage: `${ballGlow(index)}, linear-gradient(transparent 55%, #8883 56%)`, borderColor: index >= 5 ? "#ff8c00" : index === 4 ? "#d7dde5" : undefined }}>
-      <BallSpin rarity={index} size={48} pedestal />
-      <strong>{RARITY_NAMES[index]}</strong>
-      <small>{outcome.chanceBps / 100}% · {formatGameAmount(outcome.reward, 18)} RF{tag}</small>
-    </div>)}
-  </div>;
+/** One legible ink per rarity (chips, card rims, the display case's labels), taken from each ball's own palette. */
+export const RARITY_INK: readonly string[] = ["#b3a68c", "#f08a24", "#7fb2ff", "#3ddc84", "#d7dde5", "#f2c230", "#ff8c00"];
+
+/**
+ * The Ball shop's display case (owner decision b): every ball a pack can pull, big, spinning on its pedestal in its
+ * rarity colours, each with its exact chance and RF value. Leads the shop; the Buy bar sits right under it.
+ */
+export function BallCase({ definition, tag, simulated, stadium }: { definition: GameDefinition; tag: string; simulated: boolean; stadium: string }) {
+  return <section className="pk-vitrine" data-testid="display-case" aria-label="Display case: every ball a pack can pull">
+    <header className="pk-vitrine-head">
+      <h3>Display case <small>{stadium} · what a pack can pull</small></h3>
+      <span className="pk-livechip" data-live={!simulated}>{simulated ? "SIMULATED" : "LIVE"}</span>
+    </header>
+    <ol className="pk-vitrine-shelf">
+      {definition.outcomes.map((outcome, index) => <li className="pk-vball" key={outcome.name} data-rarity={index}
+        style={{ "--pk-rc": RARITY_INK[index] ?? "#f7f7f2", backgroundImage: ballGlow(index) } as CSSProperties}>
+        <BallSpin rarity={index} size={48} pedestal />
+        <strong>{RARITY_NAMES[index].replace(" Ball", "")}</strong>
+        <span className="pk-vodds"><RarityChip rarity={index} />{outcome.chanceBps / 100}%</span>
+        <small>{formatGameAmount(outcome.reward, 18)} RF{tag}</small>
+      </li>)}
+    </ol>
+  </section>;
 }
 
 /** A tiny pixel ball in a rarity's own colours (odds table, Bag counts): 8 × 8 rects, crisp at any size. */

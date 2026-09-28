@@ -3,13 +3,13 @@
  * (editions × rarities) and a clearly labelled "Market (coming soon)" preview.
  * Honesty: rarity is decided by on-chain randomness at reveal; ball choice only affects the kick.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ChanceGameDefinition } from "@rarefriends/friendsdk/game";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import { TIERS, formatNumber, type Tier, type TierId } from "./economy.js";
 import { STADIUM_RACE_RULE, stadiumRaceLine } from "./game/weekly.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
-import { BallSpin, ballGlow, TokenExplainer, RarityChip, Tile } from "./ui.js";
+import { BallCase, BallSpin, ballGlow, TokenExplainer, RarityChip, Tile } from "./ui.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
@@ -27,24 +27,55 @@ export function OddsLine({ definition, onFull }: { definition: ChanceGameDefinit
 /** B5: the pack while the Stage reveals it ("stage": a compact card strip under the reveal) and after ("summary"). */
 export type PackPhase = "tear" | "flip" | "summary";
 
-/** a) SHOP: stadium tier + pack size; total cost, max prize and odds before confirming. */
-export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false, now = Date.now(), onStadium }: {
+/**
+ * a) SHOP (owner decision b): the display case leads (every ball a pack can pull, with its odds and RF value), then
+ * the Buy bar (pack size, "Buy pack · price", Open unopened) above the fold at every frame size. Below it: the true
+ * figures (total cost, top prize, the odds line, the 90% average return), the first-purchase explainer and the stadiums.
+ * Spending is confirmed by the wallet (the SDK's confirmation dialog) before anything is charged.
+ */
+export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, onOdds, unopened, onOpen, firstPurchase = false, now = Date.now(), onStadium, notice }: {
   definition: ChanceGameDefinition; tier: Tier; simulated: boolean; balance: bigint; busy: boolean; full: boolean;
   onBuy: (quantity: bigint) => void; onOdds: () => void; unopened: bigint; onOpen: () => void; firstPurchase?: boolean;
   /** C3b: the stadium clock (Champions Night doubles the Cup points line) and "Play at <stadium>" (opens that stadium's own page). */
   now?: number; onStadium?: (id: TierId) => void;
+  /** The last shop message ("2 balls bought…", an error), shown right under the Buy bar. */
+  notice?: ReactNode;
 }) {
   const affordable = PACKS.filter(size => balance >= definition.price * size);
   const [pack, setPack] = useState<bigint>(affordable.includes(5n) ? 5n : affordable[affordable.length - 1] ?? 1n);
   const tag = simulated ? " (sim)" : "";
   const cost = definition.price * pack, maxPrize = definition.outcomes.reduce((max, item) => (item.reward > max ? item.reward : max), 0n);
   return <div className="pk-shop">
+    <BallCase definition={definition} tag={tag} simulated={simulated} stadium={tier.name} />
+    <div className="pk-buybar" data-testid="buy-bar">
+      <div className="pk-packs" role="radiogroup" aria-label="Pack size">
+        {PACKS.map(size => <button key={size.toString()} type="button" role="radio" aria-checked={pack === size} onClick={() => setPack(size)} data-testid={`pack-${size}`} disabled={balance < definition.price * size} title={balance < definition.price * size ? "Not enough RF for this pack" : undefined}>
+          {size.toString()} ball{size > 1n ? "s" : ""}</button>)}
+      </div>
+      {full ? <p className="pk-warn" role="status">Stadium full: every seat's top prize is reserved right now. Try again after some balls settle.</p>
+        : <div className="pk-buyrow">
+          <button type="button" className="pk-primary" disabled={busy || balance < cost} onClick={() => onBuy(pack)} data-testid="buy-pack">Buy pack · {rf(cost)}{tag}</button>
+          {unopened > 0n && <button type="button" onClick={onOpen} data-testid="open-pack">Open {unopened.toString()} unopened</button>}
+        </div>}
+    </div>
+    <div className="pk-avgline">
+      <p className="pk-note">Average return 90% of the ball price in RF, over many balls. Most packs return less than they cost; a few return much more.</p>
+      <button type="button" onClick={onOdds}>See odds</button>
+    </div>
+    {notice}
+    {balance < cost && <p>{simulated ? `The preview wallet holds ${rf(balance)} of simulated RF. Redeem balls in your Bag to get RF back.` : "Not enough RF in your Friend's wallet: use Transfer RF to Friend in the wallet menu."}</p>}
+    <OddsLine definition={definition} />
+    <div className="pk-tiles pk-cost">
+      <Tile value={<>{rf(cost)}<small>{tag}</small></>} label={`total for ${pack.toString()} ball${pack > 1n ? "s" : ""}`} tone="volt" />
+      <Tile value={<>{rf(maxPrize)}<small>{tag}</small></>} label="each ball can pull up to" tone="gold" />
+    </div>
     {firstPurchase && <div className="pk-explain" data-testid="first-purchase">
       <h3>Before your first pack</h3>
       <p>Each ball's rarity is decided when you open the pack, and every ball is worth the RF printed on it. <button type="button" className="pk-link" onClick={onOdds}>See odds</button></p>
       <p><b>{RARITY_NAMES[0]}:</b> {SCUFFED_LINE}.</p>
       <TokenExplainer />
     </div>}
+    <h3>Stadiums</h3>
     <div className="pk-tiers" role="radiogroup" aria-label="Stadium">
       {TIERS.map(item => <div key={item.id} className="pk-tiercard" data-stadium={item.id} data-current={item.id === tier.id} role="radio" aria-checked={item.id === tier.id}>
         <strong>{item.name}</strong>
@@ -57,23 +88,6 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
       </div>)}
     </div>
     <p className="pk-note" data-testid="stadium-rule">{STADIUM_RACE_RULE}</p>
-    <div className="pk-packs" role="radiogroup" aria-label="Pack size">
-      {PACKS.map(size => <button key={size.toString()} type="button" role="radio" aria-checked={pack === size} onClick={() => setPack(size)} data-testid={`pack-${size}`} disabled={balance < definition.price * size} title={balance < definition.price * size ? "Not enough RF for this pack" : undefined}>
-        {size.toString()} ball{size > 1n ? "s" : ""}</button>)}
-    </div>
-    <div className="pk-tiles pk-cost">
-      <Tile value={<>{rf(cost)}<small>{tag}</small></>} label={`total for ${pack.toString()} ball${pack > 1n ? "s" : ""}`} tone="volt" />
-      <Tile value={<>{rf(maxPrize)}<small>{tag}</small></>} label="each ball can pull up to" tone="gold" />
-      <button type="button" className="pk-link" onClick={onOdds}>See odds</button>
-    </div>
-    <OddsLine definition={definition} />
-    <p className="pk-note">Average return 90% of the ball price in RF, over many balls. Most packs return less than they cost; a few return much more.</p>
-    {full ? <p className="pk-warn" role="status">Stadium full: every seat's top prize is reserved right now. Try again after some balls settle.</p>
-      : <div className="pk-buyrow">
-        <button type="button" className="pk-primary" disabled={busy || balance < cost} onClick={() => onBuy(pack)} data-testid="buy-pack">Buy pack · {rf(cost)}</button>
-        {unopened > 0n && <button type="button" onClick={onOpen} data-testid="open-pack">Open {unopened.toString()} unopened</button>}
-      </div>}
-    {balance < cost && <p>{simulated ? `The preview wallet holds ${rf(balance)} of simulated RF. Redeem balls in your Bag to get RF back.` : "Not enough RF in your Friend's wallet: use Transfer RF to Friend in the wallet menu."}</p>}
   </div>;
 }
 

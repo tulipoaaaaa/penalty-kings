@@ -14,17 +14,18 @@
 // Also (BQ-P1-9): at 960×640 and 1280×800 the title's Kick off is >= 44 CSS px (cold open and attract card).
 // PK_TAP_SURVEY=1 lists every small tap target instead of failing on the first.
 // QA-4: at 844x390 (reduced and full motion) the Results tiles and the primary button are both in view.
-// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only | --results-only] [--out docs/screenshots]
+// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only | --results-only | --review-only] [--out docs/screenshots]
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
+import { playInPortraitIfAsked } from "./lib/phone.mjs";
 
 installPriceFixture(); // answers the live RF/USD pool reads with recorded values (the SDK fixture rejects unknown reads)
 
 const args = process.argv.slice(2);
 const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") || args.includes("--results-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
+const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") || args.includes("--results-only") || args.includes("--review-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
 const OUT = option("--out") ?? "artifacts";
 const MIN_FONT = 11;
 const MIN_TAP = 44; // BQ-P1-10: every tap target (was 32)
@@ -471,7 +472,7 @@ for (const [width, height] of SIZES) {
 // BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
 // in the cold open and on the attract card after "Skip intro". BQ-P1-10: and every tap target in Results, the menu
 // hub, Settings, mode select and the Ball shop.
-const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[949, 634], [960, 640], [1280, 800]];
+const DESKTOP = option("--size") || args.includes("--results-only") || args.includes("--review-only") ? [] : [[949, 634], [960, 640], [1280, 800]];
 for (const [width, height] of DESKTOP) {
   const label = `${width}x${height}`, sizes = [];
   await testGame("./games/penalty-kings", {
@@ -544,7 +545,7 @@ for (const [width, height] of DESKTOP) {
 }
 // QA-4: on a landscape phone the Results tiles stay in view once Results land (no focus jump, no scroll to the
 // button after the count-up), and the primary button is visible and tappable too, in both motion modes.
-for (const [width, height, motion] of option("--size") ? [] : [[844, 390, "reduce"], [844, 390, "no-preference"]]) {
+for (const [width, height, motion] of option("--size") || args.includes("--review-only") ? [] : [[844, 390, "reduce"], [844, 390, "no-preference"]]) {
   const label = `${width}x${height} ${motion === "reduce" ? "reduced motion" : "full motion"}`;
   await testGame("./games/penalty-kings", {
     width, height, timeout: 60_000,
@@ -571,6 +572,89 @@ for (const [width, height, motion] of option("--size") ? [] : [[844, 390, "reduc
       assert.ok(seen.inViewport && seen.tiles.every(Boolean), `${label}: the Results tiles are scrolled out of view ${JSON.stringify(seen)}`);
       assert.ok(seen.primary && seen.primaryRect[2] >= 44, `${label}: the primary Results button is not visible and tappable ${JSON.stringify(seen)}`);
       console.log(`PASS Results in view ${label}: tiles ${seen.tilesRect.join("-")}, primary "${seen.primaryText.trim()}" ${seen.primaryRect.slice(0, 2).join("-")}`);
+    },
+  });
+}
+// Owner decision (b), at every review size: the Ball shop opens on its display case (every ball a pack can pull:
+// art, odds, RF value), and the primary "Buy pack" button is wholly on screen with no scrolling: inside the page
+// viewport and the menu's visible body, clear of the SDK toolbar, uncovered, >= 44 px; the case comes before it in
+// the DOM and is visible.
+const REVIEW = option("--size") || args.includes("--results-only") ? [] : [[1280, 800], [949, 634], [844, 390], [800, 360], [390, 844], [360, 640]];
+for (const [width, height] of REVIEW) {
+  const label = `${width}x${height}`;
+  await testGame("./games/penalty-kings", {
+    width, height, timeout: 90_000,
+    check: async ({ page, game }) => {
+      const press = locator => (width < 500 ? locator.tap() : locator.click());
+      const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
+      const origin = () => page.locator("iframe").evaluate(node => { const r = node.getBoundingClientRect(); return { x: r.left + node.clientLeft, y: r.top + node.clientTop }; });
+      const toolbar = () => page.locator(".rf-frame-toolbar").evaluate(node => { const r = node.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; });
+      const hit = (a, b) => a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+      /** Text under 11 px, and text (or any box) outside its card, anywhere under `root` (scrolled or not). */
+      const tidy = (root, cards) => game.locator(root).evaluate((node, [cards, min]) => {
+        const bad = [], walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+          const el = text.parentElement;
+          if (!text.textContent.trim() || !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+          const size = parseFloat(getComputedStyle(el).fontSize);
+          if (size < min - 0.01) bad.push(`${size}px "${text.textContent.trim().slice(0, 30)}"`);
+        }
+        for (const card of node.querySelectorAll(cards)) {
+          const c = card.getBoundingClientRect();
+          if (card.scrollWidth > card.clientWidth + 1 || card.scrollHeight > card.clientHeight + 1) bad.push(`${card.className} scrolls inside (${card.scrollWidth}x${card.scrollHeight} > ${card.clientWidth}x${card.clientHeight})`);
+          const w = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+          for (let text = w.nextNode(); text; text = w.nextNode()) {
+            if (!text.textContent.trim() || !text.parentElement.checkVisibility()) continue;
+            const range = document.createRange(); range.selectNodeContents(text);
+            for (const q of range.getClientRects()) if (q.width > 0 && (q.left < c.left - 1 || q.right > c.right + 1 || q.top < c.top - 1 || q.bottom > c.bottom + 1)) { bad.push(`"${text.textContent.trim().slice(0, 24)}" lies outside its ${card.className}`); break; }
+          }
+        }
+        const body = node.closest(".rf-frame-menu-body");
+        if (body && body.scrollWidth > body.clientWidth + 1) bad.push(`the menu scrolls sideways (${body.scrollWidth} > ${body.clientWidth})`);
+        return bad;
+      }, [cards, MIN_FONT]);
+
+      await playInPortraitIfAsked(game);
+      if (await game.getByTestId("skip-intro").isVisible()) await press(game.getByTestId("skip-intro"));
+      await press(game.getByTestId("play"));
+      for (let kick = 1; kick <= 3; kick++) {
+        await waitShootable(); await press(game.getByTestId("quick"));
+        await game.locator(".pk-banner").waitFor({ timeout: 8000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
+      }
+      await game.getByTestId("results").waitFor({ timeout: 10_000 });
+      await press(game.getByTestId("results").getByRole("button", { name: "Modes", exact: true }));
+
+      // (b) Ball shop, as it opens (the first-purchase state: the longest shop).
+      await press(game.getByTestId("ball-shop"));
+      await game.getByTestId("buy-pack").waitFor();
+      await game.getByTestId("first-purchase").waitFor();
+      await page.waitForTimeout(300); // the menu's 200 ms entry
+      const shop = await game.locator("body").evaluate(() => {
+        const box = el => { const r = el.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom }; };
+        const buy = document.querySelector("[data-testid=buy-pack]"), vitrine = document.querySelector("[data-testid=display-case]"), body = buy?.closest(".rf-frame-menu-body");
+        if (!buy || !vitrine || !body) return { missing: { buy: Boolean(buy), vitrine: Boolean(vitrine), body: Boolean(body) } };
+        const b = box(buy), top = document.elementFromPoint((b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2);
+        const balls = [...vitrine.querySelectorAll(".pk-vball")].map(item => ({ name: item.querySelector("strong")?.textContent.trim(), odds: item.querySelector(".pk-vodds")?.textContent.trim(), value: item.querySelector("small")?.textContent.trim(), art: Boolean(item.querySelector("canvas")?.checkVisibility()) }));
+        return { buy: b, text: buy.textContent, body: box(body), scrolled: body.scrollTop, covered: !(top && buy.contains(top)) && `${top?.tagName}.${top?.className}`,
+          before: Boolean(vitrine.compareDocumentPosition(buy) & Node.DOCUMENT_POSITION_FOLLOWING), vitrine: box(vitrine), vitrineVisible: vitrine.checkVisibility({ visibilityProperty: true, opacityProperty: true }), balls };
+      });
+      assert.equal(shop.missing, undefined, `${label}: the Ball shop has no display case / Buy button ${JSON.stringify(shop.missing)}`);
+      assert.equal(shop.scrolled, 0, `${label}: the Ball shop opens scrolled`);
+      assert.ok(shop.before, `${label}: the display case comes before the Buy button`);
+      assert.ok(shop.vitrineVisible && shop.vitrine.y1 >= shop.body.y1 - 0.5 && shop.vitrine.y1 < shop.body.y2, `${label}: the display case is not visible at the top of the shop ${JSON.stringify(shop)}`);
+      assert.equal(shop.balls.length, 7, `${label}: seven balls in the display case`);
+      for (const ball of shop.balls) assert.ok(ball.art && ball.name && /^[\d.]+%$/.test(ball.odds) && /RF/.test(ball.value), `${label}: a display-case ball without art, name, odds or RF value ${JSON.stringify(ball)}`);
+      assert.match(shop.text, /^Buy pack · [\d,.]+ RF/, `${label}: the Buy button names its price in RF`);
+      const o = await origin(), bar = await toolbar(), buy = { x1: shop.buy.x1 + o.x, y1: shop.buy.y1 + o.y, x2: shop.buy.x2 + o.x, y2: shop.buy.y2 + o.y };
+      assert.ok(shop.buy.y1 >= shop.body.y1 - 0.5 && shop.buy.y2 <= shop.body.y2 + 0.5, `${label}: Buy pack is below the fold of the shop (button ${Math.round(shop.buy.y1)}-${Math.round(shop.buy.y2)}, visible body ${Math.round(shop.body.y1)}-${Math.round(shop.body.y2)})`);
+      assert.ok(buy.x1 >= -0.5 && buy.y1 >= -0.5 && buy.x2 <= width + 0.5 && buy.y2 <= height + 0.5, `${label}: Buy pack is off the page viewport ${JSON.stringify(buy)}`);
+      assert.ok(!hit(buy, bar), `${label}: Buy pack is under the SDK toolbar ${JSON.stringify({ buy, bar })}`);
+      assert.equal(shop.covered, false, `${label}: Buy pack is covered by ${shop.covered}`);
+      assert.ok(shop.buy.y2 - shop.buy.y1 >= MIN_TAP - 0.5 && shop.buy.x2 - shop.buy.x1 >= MIN_TAP - 0.5, `${label}: Buy pack is under ${MIN_TAP} px`);
+      assert.deepEqual(await tidy(".pk-shop", ".pk-vball, .pk-buybar"), [], `${label}: Ball shop text`);
+      await assertTargets(game, `${label} ball shop (display case)`);
+      console.log(`PASS shop ${label}: Buy pack ${Math.round(buy.y1)}-${Math.round(buy.y2)} of ${height} (display case first)`);
     },
   });
 }
