@@ -58,6 +58,7 @@
     "qa:90s": "node scripts/qa-90s.mjs && node scripts/qa-90s.mjs --width 360 && node scripts/qa-90s.mjs --motion && node scripts/qa-90s.mjs --width 360 --motion",
     "test:flow": "node scripts/test-flow.mjs && node scripts/test-flow.mjs --width 360",
     "test:overflow": "npm run build:site && node scripts/test-overflow.mjs",
+    "test:overflow:ci": "npm run build:site && node scripts/test-overflow.mjs --viewports 1280x800,949x634,844x390,390x844 --fonts normal,fallback --jobs 2",
     "test:practice": "npm run build:site && node scripts/test-practice.mjs",
     "test:landing": "npm run build:site && node scripts/test-landing.mjs",
     "shot:c4": "node scripts/shot-c4.mjs"

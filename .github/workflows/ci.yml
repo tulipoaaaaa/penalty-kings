@@ -82,6 +82,28 @@ jobs:
         with:
           name: screenshots
           path: artifacts/
+  overflow:
+    # Text overflow / clipping / overlap / tap-size sweep of every game screen and the site pages (scripts/test-overflow.mjs),
+    # CI-sized: 1280x800, 949x634, 844x390, 390x844, web fonts and fallback font, realistic longest strings on. Its own job so
+    # it runs next to `checks`. The full 9-viewport sweep is `npm run test:overflow` (local).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Overflow sweep (no text escapes, clips, overlaps or taps under 44 px; 4 viewports x 2 fonts)
+        run: npm run test:overflow:ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: overflow-report
+          path: artifacts/overflow/
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 30
