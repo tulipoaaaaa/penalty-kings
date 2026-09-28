@@ -49,6 +49,7 @@ export async function buildPractice(outdir, { mainGame = "../" } = {}) {
   <div class="pp-side">
     <ol class="pp-results" id="pp-results" aria-label="Your five kicks">${results}</ol>
     <p class="pp-status" id="pp-status" role="status" aria-live="polite"></p>
+    <p class="pp-tip" id="pp-tip" data-testid="practice-tip" aria-live="polite" hidden></p>
     <div class="pp-controls"><button type="button" class="pp-btn" id="pp-quick" data-testid="quick" disabled>Quick shot</button></div>
     <p class="pp-keys">Swipe up from the ball: direction aims, length aims higher, speed is pace, a bend curls it. Keys: arrows aim, A / D curl, hold Space to charge.</p>
   </div>
