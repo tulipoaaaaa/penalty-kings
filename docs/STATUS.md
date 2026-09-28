@@ -1,6 +1,6 @@
 # Status: live, simulated, roadmap
 
-Last updated on 2026-09-27. Each "live" line is checked on-chain or in CI.
+Last updated on 2026-09-28 (branch head `d51e550`, CI run 143 green).  Each "live" line is checked on-chain or in CI.
 
 ## Live on-chain (Robinhood mainnet, chain 4663)
 
@@ -21,8 +21,16 @@ That is the only transaction. **No game contract, $GBOOT token, pool or vault is
 
 - The RF balance: 20 RF, the SDK preview default.
 - Packs, reveals, the Bag and redemptions.
-- $GBOOT drops, Cup pots, race tables and rivals.
+- $GBOOT drops, Cup pots, the "last week" winners ticker, race tables and rivals (a simulated rival buys a Pro ball every 15 s so the pot visibly ticks).
+- Champions Night's doubled race points (live Cup weights never double).
 - The random beacon's wait. The preview uses 0 s; the Showroom can simulate 0, 5 or 15 s.
+
+## What shipped in the judged build
+
+- **Modes:** tutorial, Penalties (12-keeper ladder), Free Kicks, Target Practice, World Tour (30 levels), Daily Challenge; the optional Big Match.
+- **Big Match and meta:** Ball shop with a display case and exact odds, packs of 1/2/5/10, pack reveal with true totals, the Bag, redemptions, Cups (Golden Boot Cup pot, draw countdown, winners ticker), Champions Night (Saturday 19:00–21:00 UTC), Kit shop (cosmetics), the Scouting Book sticker album.
+- **Retention (XP and cosmetics only):** NEXT GOAL, Keeper of the Week (double XP), the Daily "Day N" streak, share cards and challenge codes.
+- **Game feel, sound and atmosphere:** hit-stop, net bulge, near-miss moments, streak fever at 3/5/10, the sound pass (voiced SFX, crowd hush and roar, master limiter), weather, floodlight pool and crowd band, UI press/entry animations, count-up Results. All with reduced-motion equivalents.
 
 ## Free, with no wallet
 
@@ -42,4 +50,16 @@ That is the only transaction. **No game contract, $GBOOT token, pool or vault is
 
 - Every push runs the full CI ([ci.yml](../.github/workflows/ci.yml)).
 - The public preview redeploys only after a fully green run.
-- `judging-stable-1` = `18b4bc8` (tagged). Later work (from `135c2db`) goes into `judging-stable-2` at the freeze ([RELEASES](RELEASES.md)).
+- Latest branch head `d51e550`: CI run 143 green, mainnet-fork rehearsal run 101 green.
+- Local counts on `d51e550`: game-logic 206, engine 54, Match Director 27, referee 15, weekly Cup 9, Foundry 206 offline (plus the `Fork` suites in CI).
+- Browser suites in CI: `test:smoke`, `test:practice`, `test:landing`, `test:game`, `test:phone`, `test:modes`, `test:skillzones`, `qa:90s`, `test:flow`, `test:real-gate`, and `test:overflow:ci` (its own job).
+- `judging-stable-1` = `18b4bc8` (tagged). Later work (from `135c2db`) goes into `judging-stable-2` at the freeze, Sep 29 ([RELEASES](RELEASES.md)).
+
+## Open items for the founder
+
+- **Freeze (Sep 29 10:00–12:00 UTC):** create the `judging-stable-2` tag on the frozen commit; the submission links already point at it.
+- **Media re-record after the freeze fixes:** the judge-path video and its frames (the README now shows `judge-pack-summary.png`, written by `npm run record:judge`), and the money shot cropped to the game frame (no SDK harness chips).
+- **Paste by hand:** `submission/README.md` and `submission/PR.md` into the vibeathon fork.
+- **Human checks:** a real-wallet playthrough on a phone ([HUMAN-CHECKS](HUMAN-CHECKS.md)), and a legal review before any live promotion of paid chance ([LEGAL](LEGAL.md)).
+- **Design decision to confirm:** the pre-kick keeper tell is hidden in beacon mode ([RNG-INTEGRATION](RNG-INTEGRATION.md)).
+- **Ask of the SDK v0.2.1 host:** ≥ 11 px toolbar text on phones, a bigger preview wallet option ([HANDOFF-RF](HANDOFF-RF.md)).

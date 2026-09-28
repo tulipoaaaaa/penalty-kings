@@ -20,9 +20,9 @@ Every launch step runs in CI against an anvil fork of Robinhood mainnet, using a
 created at runtime and funded **on the fork only**
 ([`.github/workflows/rehearsal.yml`](../.github/workflows/rehearsal.yml)):
 
-| Step | Script | Result (run 1, 2026-09-27) |
+| Step | Script | Result |
 |---|---|---|
-| $GBOOT + KitShop + LiquidityLock + PoolSwapper; pool init; position A (600M $GBOOT) and floor position B (250k RF) minted straight into the lock; 1,000 RF buy + 10% sell-back | `contracts/script/Launch.s.sol` | passed ([run](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36296904970)) |
+| Tokenomics v2 launch: 100M $GBOOT; KitShop, LiquidityLock, PoolSwapper, SkillCup, Wildcards, Bootroom, FriendsAirdrop, EdgeSplitter, GBootFixedPrice, RewardsDistributor and the drop / Cups / rewards EmissionVaults; 45M $GBOOT allocated (20M drops, 10M Cups, 5M rewards, 10M Friends airdrop); a **plain** $GBOOT/RF pool (1% LP fee, no hook) initialised; position A (**55M $GBOOT**, single-sided) and floor position B (250k RF) minted straight into the lock; 1,000 RF buy + 10% sell-back | `contracts/script/Launch.s.sol` | passed on the current script: [run 101](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36413300342) on `d51e550` (2026-09-28). The first run ([run 1](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36296904970), 2026-09-27) rehearsed the earlier 1B-supply script with a 600M position A |
 | Park ChanceGame via the SDK's own `deployGame` / `fundDeployment`, 20k RF stake; price, max prize and free stake verified | `scripts/onchain/stadium.mjs park 20000` | passed: deploy 4,405,603 gas · approve 46,390 · fund 210,340 |
 | Lock semantics on real PositionManager (collect fees only; early withdraw reverts; withdraw after 180 days) | `contracts/test/Fork.t.sol` | passed ([CI](https://github.com/tulipoaaaaa/penalty-kings/actions/runs/36296746654)) |
 
