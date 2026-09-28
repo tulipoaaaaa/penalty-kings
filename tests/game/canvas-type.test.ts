@@ -59,9 +59,8 @@ test("wait overlays (THE KEEPER IS DECIDING…, the sealed pack) draw their bold
 
 test("no canvas text in gfx/ is set in bold Pixelify (the reveal banner, the walkout name plate, the chant ribbon…)", () => {
   // friend.ts's dashed "?" is the Friend's loading silhouette (no C in it, and the Friend's file stays untouched).
-  // sharecard.ts is the 960-px share PNG, not the Stage: its bold lines are mixed case at 18–54 px (owner's call).
   const rest: string[] = [];
-  for (const name of readdirSync(GFX).filter(n => n.endsWith(".ts") && n !== "friend.ts" && n !== "sharecard.ts")) {
+  for (const name of readdirSync(GFX).filter(n => n.endsWith(".ts") && n !== "friend.ts")) {
     readFileSync(join(GFX, name), "utf8").split("\n").forEach((line, i) => {
       for (const m of line.matchAll(/font\s*=\s*([`"][^`"]*[`"])/g)) if (/bold|[6-9]00 /.test(m[1]) && m[1].includes("PixelifySans")) rest.push(`${name}:${i + 1}`);
     });
