@@ -50,6 +50,9 @@ const IGNORE = [
   { check: "clipped", selector: "canvas", why: "canvas" },
   // The textarea save code / challenge input scroll natively.
   { check: "*", selector: "#pk-overflow-mark", why: "the checker's own outline" },
+  // FriendSDK host chrome on the site pages (the "Choose Friend" toolbar and the runtime's "Check for wallet" panel):
+  // 36 px buttons rendered and styled by @rarefriends/friendsdk, not by this game; out of scope for our CSS.
+  { check: "small-tap", selector: ".rf-frame-toolbar, .rf-runtime-connection", why: "FriendSDK chrome (the SDK's own 36 px buttons)" },
 ];
 
 /** Realistic longest values (game/nextgoal.ts, engine keeper names, big balances, Big Match sudden death). */
