@@ -44,6 +44,7 @@ contract PoolSwapper {
         uint256 received = uint256(uint128(zeroForOne ? amount1 : amount0));
         if (received < minOut) revert TooLittleReceived(received, minOut);
         poolManager.sync(input);
+        // payer is always swapExactIn's msg.sender: only the PoolManager calls this, and it calls back only the unlock() caller (this contract) with the data swapExactIn encoded.
         IERC20(input).safeTransferFrom(payer, address(poolManager), owed);
         poolManager.settle();
         poolManager.take(output, payer, received);

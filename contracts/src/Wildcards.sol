@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.36;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IGBootPriceFeed, ISinkLedger } from "./interfaces/IGBootPriceFeed.sol";
 
 interface IWildcardGenerations {
@@ -30,6 +32,8 @@ interface IWildcardEntropy {
 /// no RF payout, so Wildcards are always a dearer route to race points than balls (docs/ECONOMY.md,
 /// "Wildcard farm check"). Burns are recorded per week (sink ledger).
 contract Wildcards is ISinkLedger {
+    using SafeERC20 for IERC20;
+
     uint256 public constant PRICE_RF = 10e18;
     uint32 public constant CALLBACK_GAS_LIMIT = 200_000;
 
@@ -103,9 +107,9 @@ contract Wildcards is ISinkLedger {
         drawOf[drawId].friendId = friendId;
         uint256 burned = cost / 2;
         burnedInWeek[week()] += burned;
-        gboot.transferFrom(msg.sender, address(this), cost);
+        IERC20(address(gboot)).safeTransferFrom(msg.sender, address(this), cost);
         gboot.burn(burned);
-        gboot.transfer(pot, cost - burned);
+        IERC20(address(gboot)).safeTransfer(pot, cost - burned);
         uint64 sequenceNumber = entropy.requestV2{ value: fee }(
             provider, keccak256(abi.encode(address(this), block.chainid, drawId)), CALLBACK_GAS_LIMIT
         );

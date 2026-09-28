@@ -50,7 +50,7 @@ contract EdgeSplitter {
         uint256 swapRf = (total * BUYBACK_BPS) / 10_000;
         uint256 toCup = total - burnRf - swapRf;
         IBurn(address(rf)).burn(burnRf);
-        uint256 bought;
+        uint256 bought = 0; // stays 0 when the dust buyback share skips the swap
         if (swapRf != 0) { // total >= 4 wei; below that the buyback share is 0 and the swap is skipped
             rf.forceApprove(address(swapper), swapRf);
             bought = swapper.swapExactIn(key, key.currency0 == address(rf), uint128(swapRf), uint128(minGbootOut));

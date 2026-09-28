@@ -126,7 +126,7 @@ contract Bootroom {
 
     /// @dev log2 of a 1e18 fixed-point number ≥ 1e18, result in 1e18 fixed point (≈1e-9 precision).
     function log2Wad(uint256 x) public pure returns (uint256 result) {
-        uint256 n;
+        uint256 n = 0; // integer part of log2(x / 1e18); stays 0 for x in [1e18, 2e18)
         uint256 y = x / 1e18;
         while (y >= 2) { y >>= 1; n++; }
         result = n * 1e18;

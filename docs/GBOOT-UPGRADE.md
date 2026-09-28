@@ -22,7 +22,7 @@
 | `BallVault.sol` | Tradeable "Vault Balls" backed 1:1 by RF; a free-price escrow market; enforced edition scarcity |
 | `script/Launch.s.sol` | The whole launch wiring (the ONE default: plain pool, 1% LP fee, no hook, `LiquidityLock` and `EdgeSplitter` paying the Cup pot `CUP_POT`), rehearsed on a mainnet fork in CI |
 
-**Tests:** 201 Foundry unit/fuzz/invariant tests (`cd contracts && forge test --no-match-contract Fork`, offline) plus 7 mainnet-fork tests (`forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
+**Tests:** 206 Foundry unit/fuzz/invariant tests (`cd contracts && forge test --no-match-contract Fork`, offline) plus 7 mainnet-fork tests (`forge test --match-contract Fork --fork-url $ROBINHOOD_RPC_URL`). The full maths is in [ECONOMY.md](ECONOMY.md), the scarcity rules in [SCARCITY.md](SCARCITY.md), and the legal risks (not legal advice) in [LEGAL.md](LEGAL.md).
 
 ## Recorded defaults (owner-approved design)
 
@@ -40,7 +40,7 @@
 
 ## Reviving the upgrade later (checklist)
 
-1. An external audit of `GBootFeeHook` + `GBootPriceFeed` (or launch without them, per the default above).
+1. An external audit of `GBootFeeHook` + `GBootPriceFeed` (or launch without them, per the default above). The auditor's starting pack (contracts, trust assumptions, privileged roles, Slither triage, test inventory, open questions) is [AUDIT-PREP.md](AUDIT-PREP.md).
 2. For the no-hook default, the fixed-$GBOOT-price mode is `GBootFixedPrice` (done: `Launch.s.sol` wires it into `KitShop`, `SkillCup`, `Wildcards` and `RewardsDistributor`).
 3. Add the season-0 bootstrap constant and its test.
 4. Rehearse `Launch.s.sol` on a fork (`.github/workflows/rehearsal.yml`), then do a legal review (`HUMAN-CHECKS.md`).
