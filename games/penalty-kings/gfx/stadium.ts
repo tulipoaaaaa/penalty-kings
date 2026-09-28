@@ -2,7 +2,7 @@
  * Stadium backdrops (Park / Pro / Champions), weather, pitch and goal frame.
  * Static layers are painted once into cached canvases; animated details are drawn per frame.
  */
-import { W, H, hash01, pixelStar, type Particles } from "./core.js";
+import { W, H, hash01, pixelStar, plainText, type Particles } from "./core.js";
 import { vignetteParams, renderLayer, paintPixels } from "./atmosphere.js";
 
 export type StadiumId = "park" | "pro" | "champions";
@@ -77,7 +77,7 @@ export const CROWD_HOLES: Readonly<Record<StadiumId, readonly Rect[]>> = { park:
 const cache = new Map<string, HTMLCanvasElement>();
 function layer(key: string, paint: (c: CanvasRenderingContext2D) => void, width = LAYER_W, height = H) {
   let canvas = cache.get(key);
-  if (!canvas) { canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height; const c = canvas.getContext("2d")!; c.imageSmoothingEnabled = false; paint(c); cache.set(key, canvas); }
+  if (!canvas) { canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height; const c = plainText(canvas.getContext("2d")!); c.imageSmoothingEnabled = false; paint(c); cache.set(key, canvas); }
   return canvas;
 }
 

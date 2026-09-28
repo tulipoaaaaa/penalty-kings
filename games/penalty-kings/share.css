@@ -1,4 +1,6 @@
 /* C4 social UI (share.tsx). Every text >= 11 CSS px, every tap target >= 44 px; no animation (nothing to reduce). */
+/* Pixelify's fi/fl ligature reads as an "A": off here too (style.css covers .pk; explicit for any other host). */
+.pk-social, .pk-social *, .pk-sharecard, .pk-sharecard * { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "clig" 0 !important; }
 .pk-social { display: grid; gap: 6px; margin-top: 8px; }
 .pk-social p { margin: 0; }
 .pk-comeback { font-size: max(11px, 0.9em); color: var(--pk-gold, #ffd23f); }

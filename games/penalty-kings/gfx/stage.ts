@@ -4,7 +4,7 @@
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
 import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
-import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont } from "./core.js";
+import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont, plainText } from "./core.js";
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, glyphCols, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { atmosphereParams, drawAtmosphere, type Atmosphere } from "./atmosphere.js";
@@ -542,6 +542,7 @@ export class Stage {
 
   // ── Render ────────────────────────────────────────────────────────────────
   render(c: CanvasRenderingContext2D) {
+    plainText(c); // no Pixelify fi/fl ligatures ("Arst go"): see core.ts
     c.save();
     c.imageSmoothingEnabled = false;
     c.fillStyle = "#0b0d1a"; c.fillRect(0, 0, W, H);

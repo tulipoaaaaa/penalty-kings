@@ -113,6 +113,65 @@ await testGame("./games/penalty-kings", {
       for (const font of fonts.slice(0, 4)) assert.ok(diff[font] >= 0.2, `C and O differ in ${font}: ${(diff[font] * 100).toFixed(0)} % of their pixels`);
       console.log(`C vs O pixel difference: ${Object.entries(diff).map(([f, d]) => `${f.split(",")[0]} ${(d * 100).toFixed(0)}%`).join(" · ")}`);
     }
+    // Polish P1: Pixelify's fi/fl ligature draws an "A" ("Friend's Arst go", "Photographers' Aashes"). The DOM turns
+    // ligatures off on .pk; the game canvas (its own context, as the Stage patched it) inserts a zero-width non-joiner.
+    // Both must render "fi fl first flashes" pixel-for-pixel like the same text with the ligatures broken by hand.
+    {
+      const LIG = "fi fl first flashes", BROKEN = LIG.replace(/f(?=[fil])/g, "f‌");
+      assert.equal(await game.locator(".pk").first().evaluate(n => getComputedStyle(n).fontVariantLigatures), "none", ".pk: font-variant-ligatures none");
+      const shorthand = await game.locator(".pk button, .pk h1, .pk h2, .pk p").evaluateAll(nodes => nodes.map(n => getComputedStyle(n).fontVariantLigatures).filter(v => v !== "none").length);
+      assert.equal(shorthand, 0, "no .pk descendant turns ligatures back on (a font shorthand resets them)");
+      // DOM: two spans in the game's own font (inside .pk), one plain and one broken by hand, screenshot-compared
+      // (kerning off in both: a non-joiner also breaks the f-i kerning pair, which is not what this checks).
+      await game.locator(".pk").first().evaluate(async (root, [plain, broken]) => {
+        await document.fonts.load("16px PixelifySans", plain);
+        for (const [id, text] of [["pk-lig-a", plain], ["pk-lig-b", broken]]) {
+          const span = document.createElement("span"); span.id = id; span.textContent = text;
+          Object.assign(span.style, { position: "absolute", left: "0", top: id.endsWith("a") ? "0" : "30px", zIndex: 99999, font: "16px PixelifySans, monospace", fontKerning: "none", color: "#fff", background: "#000", padding: "2px", whiteSpace: "pre" });
+          root.append(span);
+        }
+      }, [LIG, BROKEN]);
+      const [shotA, shotB] = [await game.locator("#pk-lig-a").screenshot(), await game.locator("#pk-lig-b").screenshot()];
+      const widths = await game.locator("#pk-lig-a, #pk-lig-b").evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().width));
+      await game.locator("#pk-lig-a, #pk-lig-b").evaluateAll(nodes => nodes.forEach(n => n.remove()));
+      assert.equal(widths[0], widths[1], `DOM "${LIG}" is as wide as with the ligatures broken (${widths.join(" vs ")})`);
+      assert.ok(shotA.equals(shotB), `DOM "${LIG}" renders exactly like "f\\u200ci" (no ligature glyph)`);
+      // Canvas: the game's actual font strings, drawn on the game's own context (restored before the next frame).
+      const face = readFileSync(new URL("../games/penalty-kings/gfx/core.ts", import.meta.url), "utf8").match(/export const HEAD_FACE = "([^"]+)"/)?.[1];
+      const fonts = ["8px PixelifySans, monospace", "11px PixelifySans, monospace", "22px PixelifySans, monospace", `16px ${face}`];
+      const result = await game.locator("canvas.pk-canvas").evaluate(async (canvas, [plain, broken, fonts]) => {
+        for (const font of fonts) await document.fonts.load(font, plain);
+        const mask = (c, font, text, kerning = "auto") => {
+          c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = "source-over"; c.textAlign = "left"; c.textBaseline = "alphabetic";
+          c.fillStyle = "#000"; c.fillRect(0, 0, 320, 40); c.fillStyle = "#fff"; c.font = font; c.fontKerning = kerning; c.fillText(text, 4, 30);
+          const data = c.getImageData(0, 0, 320, 40).data; c.restore();
+          let bits = ""; for (let i = 0; i < data.length; i += 4) bits += data[i] > 127 ? "1" : "0";
+          return bits;
+        };
+        const fresh = () => { const k = document.createElement("canvas"); k.width = 320; k.height = 40; return k.getContext("2d"); };
+        const out = [];
+        for (const font of fonts) {
+          const game = mask(canvas.getContext("2d"), font, plain), reference = mask(fresh(), font, broken), raw = mask(fresh(), font, plain);
+          // Letter by letter (no shaping at all) for the bare pairs: "fi" and "fl" must be an f and an i / l (kerning off
+          // on the game context for this one: an f-l kerning pair survives the non-joiner, and kerning is not the bug).
+          const letters = pair => {
+            const k = fresh(); k.fillStyle = "#000"; k.fillRect(0, 0, 320, 40); k.fillStyle = "#fff"; k.font = font;
+            k.fillText(pair[0], 4, 30); k.fillText(pair[1], 4 + k.measureText(pair[0]).width, 30);
+            const d = k.getImageData(0, 0, 320, 40).data; let b = ""; for (let i = 0; i < d.length; i += 4) b += d[i] > 127 ? "1" : "0";
+            return b;
+          };
+          const pairs = ["fi", "fl"].map(pair => mask(canvas.getContext("2d"), font, pair, "none") === letters(pair));
+          out.push({ font, matches: game === reference, ligatureInBrowser: raw !== reference, pairs, lit: game.split("1").length - 1 });
+        }
+        return out;
+      }, [LIG, BROKEN, fonts]);
+      for (const r of result) {
+        assert.ok(r.lit > 20, `canvas text drew in ${r.font}`);
+        assert.ok(r.matches, `canvas "${LIG}" in ${r.font} matches the text with the ligatures broken by hand`);
+        assert.deepEqual(r.pairs, [true, true], `canvas "fi" / "fl" in ${r.font} match "f" + "i" / "l" drawn letter by letter`);
+      }
+      console.log(`fi/fl ligatures: DOM off (${widths[0]} px), canvas ${result.map(r => `${r.font.split(",")[0]} ok${r.ligatureInBrowser ? " (browser would ligate)" : ""}`).join(" · ")}`);
+    }
     // Title → modes → Penalties (first time = tutorial).
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     await game.getByTestId("pot").waitFor();

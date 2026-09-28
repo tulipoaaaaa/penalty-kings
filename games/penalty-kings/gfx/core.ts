@@ -35,6 +35,31 @@ export function loadHeadFont() {
     fonts?.load(headFont(16), "CLANG!").catch(() => undefined);
   } catch { /* no FontFaceSet */ }
 }
+/**
+ * Pixelify Sans turns "fi", "fl" and "ff" into a ligature glyph that reads as an "A" ("Friend's Arst go",
+ * "Photographers' Aashes"). Canvas has no font-variant-ligatures in WebKit, so a zero-width non-joiner goes
+ * between the f and the next letter: it has no width and no glyph, and it stops the ligature in every engine.
+ */
+export const noLig = (text: string) => (text.includes("f") ? text.replace(/f(?=[fil])/g, "f‌") : text);
+type TextContext = CanvasRenderingContext2D & { textRendering?: string; __pkNoLig?: true };
+/**
+ * Every canvas that draws text goes through this once: `textRendering = "optimizeSpeed"` where supported
+ * (Chromium: no ligatures) and fillText / strokeText / measureText wrapped with noLig everywhere else too,
+ * so no call site can forget it. Idempotent and cheap: the Stage calls it every frame, because resizing a
+ * canvas resets textRendering with the rest of the context state.
+ */
+export function plainText<C extends CanvasRenderingContext2D>(context: C): C {
+  const c = context as TextContext;
+  if ("textRendering" in c && c.textRendering !== "optimizeSpeed") c.textRendering = "optimizeSpeed";
+  if (c.__pkNoLig) return context;
+  c.__pkNoLig = true;
+  // (Test fakes may lack a method: wrap only what exists.)
+  const fill = c.fillText?.bind(c), stroke = c.strokeText?.bind(c), measure = c.measureText?.bind(c);
+  if (fill) c.fillText = (text: string, x: number, y: number, maxWidth?: number) => (maxWidth === undefined ? fill(noLig(String(text)), x, y) : fill(noLig(String(text)), x, y, maxWidth));
+  if (stroke) c.strokeText = (text: string, x: number, y: number, maxWidth?: number) => (maxWidth === undefined ? stroke(noLig(String(text)), x, y) : stroke(noLig(String(text)), x, y, maxWidth));
+  if (measure) c.measureText = (text: string) => measure(noLig(String(text)));
+  return context;
+}
 export const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** Progress of `t` through a window [start, start + duration], eased. */
