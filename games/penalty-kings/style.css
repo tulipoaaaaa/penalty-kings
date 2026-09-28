@@ -44,13 +44,19 @@
 .pk-hud-right { right: 1.2cqw; align-items: flex-end; top: 11cqh; }
 .pk-stat, .pk-chip { background: #0b0d1ad9; border: 2px solid #ffffff2e; padding: 0.3em 0.6em; white-space: nowrap; }
 .pk-stat b { color: var(--pk-volt); }
+/* The HUD stats wrap at every frame size, not only on phones: in the 26cqw column a nowrap stat was truncated
+   ("Unopened 0" in Big Match) or ran past the frame edge ("kick 3/3 · ← 2.0 m/s", "SUDDEN DEATH · kick 17 · 12 in a row")
+   in the fallback font. */
+.pk-hud .pk-stat { white-space: normal; overflow-wrap: anywhere; }
+.pk-hud-right .pk-stat { text-align: right; }
 .pk-chip { font-weight: 700; letter-spacing: 0.06em; }
-/* Shot clock bar (round 6 C14): drains from full to empty; red in the last 1.5 s. */
-.pk-clockbar { position: relative; width: 100%; min-width: 72px; height: 1.3em; background: #0b0d1ad9; border: 2px solid #ffffff2e; box-sizing: border-box; }
+/* Shot clock bar (round 6 C14): drains from full to empty; red in the last 1.5 s. Its height follows the label (a fixed
+   1.3em at the 11 px HUD font cut "Shot clock" to 10 of its 13 px on landscape phones). */
+.pk-clockbar { position: relative; width: 100%; min-width: 72px; height: auto; min-height: 1.3em; background: #0b0d1ad9; border: 2px solid #ffffff2e; box-sizing: border-box; }
 .pk-clockbar[hidden] { display: none; }
 .pk-clockbar i { position: absolute; inset: 0; background: var(--pk-volt); transform-origin: left center; transform: scaleX(var(--left, 1)); }
 .pk-clockbar[data-urgent="true"] i { background: var(--pk-red); }
-.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: max(11px, 0.85em); line-height: 1.2em; color: #fff; text-shadow: 1px 1px 0 #000; }
+.pk-clockbar span { position: relative; z-index: 1; display: block; padding: 0 0.4em; font-size: max(11px, 0.85em); line-height: 1.2; color: #fff; text-shadow: 1px 1px 0 #000; }
 .pk-sim { background: var(--pk-gold); color: var(--pk-ink); border-color: var(--pk-gold); }
 .pk-live { background: var(--pk-red); color: #fff; border-color: var(--pk-red); }
 
@@ -100,6 +106,9 @@
 @keyframes pk-unlock-back { 0%, 55% { transform: rotateY(180deg); } 100% { transform: rotateY(0); } }
 /* The in-game "Reduce motion" setting: the same still layout as prefers-reduced-motion below. */
 .pk-reduce-motion .pk-discover { animation: none; }
+/* The ball carousel (a dialog, z-index 3) already paints over the toast; while it is open the toast is hidden outright,
+   so its text never sits under the ‹ › arrows (portrait phones: "NEW: Rain rolls in!" under ‹). */
+.pk-stage:has(.pk-carousel) .pk-discover { visibility: hidden; }
 .pk-reduce-motion .pk-unlock-flip { height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; perspective: none; }
 .pk-reduce-motion .pk-unlock-front, .pk-reduce-motion .pk-unlock-back { position: static; animation: none; transform: none; }
 .pk-discovery { margin: 0 0 8px; padding: 5px 8px; background: var(--pk-card, #1b1f3a); border: 2px solid var(--pk-line, #444); font-weight: bold; }
@@ -662,8 +671,9 @@
     width: max-content; max-width: calc(100cqw - 12px); max-height: calc(var(--pk-pt) + 140 * var(--pk-s) - max(64px, calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s))));
     font-size: 11px; line-height: 1.2; padding: 0.3em 0.6em; text-align: center; overflow: hidden; box-shadow: 2px 2px 0 #000; }
   .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
-  /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
-  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
+  /* Discovery toast: in the left letterbox bar, under the Friend-art status line (the coaching toast has the sky, the
+     right bar holds the kick chip and the action column: at 667x375 a two-line toast there ran into "Change ball"). */
+  .pk-discover { left: 6px; right: auto; top: calc(var(--pk-pt) + 146 * var(--pk-s) + 40px); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
   /* Polish: a one-line headline in the sky right under the commentator strip (logical top --pk-cmt, 22 px + rule),
      sub line under it, all above the crossbar and clear of the Friend at the payoff. The Stage's CLANG!/fever chip
      belongs below this band (logical y > ~150) or not under it. */
@@ -978,3 +988,16 @@
 @container (max-height: 519px) {
   .pk .rf-frame-menu-body .pk-book-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
+/* ── Tap targets >= 44 CSS px in the game (overflow sweep, small-tap): menu buttons were 40 px (34 px on narrow frames),
+   the menu close × 36/32 px, the Bag sort select 32 px, ball-card actions 34 px, the Settings toggles 40 px, the save-code
+   box 43 px, "Skip intro" 34 px and the HUD pot banner 32 px on portrait phones. Only minimum sizes grow; the pixel
+   borders, shadows and type stay. The close × keeps the header height: its extra size goes into the header padding. ── */
+.pk .rf-frame-menu-body button:not(.pk-link), .pk .rf-frame-menu-body .pk-ballactions button, .pk .rf-frame-menu-body select,
+.pk .rf-frame-menu-body .pk-settings > label, .pk .rf-frame-menu-body .pk-save textarea { min-height: 44px; }
+.pk .rf-frame-menu-heading button { width: 44px; height: 44px; margin: -4px 0; }
+@container (max-width: 560px) { .pk .rf-frame-menu-heading button { width: 44px; height: 44px; margin: -2px 0; } }
+.pk .pk-skip { min-height: 44px; }
+.pk .pk-pot { min-height: 44px; align-content: center; }
+/* Text-link buttons (.pk-link: "See odds", "Open the Scouting Book", "Full odds ›") keep their inline look: a 44 px tall
+   hit area, centred on the text, with negative margins that give the extra height back, so the line does not move. */
+.pk button.pk-link { min-height: 44px !important; padding: 0 4px !important; margin: calc((1lh - 44px) / 2) -4px; }
