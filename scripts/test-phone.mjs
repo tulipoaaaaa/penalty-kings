@@ -148,6 +148,41 @@ async function toastShort(game, where, seen) {
   return m.text;
 }
 
+/** Polish (owner report, 949x634): the NEXT GOAL / Keeper of the Week / Results NEXT GOAL buttons grow with their
+ *  text. With the longest realistic goal text swapped in (then restored), in Pixelify and in the fallback monospace,
+ *  nothing scrolls inside the button and every line of text lies inside its border. Returns the selectors checked. */
+const LONG_TEXT = {
+  "[data-testid=next-goal]": "<b>NEXT GOAL</b> Beat Nibbles the Squirrel (3 goals in a round) for Scouting Book stamp 3/12 ▸",
+  "[data-testid=weekly-keeper]": "KEEPER OF THE WEEK: Octavia the Octopus Goalkeeper. Score 3 in a round for ×2 XP ▸",
+  "[data-testid=results-next-goal]": "<b>NEXT GOAL</b> Beat Nibbles the Squirrel (3 goals in a round) for Scouting Book stamp 3/12 ▸",
+};
+async function goalFits(game, where, selectors) {
+  const result = await game.locator("body").evaluate((_, entries) => {
+    const bad = [], seen = [];
+    for (const [selector, html] of entries) {
+      const node = document.querySelector(selector);
+      if (!node || !node.checkVisibility()) continue;
+      seen.push(selector);
+      const original = node.innerHTML, font = node.style.fontFamily;
+      node.innerHTML = html;
+      for (const family of ["", "ui-monospace, monospace"]) {
+        node.style.fontFamily = family;
+        const r = node.getBoundingClientRect(), s = getComputedStyle(node), bl = parseFloat(s.borderLeftWidth), bt = parseFloat(s.borderTopWidth);
+        const inner = { x1: r.left + bl - 0.5, y1: r.top + bt - 0.5, x2: r.right - bl + 0.5, y2: r.bottom - bt + 0.5 };
+        const range = document.createRange(); range.selectNodeContents(node);
+        const out = [...range.getClientRects()].filter(q => q.width > 0 && (q.left < inner.x1 || q.right > inner.x2 || q.top < inner.y1 || q.bottom > inner.y2));
+        const label = `${selector} (${family || "game font"})`;
+        if (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1) bad.push(`${label}: its text scrolls inside it ${JSON.stringify({ sh: node.scrollHeight, ch: node.clientHeight, sw: node.scrollWidth, cw: node.clientWidth })}`);
+        if (out.length) bad.push(`${label}: a text line lies outside its border ${JSON.stringify({ button: [r.left, r.top, r.right, r.bottom].map(Math.round), line: [out[0].left, out[0].top, out[0].right, out[0].bottom].map(Math.round) })}`);
+      }
+      node.style.fontFamily = font; node.innerHTML = original;
+    }
+    return { bad, seen };
+  }, selectors.map(selector => [selector, LONG_TEXT[selector]]));
+  assert.deepEqual(result.bad, [], `${where}: a NEXT GOAL / Keeper of the Week button overflows`);
+  return result.seen;
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -346,6 +381,7 @@ for (const [width, height] of SIZES) {
       }
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await fonts("results");
+      for (const selector of await goalFits(game, `${label} results`, ["[data-testid=results-next-goal]"])) checked.push(`fits:${selector}`);
       await targets("results");
       // (Closing Results goes to the Modes screen, QA-8; Play again keeps a session on the pitch for the menu hub.)
       await press(game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }));
@@ -362,6 +398,7 @@ for (const [width, height] of SIZES) {
       await press(game.getByTestId("menu"));
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await fonts("mode select");
+      for (const selector of await goalFits(game, `${label} modes`, ["[data-testid=next-goal]", "[data-testid=weekly-keeper]"])) checked.push(`fits:${selector}`);
       // Polish (C3c/C4 regression): on landscape phones the six mode cards are wholly on screen without scrolling
       // (above the SDK toolbar, nothing covering them) and NEXT GOAL is visible too, with the pot, Day badge,
       // Keeper of the Week and the check-in note all on the Modes screen.
@@ -434,7 +471,7 @@ for (const [width, height] of SIZES) {
 // BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
 // in the cold open and on the attract card after "Skip intro". BQ-P1-10: and every tap target in Results, the menu
 // hub, Settings, mode select and the Ball shop.
-const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[960, 640], [1280, 800]];
+const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[949, 634], [960, 640], [1280, 800]];
 for (const [width, height] of DESKTOP) {
   const label = `${width}x${height}`, sizes = [];
   await testGame("./games/penalty-kings", {
@@ -469,6 +506,7 @@ for (const [width, height] of DESKTOP) {
       assert.ok(toasts >= 1, `${label}: the tutorial coaching toast was checked against the Friend`); sizes.push(`toast clear of the Friend/ball/goal/strip x${toasts}`);
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await assertTargets(game, `${label} results`); sizes.push("results");
+      sizes.push(...(await goalFits(game, `${label} results`, ["[data-testid=results-next-goal]"])).map(selector => `fits ${selector}`));
       await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).click(); // (× goes to Modes, QA-8)
       await waitShootable();
       await game.getByTestId("menu").click();
@@ -480,6 +518,7 @@ for (const [width, height] of DESKTOP) {
       await game.getByTestId("menu").click();
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await assertTargets(game, `${label} mode select`); sizes.push("mode select");
+      sizes.push(...(await goalFits(game, `${label} modes`, ["[data-testid=next-goal]", "[data-testid=weekly-keeper]"])).map(selector => `fits ${selector}`));
       await game.getByTestId("ball-shop").click();
       await assertTargets(game, `${label} ball shop`); sizes.push("ball shop");
     },
