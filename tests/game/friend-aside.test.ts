@@ -4,19 +4,21 @@ import { KEEPERS, NEUTRAL, resolveShot, kickSeed, prng, freeKickSetup, type Shot
 import { GOAL, PENALTY_GOAL } from "../../games/penalty-kings/gfx/stadium.ts";
 import { applyGoal } from "../../games/penalty-kings/gfx/setpieces.ts";
 import { Stage, penaltyFlight } from "../../games/penalty-kings/gfx/stage.ts";
-import { PENALTY_VIEW, freeKickView, plantSpot, legFrame, STRIKE_AT, friendAside, FRIEND_FLIGHT_ALPHA, FRIEND_RESTORE_AFTER, FRIEND_HOLD_AFTER, type KickView } from "../../games/penalty-kings/gfx/kick.ts";
+import { PENALTY_VIEW, freeKickView, plantSpot, legFrame, STRIKE_AT, friendAside, handoverAfter, FRIEND_FLIGHT_ALPHA, HANDOVER_AFTER, type KickView } from "../../games/penalty-kings/gfx/kick.ts";
 
 // B11: after the strike the big foreground Friend fades to ~45 % and eases a few whole pixels aside for the ball's
 // flight (it hid the left third of the goal: the arrival and the keeper's save there). Polish: it stays faded and
-// aside through the payoff (the net ripple, the keeper's reaction) until 400 ms after the crossing, then eases back
-// over 250 ms: full opacity and its planted spot 650 ms after the crossing, before the goal celebration (+1.0 s).
-// The reaction beat (miss/save/post) still starts at +0.1 s; its pose plays under the fade. Layering only: the
-// sprite and kickPose are untouched.
+// aside through the whole payoff, while the DOM result banner (GOAL! / OFF THE POST!) is up: until the shot hands
+// over, when a goal's celebration pose starts (+1.0 s after the crossing) or a miss/save/post clears the banner
+// (+1.3 s). It was back opaque, centre-front over the keeper, at +0.65 s with the banner still up. Celebrations
+// draw it at full opacity from their first frame. The reaction beat (miss/save/post) still starts at +0.1 s; its
+// pose plays under the fade. Layering only: the sprite and kickPose are untouched.
 
 const VIEWS: Array<[string, KickView]> = [["penalty", PENALTY_VIEW], ["free kick 24 m", freeKickView(freeKickSetup(5, { distance: 24, angle: 0.2, wallSize: 4 }))]];
 /** Penalty flights span 0.35–0.55 s; free kicks fly on the engine's clock (≈ 0.6–1.6 s). */
 const FLIGHTS = [penaltyFlight(0.4), penaltyFlight(0.7), penaltyFlight(0.95), 0.8, 1.2, 1.6];
 const DT = 1 / 120;
+const HANDOVERS = [HANDOVER_AFTER.goal, HANDOVER_AFTER.other];
 
 test("friendAside: full opacity and no offset before and at contact, through the contact frame", () => {
   for (const [name, view] of VIEWS) {
@@ -42,7 +44,7 @@ test("friendAside: eases to ≤ 0.5 alpha during the flight, holding through the
       }
       // Eased: no step bigger than a couple of px or 0.12 alpha between 1/120 s samples, and monotone out then back.
       let prev = friendAside(0, flight, scale);
-      for (let since = 0; since <= flight + FRIEND_RESTORE_AFTER + 0.1; since += DT) {
+      for (let since = 0; since < flight + HANDOVER_AFTER.goal; since += DT) {
         const a = friendAside(since, flight, scale);
         assert.ok(Number.isInteger(a.dx) && Number.isInteger(a.dy), `${name}: whole pixels at ${since.toFixed(3)}`);
         assert.ok(Math.abs(a.dx - prev.dx) <= 2 && Math.abs(a.dy - prev.dy) <= 1 && Math.abs(a.alpha - prev.alpha) <= 0.12, `${name} ${flight}s: smooth at ${since.toFixed(3)}`);
@@ -52,31 +54,31 @@ test("friendAside: eases to ≤ 0.5 alpha during the flight, holding through the
   }
 });
 
-test("friendAside: held faded and aside through the payoff, until 400 ms after the crossing", () => {
-  assert.equal(FRIEND_HOLD_AFTER, 0.4); assert.equal(FRIEND_RESTORE_AFTER, 0.65);
+test("friendAside: held faded (≤ 60 %) and aside while the result banner is up, until the handover", () => {
+  assert.equal(HANDOVER_AFTER.goal, 1.0); assert.equal(HANDOVER_AFTER.other, 1.3);
+  assert.equal(handoverAfter("goal"), 1.0); for (const r of ["save", "miss", "post"]) assert.equal(handoverAfter(r), 1.3);
   for (const [name, view] of VIEWS) {
     const scale = plantSpot(view).scale, full = friendAside(1, 2, scale); // a long flight: fully out
-    for (const flight of FLIGHTS) {
-      for (let since = flight; since <= flight + FRIEND_HOLD_AFTER; since += DT) {
-        const a = friendAside(since, flight, scale);
-        assert.ok(a.alpha <= 0.5, `${name} ${flight}s: still faded ${((since - flight) * 1000).toFixed(0)} ms after the crossing (${a.alpha.toFixed(2)})`);
-        assert.deepEqual([a.dx, a.dy], [full.dx, full.dy], `${name} ${flight}s: still aside ${((since - flight) * 1000).toFixed(0)} ms after the crossing`);
-        const r = friendAside(since, flight, scale, true);
+    for (const flight of FLIGHTS) for (const handover of HANDOVERS) {
+      for (let since = flight; since < flight + handover - 1e-9; since += DT) {
+        const a = friendAside(since, flight, scale, false, handover), ms = ((since - flight) * 1000).toFixed(0);
+        assert.ok(a.alpha <= 0.6, `${name} ${flight}s: still faded ${ms} ms after the crossing (${a.alpha.toFixed(2)})`);
+        assert.deepEqual([a.dx, a.dy], [full.dx, full.dy], `${name} ${flight}s: still aside ${ms} ms after the crossing`);
+        const r = friendAside(since, flight, scale, true, handover);
         assert.deepEqual(r, { alpha: FRIEND_FLIGHT_ALPHA, dx: 0, dy: 0 }, `${name}: reduced motion holds the static fade`);
       }
-      // Then eases back over ~250 ms (not a snap): part-way at +525 ms.
-      const mid = friendAside(flight + 0.525, flight, scale);
-      assert.ok(mid.alpha > FRIEND_FLIGHT_ALPHA + 0.1 && mid.alpha < 0.95, `${name} ${flight}s: easing back at +525 ms (${mid.alpha.toFixed(2)})`);
+      // The evidence frame: ~1.5 s after release (+0.65 s after a 0.45 s crossing) it was back opaque over the keeper.
+      assert.ok(friendAside(flight + 0.65, flight, scale, false, handover).alpha <= 0.6, `${name} ${flight}s: faded at +650 ms`);
     }
   }
 });
 
-test("friendAside: back to full opacity and the planted spot 650 ms after the crossing (before any celebration)", () => {
+test("friendAside: back to full opacity and the planted spot at the handover (the celebration's first frame)", () => {
   for (const [name, view] of VIEWS) {
     const scale = plantSpot(view).scale;
-    for (const flight of FLIGHTS) for (const reduced of [false, true]) {
-      for (const since of [flight + FRIEND_RESTORE_AFTER, flight + 0.8, flight + 1.0, flight + 1.3, 99]) {
-        assert.deepEqual(friendAside(since, flight, scale, reduced), { alpha: 1, dx: 0, dy: 0 }, `${name} ${flight}s reduced=${reduced}: restored at ${since.toFixed(2)}`);
+    for (const flight of FLIGHTS) for (const handover of HANDOVERS) for (const reduced of [false, true]) {
+      for (const since of [flight + handover, flight + handover + 0.3, 99]) {
+        assert.deepEqual(friendAside(since, flight, scale, reduced, handover), { alpha: 1, dx: 0, dy: 0 }, `${name} ${flight}s reduced=${reduced}: restored at ${since.toFixed(2)}`);
       }
     }
   }
@@ -86,7 +88,7 @@ test("friendAside, reduced motion: no positional movement, only a static fade fo
   for (const [name, view] of VIEWS) {
     const scale = plantSpot(view).scale;
     for (const flight of FLIGHTS) {
-      for (let since = -STRIKE_AT; since <= flight + FRIEND_RESTORE_AFTER + 0.2; since += DT) {
+      for (let since = -STRIKE_AT; since <= flight + HANDOVER_AFTER.other + 0.2; since += DT) {
         const a = friendAside(since, flight, scale, true);
         assert.equal(a.dx, 0); assert.equal(a.dy, 0);
         assert.ok(a.alpha === 1 || a.alpha === FRIEND_FLIGHT_ALPHA, `${name}: static alpha ${a.alpha}`);
@@ -131,54 +133,52 @@ function stubDocument() {
 /** The planted Friend's x on screen (the rest pose after the kick). */
 const stage0X = () => new Stage({ keeper: KEEPERS[0].id }).kickPose(99).x;
 
-test("Stage: the Friend eases aside live and in the instant replay alike, and is restored before reactions and celebrations", () => {
+test("Stage: the Friend stays aside while the result banner is up, live and in the replay alike; full opacity once a celebration starts", () => {
   stubDocument();
-  for (const want of ["goal", "save"] as const) {
-    const shot = outcome(want), flight = penaltyFlight(shot.target.time);
+  for (const want of ["goal", "save", "post"] as const) {
+    const shot = outcome(want), flight = penaltyFlight(shot.target.time), handover = handoverAfter(shot.result);
+    // Live: the DOM banner is up from "resolved" (the crossing) to "done" (index.tsx clears it there). The drawn
+    // Friend's alpha is friendAsideNow's (1 outside a shot): ≤ 60 % for that whole window, drawn aside.
     const live = new Stage({ keeper: KEEPERS[0].id });
+    let bannerUp = false, doneAt = -1, resolvedAt = -1, frames = 0, celebrating = 0, shotClock = 0;
+    const clock = () => (live as unknown as { modeTime: number }).modeTime;
+    // "done" fires inside update(): a goal's celebration has already reset modeTime, so take the last shot-clock frame.
+    live.onEvent = event => { if (event === "resolved") { bannerUp = true; resolvedAt = clock(); } if (event === "done") { bannerUp = false; doneAt = shotClock; } };
     live.play(shot, 0);
-    const trace = (stage: Stage, from: number) => {
-      const out = new Map<number, string>();
-      for (let t = from; t < STRIKE_AT + flight + 2.2; t += 1 / 60) {
-        const since = Math.round(((stage as unknown as { modeTime: number }).modeTime - STRIKE_AT) * 60);
-        const a = stage.friendAsideNow; if (a) out.set(since, `${a.alpha.toFixed(3)} ${a.dx} ${a.dy}`);
-        stage.update(1 / 60);
+    const rest = stage0X(), context = document.createElement("canvas").getContext("2d") as CanvasRenderingContext2D;
+    for (let t = 0; t < STRIKE_AT + flight + 2.2; t += 1 / 120) {
+      if ((live as unknown as { mode: string }).mode === "shot") shotClock = clock();
+      live.update(1 / 120);
+      const mode = (live as unknown as { mode: string }).mode, a = live.friendAsideNow, alpha = a?.alpha ?? 1;
+      if (bannerUp) {
+        frames++;
+        assert.ok(alpha <= 0.6, `${want}: Friend at ${(alpha * 100).toFixed(0)} % with the banner up (+${(clock() - STRIKE_AT - flight).toFixed(2)} s after the crossing)`);
+        if (clock() > STRIKE_AT + flight + 0.2) { live.render(context); const r = live.stats.friendRect!; assert.ok((r.x1 + r.x2) / 2 < rest - 1 || want !== "goal", `${want}: drawn aside with the banner up`); }
       }
-      return out;
-    };
-    const liveTrace = trace(live, 0);
-    const mid = [...liveTrace].find(([f]) => f === Math.round((flight / 2 + 0.1) * 60));
-    assert.ok(mid && Number(mid[1].split(" ")[0]) <= 0.5, `${want}: faded live mid-flight (${mid?.[1]})`);
-    // After the shot mode ends (reaction or celebration), no fade at all.
+      if (mode === "celebrate") { celebrating++; assert.equal(a, null); assert.equal(alpha, 1, `${want}: a celebration draws the Friend at full opacity`); }
+    }
+    assert.ok(frames > 100, `${want}: the banner was up (${frames} frames)`);
+    assert.ok(Math.abs(doneAt - resolvedAt - handover) < 0.02, `${want}: the handover matches the banner's end (${(doneAt - resolvedAt).toFixed(2)} s)`);
+    assert.equal(celebrating > 0, want === "goal", `${want}: celebrates only a goal`);
     assert.equal(live.friendAsideNow, null, `${want}: no fade after the shot`);
-    for (const [f, v] of liveTrace) if (f >= Math.round((flight + FRIEND_RESTORE_AFTER) * 60) + 1) assert.equal(v, "1.000 0 0", `${want}: restored at frame ${f}`);
-
-    // Celebrations keep their start (+1.0 s after the crossing) and begin at full opacity, well after the restore.
-    if (want === "goal") assert.ok(1.0 > FRIEND_RESTORE_AFTER, "the goal celebration starts after the Friend is back");
-
-    // The drawn Friend follows friendAsideNow, including under the save/miss/post reaction pose (which still starts
-    // at +0.1 s): 300 ms after the crossing it is drawn aside; 700 ms after, at its spot.
-    const drawnAt = (after: number) => {
-      const stage = new Stage({ keeper: KEEPERS[0].id }); stage.play(shot, 0);
-      while ((stage as unknown as { modeTime: number }).modeTime < STRIKE_AT + flight + after) stage.update(1 / 120);
-      const context = document.createElement("canvas").getContext("2d") as CanvasRenderingContext2D;
-      stage.render(context);
-      const r = stage.stats.friendRect!, a = stage.friendAsideNow;
-      return { centre: (r.x1 + r.x2) / 2, aside: a };
-    };
-    const rest = stage0X(), held = drawnAt(0.3), back = drawnAt(0.7);
-    assert.ok(held.aside && held.aside.dx < 0 && held.aside.alpha <= 0.5, `${want}: faded and aside 300 ms after the crossing (${JSON.stringify(held.aside)})`);
-    assert.ok(Math.abs(held.centre - (rest + held.aside!.dx)) <= 1, `${want}: drawn aside at +300 ms (centre ${held.centre}, spot ${rest}, dx ${held.aside!.dx})`);
-    assert.ok(Math.abs(back.centre - rest) <= 1 && (!back.aside || back.aside.alpha === 1), `${want}: back at its spot at +700 ms (centre ${back.centre})`);
 
     // The net-cam replay plays the same shot clock (slowed), so each shot-clock instant matches the live frame.
     const replay = new Stage({ keeper: KEEPERS[0].id });
     replay.replay(shot, 0);
     let t = 0;
     while (replay.replayingNow && t < 10) {
-      const clock = (replay as unknown as { modeTime: number }).modeTime - STRIKE_AT, a = replay.friendAsideNow;
-      if (a) assert.deepEqual(a, friendAside(clock, flight, plantSpot(PENALTY_VIEW).scale), `${want} replay at ${clock.toFixed(3)}`);
+      const at = (replay as unknown as { modeTime: number }).modeTime - STRIKE_AT, a = replay.friendAsideNow;
+      if (a) assert.deepEqual(a, friendAside(at, flight, plantSpot(PENALTY_VIEW).scale, false, handover), `${want} replay at ${at.toFixed(3)}`);
       replay.update(1 / 60); t += 1 / 60;
     }
+  }
+});
+
+test("Stage, reduced motion: the Friend never moves aside, only the static fade while the banner is up", () => {
+  stubDocument();
+  for (const want of ["goal", "save"] as const) {
+    const shot = outcome(want), stage = new Stage({ keeper: KEEPERS[0].id, reduced: true });
+    stage.play(shot, 0);
+    for (let t = 0; t < 3; t += 1 / 120) { stage.update(1 / 120); const a = stage.friendAsideNow; if (a) { assert.equal(a.dx, 0); assert.equal(a.dy, 0); } }
   }
 });

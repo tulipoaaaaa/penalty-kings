@@ -4,7 +4,7 @@
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
 import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
-import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont } from "./core.js";
+import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont, plainText } from "./core.js";
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, glyphCols, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { atmosphereParams, drawAtmosphere, type Atmosphere } from "./atmosphere.js";
@@ -14,7 +14,7 @@ import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX, flightRadius, ribb
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { freshCommentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
-import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, friendAside, FRIEND_CELL, type KickView, type KickPose, type FriendAside } from "./kick.js";
+import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, friendAside, handoverAfter, FRIEND_CELL, type KickView, type KickPose, type FriendAside } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
 import { waitCue, WAIT_EVENTS, PACK_TEAR_MS, type WaitCue } from "../game/suspense.js";
 import { drawBallWarmup, drawPenaltyWait, drawSealedPack, drawPackTear } from "./waits.js";
@@ -158,6 +158,10 @@ export class Stage {
   season: "S0" | "S1" = "S1";
   /** The Match Director's line for the next resolve (else the plain result line). */
   cue: CommentaryContext | null = null;
+  /** In-play call-outs on the pitch (the keeper's trailing-leg "leg!" telegraph). The cold-open reel turns them off. */
+  callouts = true;
+  /** Where the crowd's text banners were drawn last frame, in logical screen px (the reel keeps its titles off them). */
+  crowdText: ReadonlyArray<{ x1: number; y1: number; x2: number; y2: number }> = [];
   /** DEV (Showroom): draw the keeper hitbox and the ball at arrival over the scene. */
   debugHitbox = false;
   /** What the viewer actually saw (the 90-second QA reads this). */
@@ -331,7 +335,7 @@ export class Stage {
       .at(STRIKE_AT + flight, () => this.resolve())
       // Next kick ready fast: a goal hands back control after 1.0 s while the celebration keeps
       // playing (the next strike cuts it); a miss after 1.3 s (the reaction beat has played).
-      .at(STRIKE_AT + flight + (outcome.result === "goal" ? 1.0 : 1.3), () => {
+      .at(STRIKE_AT + flight + handoverAfter(outcome.result), () => {
         if (this.replaying) { this.endReplay(); return; }
         if (this.kind === "target" || outcome.result !== "goal") { this.finish(); return; }
         this.startCelebration(this.celebration); this.onEvent("done");
@@ -487,12 +491,12 @@ export class Stage {
   /**
    * B11: the Friend's in-flight fade and whole-pixel offset now (null outside a shot). Live and replayed kicks
    * run the same shot clock, so a replay eases aside exactly like the live kick. It holds through the payoff and
-   * the start of the reaction beat (strike + flight + 0.1 s, drawn under it); full opacity and the planted spot are
-   * back 0.65 s after the crossing, before any celebration (which, like every react/celebrate mode, draws at full).
+   * the reaction beat (strike + flight + 0.1 s, drawn under it) while the result banner is up, until the shot hands
+   * over: the celebration (which, like every react/celebrate mode, draws at full opacity) or the banner's end.
    */
   get friendAsideNow(): FriendAside | null {
     const shot = this.mode === "shot" ? this.shot : null;
-    return shot ? friendAside(this.modeTime - shot.strikeAt, shot.flight, this.kickPose(this.modeTime).scale, this.reduced) : null;
+    return shot ? friendAside(this.modeTime - shot.strikeAt, shot.flight, this.kickPose(this.modeTime).scale, this.reduced, handoverAfter(shot.outcome.result)) : null;
   }
   private stepDust(t: number) { const pose = this.kickPose(t); this.dust(pose.x, pose.y); }
   private dust(x: number, y: number) { this.particles.emit("dust", x, y, 5, { color: ["#c8b99a", "#a89878"], speed: 25, spread: 1.6, life: 0.5, gravity: -10 }); }
@@ -542,9 +546,11 @@ export class Stage {
 
   // ── Render ────────────────────────────────────────────────────────────────
   render(c: CanvasRenderingContext2D) {
+    plainText(c); // no Pixelify fi/fl ligatures ("Arst go"): see core.ts
     c.save();
     c.imageSmoothingEnabled = false;
     c.fillStyle = "#0b0d1a"; c.fillRect(0, 0, W, H);
+    const screen = c.getTransform().inverse(); // device px → logical screen px (the crowd's banner rects)
     this.camera.apply(c, this.time);
     const pan = (this.camera.x - W / 2) * 2;
     const wind = this.kind === "freekick" && this.freeKick ? this.freeKick.setup.wind : 0;
@@ -558,6 +564,8 @@ export class Stage {
     const backdropEvents = { goalFlash: this.goalFlash, jumbotron: this.jumbotron, wind, drop, reduced: this.reduced };
     drawBackdrop(c, this.stadium, this.weather, this.time, pan, backdropEvents);
     this.crowd.draw(c, this.time, pan, this.particles, this.reduced);
+    this.crowdText = this.crowd.textRects.map(r => { const p = screen.transformPoint({ x: r.x1, y: r.y1 }), q = screen.transformPoint({ x: r.x2, y: r.y2 }); return { x1: p.x, y1: p.y, x2: q.x, y2: q.y }; })
+      .filter(r => [r.x1, r.y1, r.x2, r.y2].every(Number.isFinite));
     this.drawFan(c);
     this.feel.drawChant(c, 72, this.time, this.reduced, this.stadium === "pro" ? "#ccff00" : "#ffd23f");
     drawBoards(c, this.stadium, this.time, pan, this.boardText ?? undefined);
@@ -739,7 +747,7 @@ export class Stage {
     }
     // Telegraph the trailing leg: a "leg!" call-out on the boot whenever it is out, bold when it made the save.
     const legMade = this.modeTime - shot.strikeAt >= shot.flight && shot.outcome.touch === "leg";
-    if (frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
+    if (this.callouts && frame.leg && frame.progress > 0.35 && (legMade || Math.hypot(frame.leg.foot.x - frame.leg.hip.x, frame.leg.foot.y - frame.leg.hip.y) > 0.18)) {
       const foot = artPoint(frame.leg.foot), made = legMade;
       c.font = "10px PixelifySans, monospace"; c.textAlign = "center";
       c.fillStyle = made ? "#0b0d1a" : "#0b0d1a99"; c.fillText(made ? "LEG!" : "leg!", foot.x + 1, foot.y - 8);
@@ -807,8 +815,8 @@ export class Stage {
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
     if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, pose.x, p); y = lerp(360, pose.y, p); walking = p < 1; facing = "up"; }
     // B11: while the ball is in flight the whole Friend layer (sprite + leg overlay) fades and eases aside so the
-    // left of the goal reads; it stays so through the payoff (over the reaction pose's start too) and is back at
-    // full opacity and its planted spot 0.65 s after the crossing, before any celebration.
+    // left of the goal reads; it stays so through the payoff (over the reaction pose too) while the result banner is
+    // up, and is back at full opacity when the celebration starts or the banner goes.
     const aside = this.friendAsideNow;
     if (aside) { x += aside.dx; y += aside.dy; }
     const rows = this.rows(facing, walking, frame);

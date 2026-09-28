@@ -13,7 +13,7 @@ import type { Stage } from "./stage.js";
 import { CELEBRATIONS } from "./friend.js";
 
 /** The part of the Stage a reel drives (kept small so tests can use a fake). */
-export type ReelStage = Pick<Stage, "celebration" | "setStadium" | "stadium" | "weather" | "keeper" | "kind" | "freeKick" | "cue" | "say" | "taunt" | "play" | "walkout" | "wave" | "showReveal" | "startCelebration" | "busy" | "cancel" | "camera" | "reduced" | "goalPoint">;
+export type ReelStage = Pick<Stage, "celebration" | "setStadium" | "stadium" | "weather" | "keeper" | "kind" | "freeKick" | "cue" | "say" | "taunt" | "play" | "walkout" | "wave" | "showReveal" | "startCelebration" | "busy" | "cancel" | "camera" | "reduced" | "goalPoint" | "callouts" | "crowdText">;
 
 /** Find an engine-resolved shot with the wanted result against this keeper (skill moments only). */
 export function findShot(keeper: string, want: ShotResult, bin = false, random: () => number = Math.random) {
@@ -27,7 +27,27 @@ export function findShot(keeper: string, want: ShotResult, bin = false, random: 
 }
 
 /** Title baseline: below the pot banner (which covers canvas y 0–38 at the top centre). */
-const TITLE_Y = 84;
+export const TITLE_Y = 84;
+/** The lowest a title drops to clear a crowd banner: its rule (+12) stays above the net-cam crossbar (y ≈ 120). */
+export const TITLE_LOWEST = 104;
+type Box = Readonly<{ x1: number; y1: number; x2: number; y2: number }>;
+
+/**
+ * The title's baseline (centred at W / 2, `half` px either side, `px` tall, `below` px of rule/caption under the
+ * baseline): TITLE_Y, or just below the crowd text banners it would cover (the net-cam push brings the Pro crowd's
+ * "KINGS" banner to the top centre), never below TITLE_LOWEST.
+ */
+export function clearTitleY(half: number, px: number, below: number, text: readonly Box[], from = TITLE_Y): number {
+  let y = from;
+  for (let pass = 0; pass < 4; pass++) {
+    const x1 = W / 2 - half - 2, x2 = W / 2 + half + 2, y1 = y - px / 2 - 2, y2 = y + below + 2;
+    const hit = text.filter(r => r.x1 < x2 && r.x2 > x1 && r.y1 < y2 && r.y2 > y1);
+    if (!hit.length) return y;
+    y = Math.ceil(Math.max(...hit.map(r => r.y2)) + px / 2 + 3);
+    if (y >= TITLE_LOWEST) return TITLE_LOWEST;
+  }
+  return y;
+}
 
 /**
  * The logo slam (B8): the big logo drops from LOGO_SLAM_FROM× to 1× (outBack) over LOGO_SLAM_SECONDS,
@@ -57,6 +77,8 @@ export class ReelPlayer {
   /** Where the net-cam cut's ball goes in (screen space), set when its shot is chosen. */
   private netcam: { x: number; y: number } | null = null;
   private slammed = false;
+  /** This cut's title baseline: it only ever moves down within a cut (no jitter as the banners bob). */
+  private titleY = TITLE_Y;
   /** Seconds the reel has played (driven by update, so it pauses with the game). */
   time = 0;
   done = false;
@@ -71,7 +93,7 @@ export class ReelPlayer {
     const total = this.reel.reduce((sum, cut) => sum + cut.beats * BEAT, 0);
     if (!this.options.loop && this.time >= total) { this.done = true; return; }
     const { cut, index } = cutAt(this.time, this.reel);
-    if (index !== this.index) { this.index = index; this.started = this.time; this.netcam = null; this.slammed = false; this.apply(cut); this.options.onCut?.(cut, index); }
+    if (index !== this.index) { this.index = index; this.started = this.time; this.netcam = null; this.slammed = false; this.titleY = TITLE_Y; this.apply(cut); this.options.onCut?.(cut, index); }
     const into = this.time - this.started, s = this.stage;
     if (s.reduced) return;
     // The logo lands: two frames of shake (the flash is drawn in drawOverlay).
@@ -85,6 +107,7 @@ export class ReelPlayer {
 
   private apply(cut: Cut) {
     const s = this.stage;
+    s.callouts = false; // a montage, not a lesson: no raw "leg!" telegraph on the pitch (the shell turns them back on)
     if (s.busy) s.cancel();
     if (s.stadium !== cut.stadium) s.setStadium(cut.stadium);
     s.weather = cut.weather; s.keeper = cut.keeper; s.kind = "penalty"; s.freeKick = null;
@@ -135,20 +158,25 @@ export class ReelPlayer {
     c.save(); c.globalAlpha = Math.max(0, alpha); c.textAlign = "center"; c.textBaseline = "middle";
     // A delayed title (the TOP BIN! payoff) slams in when the ball goes in; reduced motion shows it at once.
     const titleFrom = reduced ? 0 : cut.titleAt ?? 0, tp = titleFrom ? Math.min(1, (into - titleFrom) / (cut.beats * BEAT - titleFrom)) : p;
+    const caption = cut.kind === "friend" ? `${this.options.friendName} walks out` : cut.caption;
     if (cut.title && into >= titleFrom) {
       const slam = reduced ? 1 : 1 + Math.max(0, 0.35 - tp * 2.5), accent = cut.kind === "reveal" ? "#ffd23f" : cut.kind === "friend" ? "#7fe8ff" : "#ffd23f";
-      c.font = `${Math.round(22 * slam)}px PixelifySans, monospace`;
+      const px = Math.round(22 * slam);
+      c.font = `${px}px PixelifySans, monospace`;
+      // Clear of the crowd's text banners (the full-size title and its rule or caption plate).
+      const half = c.measureText(cut.title).width / slam / 2 + 2;
+      this.titleY = Math.max(this.titleY, clearTitleY(half, Math.max(px, 22), caption ? 30 : 13, this.stage.crowdText ?? []));
+      const y = this.titleY;
       // A 1 px ink outline and a 2 px drop shadow keep the big type readable over any sky.
-      c.fillStyle = "#0b0d1a"; c.fillText(cut.title, W / 2 + 2, TITLE_Y + 2);
-      for (const [ox, oy] of OUTLINE) c.fillText(cut.title, W / 2 + ox, TITLE_Y + oy);
-      c.fillStyle = cut.kind === "reveal" ? "#ffd23f" : "#ffffff"; c.fillText(cut.title, W / 2, TITLE_Y);
+      c.fillStyle = "#0b0d1a"; c.fillText(cut.title, W / 2 + 2, y + 2);
+      for (const [ox, oy] of OUTLINE) c.fillText(cut.title, W / 2 + ox, y + oy);
+      c.fillStyle = cut.kind === "reveal" ? "#ffd23f" : "#ffffff"; c.fillText(cut.title, W / 2, y);
       // An accent rule under the title that snaps out from the centre (full width at once under reduced motion).
       const full = Math.round(c.measureText(cut.title).width / slam), grow = reduced ? 1 : Math.min(1, tp * 5), rule = Math.round(full * grow);
-      c.fillStyle = "#0b0d1a"; c.fillRect(Math.round(W / 2 - rule / 2) - 1, TITLE_Y + 9, rule + 2, 4);
-      c.fillStyle = accent; c.fillRect(Math.round(W / 2 - rule / 2), TITLE_Y + 10, rule, 2);
+      c.fillStyle = "#0b0d1a"; c.fillRect(Math.round(W / 2 - rule / 2) - 1, y + 9, rule + 2, 4);
+      c.fillStyle = accent; c.fillRect(Math.round(W / 2 - rule / 2), y + 10, rule, 2);
     }
-    const caption = cut.kind === "friend" ? `${this.options.friendName} walks out` : cut.caption;
-    if (caption) this.drawCaption(c, caption, TITLE_Y + 15);
+    if (caption) this.drawCaption(c, caption, this.titleY + 15);
     c.restore();
   }
 

@@ -18,7 +18,7 @@ import { Stage, RARITY_NAMES, STRIKE_AT, penaltyFlight, freeKickShot, type WaitB
 import { setBallReducedMotion } from "./gfx/ball.js";
 import { ReelPlayer } from "./gfx/reelplayer.js";
 import { MONTAGE } from "./gfx/showreel.js";
-import { W, H } from "./gfx/core.js";
+import { W, H, plainText } from "./gfx/core.js";
 import { weatherForDay } from "./gfx/stadium.js";
 import type { CelebrationId } from "./gfx/friend.js";
 import { createCrowd, type Crowd } from "./audio.js";
@@ -386,6 +386,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   const ready = snapshot !== null;
   useEffect(() => {
     const node = canvas.current, context = node?.getContext("2d");
+    if (context) plainText(context);
     if (!node || !context) return;
     const scene = new Stage({ stadium: lookFor(), weather: weatherForDay(), keeper: "squirrel" });
     stage.current = scene;
@@ -447,7 +448,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     window.addEventListener("keydown", skip);
     return () => {
       window.clearInterval(watch); window.removeEventListener("keydown", skip);
-      reel.current = null; scene.camera.targetZoom = 1;
+      reel.current = null; scene.camera.targetZoom = 1; scene.callouts = true; // the reel turned the "leg!" call-out off
       if (scene.stadium !== lookFor()) scene.setStadium(lookFor());
       // Only reset the scene if we are still on the title (a session may have just started its walkout).
       if (live.current.screen === "title") { scene.cancel(); scene.weather = weatherForDay(); scene.keeper = "squirrel"; }

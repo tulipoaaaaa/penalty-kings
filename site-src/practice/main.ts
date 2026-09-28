@@ -12,7 +12,7 @@ import {
   type ShotInput, type ShotResult, type SwipePoint, type SwipeOptions, type InputKind,
 } from "@penalty-kings/engine";
 import { Stage, CELEBRATIONS } from "../../games/penalty-kings/gfx/stage.js";
-import { W, H } from "../../games/penalty-kings/gfx/core.js";
+import { W, H, plainText } from "../../games/penalty-kings/gfx/core.js";
 import { SPOT, GOAL, PENALTY_GOAL, weatherForDay } from "../../games/penalty-kings/gfx/stadium.js";
 import { cueLine } from "../../games/penalty-kings/gfx/commentary.js";
 import { createGameDirector, applyBeat, playMoment, type Beat } from "../../games/penalty-kings/game/director.js";
@@ -36,7 +36,7 @@ type Kick = { result: ShotResult; keeper: string; zone: string; x: number };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("pp-canvas");
-const context = canvas.getContext("2d")!;
+const context = plainText(canvas.getContext("2d")!);
 const count = $("pp-count"), status = $("pp-status"), banner = $("pp-banner"), results = $("pp-results"), end = $("pp-end");
 const tip = $("pp-tip");
 const endScore = $("pp-end-score"), quick = $<HTMLButtonElement>("pp-quick"), again = $<HTMLButtonElement>("pp-again"), soundButton = $<HTMLButtonElement>("pp-sound");

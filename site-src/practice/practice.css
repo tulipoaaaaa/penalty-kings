@@ -15,10 +15,13 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden;
   background: var(--pk-ink); color: var(--pk-paper); font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0; /* Pixelify's fi/fl ligature reads as an "A" */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 a { color: var(--pk-volt); }
 button { font: inherit; }
+/* The `font` shorthand resets font-variant-ligatures, so every element restates it. */
+*, *::before, *::after { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "clig" 0 !important; }
 :focus-visible { outline: 3px solid var(--pk-volt); outline-offset: 2px; }
 
 .pp-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-height: var(--top); padding: 4px 12px; max-width: 1200px; margin: 0 auto; }

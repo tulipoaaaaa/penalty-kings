@@ -7,6 +7,7 @@
  * (data: images are allowed by both the game frame's CSP and the practice page's) plus a File for Web Share.
  */
 import { drawFriend } from "./friend.js";
+import { plainText } from "./core.js";
 
 export const CARD_W = 640, CARD_H = 360;
 export const CARD_TAGLINE = "Beat me at Penalty Kings";
@@ -65,6 +66,7 @@ export function renderShareCard(canvas: HTMLCanvasElement, layout: ShareCardLayo
   canvas.width = layout.width; canvas.height = layout.height;
   const c = canvas.getContext("2d");
   if (!c) return false;
+  plainText(c); // no Pixelify fi/fl ligatures on the card either (core.ts)
   c.imageSmoothingEnabled = false;
   // Night sky, stands, a stripe of pitch and a goal frame behind the striker: flat pixel blocks, no gradients.
   c.fillStyle = INK; c.fillRect(0, 0, layout.width, layout.height);

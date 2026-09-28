@@ -119,22 +119,23 @@ export const contactPoint = (view: KickView) => ({ x: view.ball.x - 2, y: view.b
 // Drawn big in the foreground, the planted Friend hides the left third of the goal while the ball flies, so the
 // arrival and the keeper's save on that side are lost. After the contact frame (the leg is into its follow-through)
 // the whole Friend layer fades to FRIEND_FLIGHT_ALPHA and eases a few whole pixels aside (left, and a touch down,
-// away from the goal); it holds there through the crossing and the payoff (net ripple, keeper reaction) until
-// FRIEND_HOLD_AFTER s after it, then eases back: full opacity and its exact planted position FRIEND_RESTORE_AFTER s
-// after the crossing, before the goal celebration (+1.0 s). The miss/save/post reaction beat keeps its +0.1 s start
-// and plays under the fade. Layering only: the canonical sprite is never redrawn or recoloured; kickPose and its
-// timing are untouched.
+// away from the goal). Polish: it holds there through the crossing and the whole payoff, while the DOM result banner
+// (GOAL! / OFF THE POST!) is up, until the shot hands over (HANDOVER_AFTER): a goal's celebration pose starts, drawn
+// at full opacity from its first frame, or a miss/save/post clears the banner. The miss/save/post reaction beat keeps
+// its +0.1 s start and plays under the fade. Layering only: the canonical sprite is never redrawn or recoloured;
+// kickPose and its timing are untouched.
 /** Seconds after contact the fade starts: the end of the "contact" leg frame (legFrame), never before it. */
 export const FRIEND_ASIDE_FROM = 0.06;
 /** Seconds the ease aside takes. */
 export const FRIEND_ASIDE_EASE = 0.12;
-/** Seconds after the crossing the Friend stays faded and aside (the DOM result banner is up by then). */
-export const FRIEND_HOLD_AFTER = 0.4;
-/** Seconds the ease back takes. */
-export const FRIEND_RESTORE_EASE = 0.25;
-/** Seconds after the crossing by which the Friend is fully restored (the goal celebration starts at +1.0 s). */
-export const FRIEND_RESTORE_AFTER = FRIEND_HOLD_AFTER + FRIEND_RESTORE_EASE;
-/** The Friend's opacity while the ball is in flight. */
+/**
+ * Seconds after the crossing the shot hands over (Stage.play's timeline): a goal starts its celebration and sends
+ * "done" (+1.0 s); a miss/save/post sends "done" after its reaction beat (+1.3 s). The shell's result banner is up
+ * from the crossing ("resolved") until "done".
+ */
+export const HANDOVER_AFTER = { goal: 1.0, other: 1.3 } as const;
+export const handoverAfter = (result: string) => (result === "goal" ? HANDOVER_AFTER.goal : HANDOVER_AFTER.other);
+/** The Friend's opacity while the ball is in flight and the result banner is up. */
 export const FRIEND_FLIGHT_ALPHA = 0.45;
 /** How far it eases aside, in sprite cells (× the sprite scale → screen px): left, and slightly down. */
 export const FRIEND_ASIDE_CELLS = { x: -3, y: 1 } as const;
@@ -142,20 +143,14 @@ export type FriendAside = { alpha: number; dx: number; dy: number };
 
 /**
  * The Friend's flight alpha and whole-pixel offset `since` s after contact (negative: before the strike), for a
- * flight of `flight` s and a sprite `scale`. Reduced motion: no movement, an instant alpha step for the flight.
+ * flight of `flight` s, a sprite `scale` and a shot that hands over `handover` s after the crossing (handoverAfter).
+ * Reduced motion: no movement, an instant alpha step for the flight and the banner.
  */
-export function friendAside(since: number, flight: number, scale: number, reduced = false): FriendAside {
-  const restoreEnd = flight + FRIEND_RESTORE_AFTER;
+export function friendAside(since: number, flight: number, scale: number, reduced = false, handover: number = HANDOVER_AFTER.goal): FriendAside {
   const rest: FriendAside = { alpha: 1, dx: 0, dy: 0 };
-  if (!(since >= FRIEND_ASIDE_FROM) || since >= restoreEnd) return rest;
+  if (!(since >= FRIEND_ASIDE_FROM) || since >= flight + handover) return rest;
   if (reduced) return { alpha: FRIEND_FLIGHT_ALPHA, dx: 0, dy: 0 };
-  // Out: ease-out from the follow-through; back: ease-in-out over FRIEND_RESTORE_EASE s from FRIEND_HOLD_AFTER s
-  // after the crossing (so the ball's arrival and the payoff are always seen with the Friend aside).
-  const back = Math.max(flight + FRIEND_HOLD_AFTER, FRIEND_ASIDE_FROM);
-  let k: number;
-  if (since < back) { const p = Math.min(1, (since - FRIEND_ASIDE_FROM) / FRIEND_ASIDE_EASE); k = 1 - (1 - p) ** 3; }
-  else { const p = Math.min(1, (since - back) / (restoreEnd - back)); k = 1 - (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2); }
-  const peak = Math.min(1, (back - FRIEND_ASIDE_FROM) / FRIEND_ASIDE_EASE); // a (very) short flight never fully eases out
-  k = Math.min(k, 1 - (1 - peak) ** 3);
+  // Out: ease-out from the follow-through, then held until the handover (the next pose takes over from there).
+  const p = Math.min(1, (since - FRIEND_ASIDE_FROM) / FRIEND_ASIDE_EASE), k = 1 - (1 - p) ** 3;
   return { alpha: 1 - (1 - FRIEND_FLIGHT_ALPHA) * k, dx: Math.round(k * FRIEND_ASIDE_CELLS.x * scale) || 0, dy: Math.round(k * FRIEND_ASIDE_CELLS.y * scale) || 0 };
 }

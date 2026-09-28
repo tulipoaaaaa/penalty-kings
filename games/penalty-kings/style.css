@@ -18,6 +18,8 @@
   --pk-ink: #0b0d1a; --pk-panel: #151a33; --pk-line: #2a3160; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2; --pk-sky: #7fd3ff;
   position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--pk-ink);
   container-type: size; font-family: PixelifySans, ui-monospace, Menlo, Consolas, monospace; color: var(--pk-paper);
+  /* Pixelify Sans maps "fi"/"fl"/"ff" to a ligature glyph that reads as an "A" ("Arst", "Aashes"): never use it. */
+  font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none; touch-action: manipulation;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-sizing: border-box;
@@ -26,6 +28,8 @@
 .pk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; touch-action: none; outline: none; cursor: crosshair; }
 .pk-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--pk-volt); }
 .pk button { font: inherit; cursor: pointer; }
+/* The `font` shorthand resets font-variant-ligatures, so every descendant restates it (important beats any later shorthand). */
+.pk *, .pk *::before, .pk *::after { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "clig" 0 !important; }
 
 /* Pixel panels + buttons (the UI kit): hard 2px borders, a 2px drop shadow, no blur. */
 .pk-actions button, .pk-title button, .pk-modes button, .pk-reveal button, .pk-pot {
@@ -165,7 +169,7 @@
 .pk-title .pk-buyrow button { min-height: 44px; padding: 0 1em; }
 
 .pk-paused { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0d1a99; font-size: clamp(14px, 4cqw, 40px); font-weight: 700; letter-spacing: 0.2em; }
-.pk-loading { display: grid; place-items: center; align-content: center; gap: 12px; height: 100%; background: #0b0d1a; color: #f7f7f2; font-family: PixelifySans, ui-monospace, monospace; text-align: center; padding: 16px; }
+.pk-loading { font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0; display: grid; place-items: center; align-content: center; gap: 12px; height: 100%; background: #0b0d1a; color: #f7f7f2; font-family: PixelifySans, ui-monospace, monospace; text-align: center; padding: 16px; }
 .pk-loading-ball { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #111; animation: pk-bounce 0.8s ease-in-out infinite alternate; }
 @keyframes pk-bounce { to { transform: translateY(-14px); } }
 
@@ -806,6 +810,13 @@
 .pk-winners[data-still] .pk-winners-run, .pk-reduce-motion .pk-winners-run { animation: none; }
 .pk-winners[data-still] .pk-winners-run, .pk-winners[data-still] .pk-winners-set { white-space: normal; flex-wrap: wrap; row-gap: 0; }
 @media (prefers-reduced-motion: reduce) { .pk-winners-run { animation: none; } }
+/* Polish: on phones the ticker is still, the top three wrapped inside the title card. A marquee in a 180-400 px
+   track cut names at both edges ("#3 Friend #74") and the run spilled past the card. */
+@container (orientation: portrait) or ((orientation: landscape) and (max-height: 519px)) {
+  .pk-winners .pk-winners-run { animation: none; }
+  .pk-winners .pk-winners-run, .pk-winners .pk-winners-set { white-space: normal; flex-wrap: wrap; row-gap: 0; }
+  .pk-winners .pk-winners-set[aria-hidden], .pk-winners .pk-winner:nth-child(n+4) { display: none; }
+}
 .pk-attract-top .pk-potline { margin-top: 4px; }
 .pk-modescreen { padding-top: 8px; }
 .pk-modescreen .pk-winners { flex: none; }
