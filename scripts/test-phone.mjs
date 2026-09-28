@@ -575,11 +575,20 @@ for (const [width, height, motion] of option("--size") || args.includes("--revie
     },
   });
 }
-// Owner decision (b), at every review size: the Ball shop opens on its display case (every ball a pack can pull:
-// art, odds, RF value), and the primary "Buy pack" button is wholly on screen with no scrolling: inside the page
-// viewport and the menu's visible body, clear of the SDK toolbar, uncovered, >= 44 px; the case comes before it in
-// the DOM and is visible.
+// Owner decisions (b) and (c), at every review size:
+//   (b) the Ball shop opens on its display case (every ball a pack can pull: art, odds, RF value), and the primary
+//       "Buy pack" button is wholly on screen with no scrolling: inside the page viewport and the menu's visible
+//       body, clear of the SDK toolbar, uncovered, >= 44 px; the case comes before it in the DOM and is visible.
+//   (c) the Scouting Book is a sticker album: 12 keeper cards, each with its name and a stamp state (stamped /
+//       scouted / locked), "Stamps N/12" matching the stamped cards, no text outside its card, no text under 11 px.
 const REVIEW = option("--size") || args.includes("--results-only") ? [] : [[1280, 800], [949, 634], [844, 390], [800, 360], [390, 844], [360, 640]];
+const REVIEW_FRIEND = 7730n;
+const crc32 = text => { let crc = ~0; for (let i = 0; i < text.length; i++) { crc ^= text.charCodeAt(i); for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (~crc >>> 0).toString(16).padStart(8, "0"); };
+const editSaveCode = (code, change) => {
+  const [prefix, payload] = code.trim().split(".");
+  const next = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")), ...change }), "utf8").toString("base64url");
+  return `${prefix}.${next}.${crc32(`${REVIEW_FRIEND}:${next}`)}`;
+};
 for (const [width, height] of REVIEW) {
   const label = `${width}x${height}`;
   await testGame("./games/penalty-kings", {
@@ -654,7 +663,36 @@ for (const [width, height] of REVIEW) {
       assert.ok(shop.buy.y2 - shop.buy.y1 >= MIN_TAP - 0.5 && shop.buy.x2 - shop.buy.x1 >= MIN_TAP - 0.5, `${label}: Buy pack is under ${MIN_TAP} px`);
       assert.deepEqual(await tidy(".pk-shop", ".pk-vball, .pk-buybar"), [], `${label}: Ball shop text`);
       await assertTargets(game, `${label} ball shop (display case)`);
-      console.log(`PASS shop ${label}: Buy pack ${Math.round(buy.y1)}-${Math.round(buy.y2)} of ${height} (display case first)`);
+      await press(game.getByRole("button", { name: "Close Ball shop" }));
+
+      // (c) Scouting Book with 3 stamps and 2 more keepers scouted (a save code).
+      await press(game.getByRole("button", { name: "Settings", exact: true }));
+      await game.getByTestId("save-code-in").fill(editSaveCode(await game.getByTestId("save-code-out").inputValue(), { stamps: ["mouse", "squirrel", "sloth"], keepersSeen: ["mouse", "squirrel", "sloth", "peacock", "octopus"] }));
+      await press(game.getByTestId("save-code-restore"));
+      await game.getByTestId("save-code-note").filter({ hasText: /restored/ }).waitFor();
+      await press(game.getByRole("button", { name: "Close Settings" }));
+      await press(game.getByRole("button", { name: "Scouting Book", exact: true }));
+      await game.locator(".pk-book").waitFor();
+      await page.waitForTimeout(300);
+      const book = await game.locator(".pk-book").evaluate(node => {
+        const body = node.closest(".rf-frame-menu-body").getBoundingClientRect(), count = node.querySelector("[data-testid=stamp-count]");
+        const c = count?.getBoundingClientRect();
+        return {
+          count: count?.textContent.trim(), countVisible: Boolean(c && c.top >= body.top - 0.5 && c.bottom <= body.bottom + 0.5 && count.checkVisibility()),
+          pips: node.querySelectorAll("[data-testid=stamp-pips] [data-on=true]").length,
+          cards: [...node.querySelectorAll(".pk-keepercard")].map(card => ({ state: card.dataset.state, name: card.querySelector(".pk-kname")?.textContent.trim(), label: card.querySelector("[data-testid=stamp-state]")?.textContent.trim(), art: Boolean(card.querySelector("canvas")?.checkVisibility()) })),
+        };
+      });
+      assert.equal(book.cards.length, 12, `${label}: twelve keeper cards in the Scouting Book`);
+      const stateLabel = { stamped: /^STAMPED/, scouted: /^SCOUTED/, locked: /^LOCKED/ };
+      for (const card of book.cards) assert.ok(card.name && card.art && stateLabel[card.state]?.test(card.label ?? ""), `${label}: a keeper card without name, portrait or stamp state ${JSON.stringify(card)}`);
+      assert.deepEqual(book.cards.map(card => card.state), ["stamped", "stamped", "stamped", "scouted", "scouted", "locked", "locked", "locked", "locked", "locked", "locked", "locked"], `${label}: stamp states follow the save`);
+      assert.equal(book.count, `Stamps ${book.cards.filter(card => card.state === "stamped").length}/12`, `${label}: the stamp count matches the stamped cards`);
+      assert.equal(book.pips, 3, `${label}: three of twelve progress pips lit`);
+      assert.ok(book.countVisible, `${label}: the stamp count is on screen when the book opens`);
+      assert.deepEqual(await tidy(".pk-book", ".pk-keepercard, .pk-bookcover"), [], `${label}: Scouting Book text`);
+      await assertTargets(game, `${label} scouting book`);
+      console.log(`PASS shop + book ${label}: Buy pack ${Math.round(buy.y1)}-${Math.round(buy.y2)} of ${height} (display case first), ${book.count}, 12 cards tidy`);
     },
   });
 }
