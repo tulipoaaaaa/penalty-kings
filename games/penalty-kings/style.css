@@ -786,6 +786,18 @@
 @container (orientation: landscape) and (max-height: 519px) {
   .pk-modescreen .pk-winners { display: none; }
   .pk-modescreen .pk-potline { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 8px; padding: 2px 8px; }
+  /* Polish (C3c/C4 regression): the header lines share rows so the six mode cards and NEXT GOAL stay above the
+     toolbar at 844x390 and 800x360: [pot line][Level][Day N], then [NEXT GOAL][Keeper of the Week], then the grid
+     and the menu buttons. The check-in note is kept for screen readers only (the Day badge's title says it too). */
+  .pk-modescreen { flex-flow: row wrap; justify-content: center; align-content: flex-start; column-gap: 6px; row-gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .pk-modescreen > h2 { align-self: center; font-size: 12px; }
+  .pk-modescreen .pk-streakday { margin: 0; align-self: center; }
+  .pk .pk-modescreen :is(.pk-nextgoal, .pk-weekly) { flex: 1 1 38%; min-width: 0; max-width: 440px; min-height: 44px; margin: 0; padding: 3px 8px; font-size: 11px; line-height: 1.2; }
+  .pk-modescreen [data-testid="checkin"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-modescreen .pk-modes { flex: none; }
+  .pk-modescreen .pk-mode { min-height: 44px; padding: 3px 8px; line-height: 1.15; }
+  .pk-modescreen .pk-buyrow { width: 100%; justify-content: center; gap: 6px; }
+  .pk-modescreen .pk-buyrow button { padding: 0 0.7em; }
 }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tierrace { color: var(--pk-gold); }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tiergo { display: grid; justify-items: start; align-content: center; min-height: 44px; margin: 4px 8px 0; padding: 2px 8px; text-align: left; font-weight: 700; }

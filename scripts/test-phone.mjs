@@ -306,6 +306,28 @@ for (const [width, height] of SIZES) {
       await press(game.getByTestId("menu"));
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await fonts("mode select");
+      // Polish (C3c/C4 regression): on landscape phones the six mode cards are wholly on screen without scrolling
+      // (above the SDK toolbar, nothing covering them) and NEXT GOAL is visible too, with the pot, Day badge,
+      // Keeper of the Week and the check-in note all on the Modes screen.
+      if (!portrait) {
+        await game.getByTestId("checkin").waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(300); // the screen's entry ease
+        const origin = await iframeOrigin(), bar = await toolbar();
+        const seen = await game.locator("body").evaluate(() => {
+          const screen = document.querySelector(".pk-modescreen");
+          const covered = node => { const r = node.getBoundingClientRect(); return [[0.1, 0.1], [0.9, 0.1], [0.5, 0.5], [0.1, 0.9], [0.9, 0.9]].some(([fx, fy]) => { const top = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy); return !(top && node.contains(top)); }); };
+          const box = node => { const r = node.getBoundingClientRect(); return { name: node.dataset.testid, x1: r.left, y1: r.top, x2: r.right, y2: r.bottom, covered: covered(node) }; };
+          return { scrolled: screen.scrollTop, cards: [...document.querySelectorAll(".pk-modescreen .pk-mode")].map(box), goal: box(document.querySelector("[data-testid=next-goal]")) };
+        });
+        assert.equal(seen.cards.length, 6, `${label}: six mode cards`);
+        assert.equal(seen.scrolled, 0, `${label}: the Modes screen is not scrolled`);
+        for (const item of [...seen.cards, seen.goal]) {
+          const b = { x1: item.x1 + origin.x, y1: item.y1 + origin.y, x2: item.x2 + origin.x, y2: item.y2 + origin.y };
+          assert.ok(inViewport(b) && !hit(b, bar) && !item.covered, `${label}: ${item.name} is not wholly on screen on the Modes screen ${JSON.stringify({ item, bar })}`);
+        }
+        await page.screenshot({ path: `artifacts/phone-${label}-modes.png` });
+        checked.push("modes:on-screen");
+      }
 
       // Big Match: buy a 2-ball pack, open it (pack opening overlay), reveal, kick, then the ball carousel.
       await game.getByTestId("ball-shop").click();
