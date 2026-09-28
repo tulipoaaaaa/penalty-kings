@@ -1,6 +1,9 @@
 /* Penalty Kings — pixel UI kit inside the SDK sandbox. Scales with the frame (container units). */
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* Polish: Pixelify's bold C/c close into O/o ("Oups", "Souffed", "OLANG!" on the canvas), so at weight 700 C and c
+   (U+0043, U+0063) come from the open 400 file. Declared after the 700 face, so the browser checks it first for them. */
+@font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0043, U+0063; }
 /* B4 legible numbers: Pixelify draws 5≈S, 2≈Z/8, 8≈B, 0≈O and has no tabular figures ("20 RF" read as "80 RF").
    Digits and number punctuation (0-9 + , - . % × −) come from Departure Mono (SIL OFL 1.1, Helena Zhang, v1.500;
    assets/DepartureMono-OFL.txt), a monospaced pixel face, so digits are tabular. These faces are declared AFTER the
@@ -63,8 +66,9 @@
 .pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: max(11px, 0.85em); }
 .pk-pot small { opacity: 0.8; }
 
-.pk-banner { position: absolute; top: 30cqh; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
-.pk-banner strong { display: block; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
+.pk-banner { position: absolute; top: 30cqh; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100cqw - 12px); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
+/* Polish: the headline never wraps ("OFF THE / POST!" used to stack across the goal mouth); sizes are set to fit. */
+.pk-banner strong { display: block; white-space: nowrap; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
 .pk-banner span { display: inline-block; margin-top: 0.4em; font-size: clamp(11px, 1.6cqw, 15px); background: #0b0d1ae6; padding: 0.3em 0.7em; }
 .pk-goal strong { color: var(--pk-volt); }
 .pk-miss strong { color: var(--pk-red); }
@@ -249,7 +253,19 @@
 .pk-oddsline { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px; font-size: max(11px, 0.85em); color: var(--pk-muted); }
 .pk-oddsline b { color: var(--pk-paper); }
 .pk-oddsline span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.pk-nextgoal { display: block; margin: 0 auto 8px; max-width: min(560px, 92cqw); min-height: 36px; padding: 6px 12px; font-size: max(11px, 0.9em); text-align: left; color: var(--pk-paper); background: #151a33; border: 2px solid var(--pk-volt, #c8ff00); box-shadow: 2px 2px 0 #000; cursor: pointer; }
+/* Polish (owner report, 949x634): in the Modes screen's scrolling flex column an item with an explicit min-height
+   could shrink below its text (flex-shrink), so a two-line NEXT GOAL hung below its border. Items keep their height. */
+.pk-modescreen > * { flex-shrink: 0; }
+/* A button scrolled into view (focus, find, scrollIntoView) stops above the SDK toolbar that overlays the frame's bottom. */
+.pk-modescreen { scroll-padding-bottom: calc(var(--pk-tb) + 8px); }
+/* Owner report: a sideways scrollbar at ~949 px. Children sized in cqw (of the whole .pk frame) filled the Modes
+   screen's content box exactly, so a classic (Windows) vertical scrollbar pushed them 17 px past it. Inside the
+   scrolling Modes screen they size to its own content box (%) instead. */
+.pk-modescreen .pk-modes { width: min(100%, 900px); }
+.pk-modescreen .pk-nextgoal, .pk-modescreen.pk-title .pk-weekly, .pk-modescreen .pk-challengebox { max-width: min(560px, 100%); }
+.pk-modescreen .pk-challengebox { width: min(560px, 100%); }
+.pk-nextgoal, .pk .pk-weekly, .pk-resultgoal { height: auto; line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere; }
+.pk-nextgoal { display: block; margin: 0 auto 8px; max-width: min(560px, 92cqw); min-height: 44px; padding: 6px 12px; font-size: max(11px, 0.9em); text-align: left; color: var(--pk-paper); background: #151a33; border: 2px solid var(--pk-volt, #c8ff00); box-shadow: 2px 2px 0 #000; cursor: pointer; }
 .pk-nextgoal b { color: var(--pk-volt, #c8ff00); margin-right: 6px; letter-spacing: 0.06em; }
 .pk-cards { display: flex; flex-wrap: wrap; gap: 0.8cqw; justify-content: center; }
 .pk-card { width: clamp(44px, 8.4cqw, 76px); min-height: 44px; aspect-ratio: 3 / 4; display: grid; place-items: center; align-content: center; gap: 2px; padding: 2px;
@@ -648,7 +664,12 @@
   .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
   /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
   .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
-  .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
+  /* Polish: a one-line headline in the sky right under the commentator strip (logical top --pk-cmt, 22 px + rule),
+     sub line under it, all above the crossbar and clear of the Friend at the payoff. The Stage's CLANG!/fever chip
+     belongs below this band (logical y > ~150) or not under it. */
+  .pk-banner { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s)); max-width: calc(480 * var(--pk-s) - 12px); }
+  .pk-banner strong { font-size: clamp(20px, calc(30 * var(--pk-s)), 40px); line-height: 1.1; }
+  .pk-banner span { max-width: calc(300 * var(--pk-s)); margin-top: 3px; font-size: 11px; line-height: 1.25; padding: 2px 8px; }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
   /* B5: the reveal strip runs from the left edge to the actions bar (the right letterbox), under the reveal banner;
@@ -700,8 +721,10 @@
   .pk-art-status, .pk-discover { left: 6px; top: calc(var(--pk-pt) + 28 * var(--pk-s)); max-width: calc(160 * var(--pk-s)); font-size: 11px; }
   /* QA-9: two lines under the commentator strip (logical top --pk-cmt, 22 px + rule), left of the goal. */
   .pk-discover { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s)); max-width: calc(200 * var(--pk-s)); }
-  .pk-banner { top: calc(var(--pk-pt) + 60 * var(--pk-s)); width: max-content; max-width: calc(100cqw - 12px); }
-  .pk-banner strong { font-size: clamp(24px, 9cqw, 44px); }
+  /* Polish: under the discovery toast (two 11 px lines from --pk-cmt + 26), one-line headline, clear of the Friend. */
+  .pk-banner { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s) + 42px); width: max-content; max-width: calc(100cqw - 12px); }
+  .pk-banner strong { font-size: clamp(20px, 7cqw, 44px); line-height: 1.1; }
+  .pk-banner span { margin-top: 3px; font-size: 11px; line-height: 1.25; padding: 2px 8px; }
   .pk-reveal { top: calc(var(--pk-pt) + 20px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 28px); padding: 10px 12px; font-size: 13px; }
   .pk-pack { top: 60px; bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - 66px); padding: 10px; gap: 8px; font-size: 13px; }
   /* B5: while the Stage reveals, the strip sits under the pitch and the actions row (the pitch stays whole). */
@@ -783,6 +806,18 @@
 @container (orientation: landscape) and (max-height: 519px) {
   .pk-modescreen .pk-winners { display: none; }
   .pk-modescreen .pk-potline { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 8px; padding: 2px 8px; }
+  /* Polish (C3c/C4 regression): the header lines share rows so the six mode cards and NEXT GOAL stay above the
+     toolbar at 844x390 and 800x360: [pot line][Level][Day N], then [NEXT GOAL][Keeper of the Week], then the grid
+     and the menu buttons. The check-in note is kept for screen readers only (the Day badge's title says it too). */
+  .pk-modescreen { flex-flow: row wrap; justify-content: center; align-content: flex-start; column-gap: 6px; row-gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .pk-modescreen > h2 { align-self: center; font-size: 12px; }
+  .pk-modescreen .pk-streakday { margin: 0; align-self: center; }
+  .pk .pk-modescreen :is(.pk-nextgoal, .pk-weekly) { flex: 1 1 38%; min-width: 0; max-width: 440px; min-height: 44px; margin: 0; padding: 3px 8px; font-size: 11px; line-height: 1.2; }
+  .pk-modescreen [data-testid="checkin"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pk-modescreen .pk-modes { flex: none; }
+  .pk-modescreen .pk-mode { min-height: 44px; padding: 3px 8px; line-height: 1.15; }
+  .pk-modescreen .pk-buyrow { width: 100%; justify-content: center; gap: 6px; }
+  .pk-modescreen .pk-buyrow button { padding: 0 0.7em; }
 }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tierrace { color: var(--pk-gold); }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tiergo { display: grid; justify-items: start; align-content: center; min-height: 44px; margin: 4px 8px 0; padding: 2px 8px; text-align: left; font-weight: 700; }

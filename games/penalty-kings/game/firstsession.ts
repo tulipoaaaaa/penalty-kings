@@ -11,6 +11,8 @@ export type FirstKick = Readonly<{
   assist: number;
   /** Commentary context played before the kick. */
   intro: string;
+  /** The coaching toast for this kick: one short line (the full shot rules live in Rules). */
+  coach: string;
   /** Surprise keeper entrance with a walk-on + taunt. */
   surprise?: boolean;
   /** After the kick: a net-cam slow-mo replay of the best goal so far. */
@@ -20,9 +22,9 @@ export type FirstKick = Readonly<{
 }>;
 
 export const FIRST_SESSION: readonly FirstKick[] = [
-  { keeper: "mouse", assist: 0.9, intro: "tutorial-1", bigCelebration: true },
-  { keeper: "chameleon", assist: 0.6, intro: "here-comes-trouble", surprise: true },
-  { keeper: "chameleon", assist: 0.5, intro: "tutorial-3", replayBest: true },
+  { keeper: "mouse", assist: 0.9, intro: "tutorial-1", bigCelebration: true, coach: "Tutorial: swipe up from the ball. The target shows where it lands." },
+  { keeper: "chameleon", assist: 0.6, intro: "here-comes-trouble", surprise: true, coach: "Kick 2: a longer swipe aims higher; a faster one adds pace, not height." },
+  { keeper: "chameleon", assist: 0.5, intro: "tutorial-3", replayBest: true, coach: "Kick 3: go for a corner. Low shots down the middle hit the keeper's leg." },
 ];
 
 /** The card that flips into the Scouting Book after the first round, plus the next-unlock teaser. */

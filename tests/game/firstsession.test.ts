@@ -17,6 +17,19 @@ test("first session: easy Squeak with assist, Chroma surprise, net-cam replay; s
   assert.equal(bestGoal([{ result: "save", points: 0 }]), null);
 });
 
+test("tutorial coaching (polish): one short line per kick, set as each kick is aimed; the full rules move to Rules", () => {
+  const lines = FIRST_SESSION.map(kick => kick.coach);
+  for (const line of lines) assert.ok(line.length <= 90, `a coaching line is ${line.length} characters: ${line}`);
+  assert.equal(new Set(lines).size, lines.length, "every kick has its own line");
+  assert.match(lines[0], /^Tutorial: swipe up from the ball/);
+  const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
+  const aim = index.slice(index.indexOf("function startAim("), index.indexOf("// ── Shooting"));
+  assert.match(aim, /setMessage\(plan\.coach\)/);
+  assert.doesNotMatch(index, /setMessage\("Tutorial: swipe up/, "no single paragraph for all three kicks");
+  const rules = index.slice(index.indexOf('menu === "rules"'), index.indexOf("</ol>", index.indexOf('menu === "rules"')));
+  for (const idea of ["never over the bar", "super-fast swipe can fly over", "trailing leg", "exactly where it lands"]) assert.ok(rules.includes(idea), `Rules keep: ${idea}`);
+});
+
 test("first session wiring (SIO-2): the shell follows the plan, assist is aim-only, the replay re-plays a stored outcome", () => {
   const index = readFileSync(new URL("../../games/penalty-kings/index.tsx", import.meta.url), "utf8");
   // Aim assist comes from the plan for the tutorial and feeds only aimedShot (the reticle uses the same value).

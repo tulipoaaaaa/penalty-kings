@@ -709,7 +709,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     void unlockAudio(); setError("");
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
-    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); setMessage("Tutorial: swipe up from the ball. Point left or right to aim across; a longer swipe aims higher, but never over the bar. The target shows exactly where the ball will land. Swiping faster adds pace, not height; only a wild, super-fast swipe can fly over. Watch out: low shots down the middle usually hit the keeper's trailing leg."); return; }
+    if (mode === "penalties" && !progress.tutorialDone) { beginSession(newSession("tutorial")); return; } // startAim sets each kick's one-line coaching toast
     if (mode === "skill") { setMenu("cups"); setConfirmSpend({ kind: "skill", menu: "cups" }); return; } // a paid entry: confirm first (BQ-P1-7)
     // Big Match (round 6 C12): kick straight away with the last-used ball (or the best one); "Change ball" opens the carousel.
     if (mode === "match") { const id = lastUsedBall(); if (id) kickWith(id); else setMenu("balls"); return; }
@@ -754,6 +754,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         const plan = FIRST_SESSION[Math.min(FIRST_SESSION.length - 1, index)], epochAt = sessionEpoch.current;
         const soon = (ms: number, run: () => void) => window.setTimeout(() => { if (sessionEpoch.current === epochAt && stage.current) run(); }, ms);
         scene.hints = 1;
+        setMessage(plan.coach); // one short line per kick (polish: was one six-line paragraph for all three)
         if (plan.surprise && plan.keeper !== current.keeper) {
           // "Here comes trouble…", then Chroma walks on (walk-off, walk-on, taunt) and gets an intro line.
           current = { ...current, keeper: plan.keeper }; setSessionNow(current);
@@ -1685,7 +1686,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "rules" && <div className="pk-rules">
         <p><b>{RULE}</b></p>
         <ol>
-          <li>Swipe up from the ball. Where you release decides the shot; speed is power; a curved swipe bends it. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power.</li>
+          <li>Swipe up from the ball. Where you release decides the shot (the target shows exactly where it lands); speed is power; a curved swipe bends it. A longer swipe aims higher but never over the bar; only a wild, super-fast swipe can fly over. Low shots down the middle usually hit the keeper's trailing leg. Keys: arrows aim, A/D curl, W/S topspin, hold Space for power.</li>
           <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. {SHOT_RULES.streak}</li>
           <li>{SHOT_RULES.perfect}</li>
           <li>{SHOT_RULES.replay}</li>

@@ -97,6 +97,92 @@ async function toastOffFriend(game, where) {
   return true;
 }
 
+/** Polish: the DOM result banner on a phone. The headline is one line that fits the frame, and neither it nor the
+ *  sub line covers the player's Friend (its drawn box, from the Stage). Checked for the banner shown and, by swapping
+ *  the text in and restoring it, for the longest headlines ("Time up — kick lost", "OFF THE POST!") and a long sub. */
+async function bannerClear(game, where) {
+  const banner = game.locator(".pk-banner");
+  if (!(await banner.isVisible())) return false;
+  const fails = await game.locator("body").evaluate(async () => {
+    const node = document.querySelector(".pk-banner"), strong = node?.querySelector("strong"), span = node?.querySelector("span");
+    if (!node || !strong) return [];
+    const canvas = document.querySelector("canvas.pk-canvas"), c = canvas.getBoundingClientRect(), scale = Math.min(c.width / 480, c.height / 320);
+    const ox = c.left + (c.width - 480 * scale) / 2, oy = c.top + (c.height - 320 * scale) / 2;
+    const hit = (a, b) => a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+    const textBox = el => { const range = document.createRange(); range.selectNodeContents(el); const r = range.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom, lines: new Set([...range.getClientRects()].map(q => Math.round(q.top))).size }; };
+    const original = [strong.textContent, span?.textContent ?? ""], bad = [];
+    const cases = [original, ["Time up — kick lost", "The shot clock ran out. Next kick in a moment."], ["OFF THE POST!", "No goal this time"], ["GOAL!", "+1,200 points · Golden Hour: double points · TOP BIN · knuckleball · 3 in a row"]];
+    for (const round of [0, 1]) {
+      if (round) await new Promise(resolve => setTimeout(resolve, 350)); // the Friend eases back after the result
+      const f = window.__pkStats().friendRect;
+      if (!f || !document.contains(node)) break;
+      const friend = { x1: ox + f.x1 * scale, y1: oy + f.y1 * scale, x2: ox + f.x2 * scale, y2: oy + f.y2 * scale };
+      for (const [head, sub] of cases) {
+        strong.textContent = head; if (span) span.textContent = sub;
+        const h = textBox(strong), s = span ? textBox(span) : null, label = `"${head}" / "${sub.slice(0, 24)}"`;
+        if (h.lines !== 1) bad.push(`${label}: the headline wraps to ${h.lines} lines`);
+        if (h.x1 < -0.5 || h.x2 > innerWidth + 0.5) bad.push(`${label}: the headline runs off the frame ${JSON.stringify(h)}`);
+        for (const [name, box] of [["headline", h], ["sub line", s]]) if (box && hit(box, friend)) bad.push(`${label}: the ${name} covers the Friend ${JSON.stringify({ box, friend })}`);
+        const discover = document.querySelector(".pk-discover"), d = discover?.checkVisibility() && discover.getBoundingClientRect();
+        if (d) for (const [name, box] of [["headline", h], ["sub line", s]]) if (box && hit(box, { x1: d.left, y1: d.top, x2: d.right, y2: d.bottom })) bad.push(`${label}: the ${name} is under the discovery toast`);
+      }
+      strong.textContent = original[0]; if (span) span.textContent = original[1];
+    }
+    return bad;
+  });
+  assert.deepEqual(fails, [], `${where}: the result banner`);
+  return true;
+}
+
+/** Polish: each tutorial kick's coaching toast is one short line (<= 90 characters, at most 3 lines on screen), and
+ *  a new kick brings a new line (not the old six-line paragraph). Returns the text, or null when no toast is up. */
+async function toastShort(game, where, seen) {
+  const toast = game.locator(".pk-toast");
+  if (!(await toast.isVisible())) return null;
+  const m = await toast.evaluate(node => { const s = getComputedStyle(node), line = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+    return { text: node.textContent, lines: Math.round((node.scrollHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / line) }; });
+  assert.ok(m.text.length <= 90, `${where}: the coaching toast is ${m.text.length} characters (max 90): "${m.text}"`);
+  assert.ok(m.lines <= 3, `${where}: the coaching toast takes ${m.lines} lines (max 3): "${m.text}"`);
+  assert.ok(!seen.includes(m.text), `${where}: the coaching toast repeats an earlier kick's line: "${m.text}"`);
+  seen.push(m.text);
+  return m.text;
+}
+
+/** Polish (owner report, 949x634): the NEXT GOAL / Keeper of the Week / Results NEXT GOAL buttons grow with their
+ *  text. With the longest realistic goal text swapped in (then restored), in Pixelify and in the fallback monospace,
+ *  nothing scrolls inside the button and every line of text lies inside its border. Returns the selectors checked. */
+const LONG_TEXT = {
+  "[data-testid=next-goal]": "<b>NEXT GOAL</b> Beat Nibbles the Squirrel (3 goals in a round) for Scouting Book stamp 3/12 ▸",
+  "[data-testid=weekly-keeper]": "KEEPER OF THE WEEK: Octavia the Octopus Goalkeeper. Score 3 in a round for ×2 XP ▸",
+  "[data-testid=results-next-goal]": "<b>NEXT GOAL</b> Beat Nibbles the Squirrel (3 goals in a round) for Scouting Book stamp 3/12 ▸",
+};
+async function goalFits(game, where, selectors) {
+  const result = await game.locator("body").evaluate((_, entries) => {
+    const bad = [], seen = [];
+    for (const [selector, html] of entries) {
+      const node = document.querySelector(selector);
+      if (!node || !node.checkVisibility()) continue;
+      seen.push(selector);
+      const original = node.innerHTML, font = node.style.fontFamily;
+      node.innerHTML = html;
+      for (const family of ["", "ui-monospace, monospace"]) {
+        node.style.fontFamily = family;
+        const r = node.getBoundingClientRect(), s = getComputedStyle(node), bl = parseFloat(s.borderLeftWidth), bt = parseFloat(s.borderTopWidth);
+        const inner = { x1: r.left + bl - 0.5, y1: r.top + bt - 0.5, x2: r.right - bl + 0.5, y2: r.bottom - bt + 0.5 };
+        const range = document.createRange(); range.selectNodeContents(node);
+        const out = [...range.getClientRects()].filter(q => q.width > 0 && (q.left < inner.x1 || q.right > inner.x2 || q.top < inner.y1 || q.bottom > inner.y2));
+        const label = `${selector} (${family || "game font"})`;
+        if (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1) bad.push(`${label}: its text scrolls inside it ${JSON.stringify({ sh: node.scrollHeight, ch: node.clientHeight, sw: node.scrollWidth, cw: node.clientWidth })}`);
+        if (out.length) bad.push(`${label}: a text line lies outside its border ${JSON.stringify({ button: [r.left, r.top, r.right, r.bottom].map(Math.round), line: [out[0].left, out[0].top, out[0].right, out[0].bottom].map(Math.round) })}`);
+      }
+      node.style.fontFamily = font; node.innerHTML = original;
+    }
+    return { bad, seen };
+  }, selectors.map(selector => [selector, LONG_TEXT[selector]]));
+  assert.deepEqual(result.bad, [], `${where}: a NEXT GOAL / Keeper of the Week button overflows`);
+  return result.seen;
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -242,6 +328,8 @@ for (const [width, height] of SIZES) {
       await sceneVisible(BALL, "ball");
       await toastClear();
       if (await toastOffFriend(game, `${label} tutorial kick 1`)) checked.push("toast:friend-1");
+      const coachLines = [];
+      if (await toastShort(game, `${label} tutorial kick 1`, coachLines)) checked.push("toast:short-1");
       await page.screenshot({ path: `artifacts/phone-${label}-tutorial.png` });
       await fonts("tutorial HUD");
       await reachable(game.getByTestId("quick"), "Quick shot");
@@ -255,6 +343,7 @@ for (const [width, height] of SIZES) {
       assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "1");
       checked.push(`swipe:${banner}`);
       await fonts("kick banner");
+      if (await bannerClear(game, `${label} tutorial kick 1`)) checked.push("banner:clear-1");
       // QA-9: the discovery toast is never truncated: it wraps (at most 2 lines, >= 11 px), even for the longest
       // moment name (measured by swapping the longest label into the shown toast, then restoring it).
       {
@@ -283,13 +372,16 @@ for (const [width, height] of SIZES) {
       for (let kick = 2; kick <= 3; kick++) {
         await waitShootable();
         if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) checked.push(`toast:friend-${kick}`);
+        if (await toastShort(game, `${label} tutorial kick ${kick}`, coachLines)) checked.push(`toast:short-${kick}`);
         await reachable(game.getByTestId("quick"), "Quick shot");
         await press(game.getByTestId("quick"));
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
+        if (await bannerClear(game, `${label} tutorial kick ${kick}`)) checked.push(`banner:clear-${kick}`);
         await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       }
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await fonts("results");
+      for (const selector of await goalFits(game, `${label} results`, ["[data-testid=results-next-goal]"])) checked.push(`fits:${selector}`);
       await targets("results");
       // (Closing Results goes to the Modes screen, QA-8; Play again keeps a session on the pitch for the menu hub.)
       await press(game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }));
@@ -306,6 +398,29 @@ for (const [width, height] of SIZES) {
       await press(game.getByTestId("menu"));
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await fonts("mode select");
+      for (const selector of await goalFits(game, `${label} modes`, ["[data-testid=next-goal]", "[data-testid=weekly-keeper]"])) checked.push(`fits:${selector}`);
+      // Polish (C3c/C4 regression): on landscape phones the six mode cards are wholly on screen without scrolling
+      // (above the SDK toolbar, nothing covering them) and NEXT GOAL is visible too, with the pot, Day badge,
+      // Keeper of the Week and the check-in note all on the Modes screen.
+      if (!portrait) {
+        await game.getByTestId("checkin").waitFor({ state: "attached", timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(300); // the screen's entry ease
+        const origin = await iframeOrigin(), bar = await toolbar();
+        const seen = await game.locator("body").evaluate(() => {
+          const screen = document.querySelector(".pk-modescreen");
+          const covered = node => { const r = node.getBoundingClientRect(); return [[0.1, 0.1], [0.9, 0.1], [0.5, 0.5], [0.1, 0.9], [0.9, 0.9]].some(([fx, fy]) => { const top = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy); return !(top && node.contains(top)); }); };
+          const box = node => { const r = node.getBoundingClientRect(); return { name: node.dataset.testid, x1: r.left, y1: r.top, x2: r.right, y2: r.bottom, covered: covered(node) }; };
+          return { scrolled: screen.scrollTop, cards: [...document.querySelectorAll(".pk-modescreen .pk-mode")].map(box), goal: box(document.querySelector("[data-testid=next-goal]")) };
+        });
+        assert.equal(seen.cards.length, 6, `${label}: six mode cards`);
+        assert.equal(seen.scrolled, 0, `${label}: the Modes screen is not scrolled`);
+        for (const item of [...seen.cards, seen.goal]) {
+          const b = { x1: item.x1 + origin.x, y1: item.y1 + origin.y, x2: item.x2 + origin.x, y2: item.y2 + origin.y };
+          assert.ok(inViewport(b) && !hit(b, bar) && !item.covered, `${label}: ${item.name} is not wholly on screen on the Modes screen ${JSON.stringify({ item, bar })}`);
+        }
+        await page.screenshot({ path: `artifacts/phone-${label}-modes.png` });
+        checked.push("modes:on-screen");
+      }
 
       // Big Match: buy a 2-ball pack, open it (pack opening overlay), reveal, kick, then the ball carousel.
       await game.getByTestId("ball-shop").click();
@@ -356,7 +471,7 @@ for (const [width, height] of SIZES) {
 // BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
 // in the cold open and on the attract card after "Skip intro". BQ-P1-10: and every tap target in Results, the menu
 // hub, Settings, mode select and the Ball shop.
-const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[960, 640], [1280, 800]];
+const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[949, 634], [960, 640], [1280, 800]];
 for (const [width, height] of DESKTOP) {
   const label = `${width}x${height}`, sizes = [];
   await testGame("./games/penalty-kings", {
@@ -391,6 +506,7 @@ for (const [width, height] of DESKTOP) {
       assert.ok(toasts >= 1, `${label}: the tutorial coaching toast was checked against the Friend`); sizes.push(`toast clear of the Friend/ball/goal/strip x${toasts}`);
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await assertTargets(game, `${label} results`); sizes.push("results");
+      sizes.push(...(await goalFits(game, `${label} results`, ["[data-testid=results-next-goal]"])).map(selector => `fits ${selector}`));
       await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).click(); // (× goes to Modes, QA-8)
       await waitShootable();
       await game.getByTestId("menu").click();
@@ -402,6 +518,24 @@ for (const [width, height] of DESKTOP) {
       await game.getByTestId("menu").click();
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await assertTargets(game, `${label} mode select`); sizes.push("mode select");
+      sizes.push(...(await goalFits(game, `${label} modes`, ["[data-testid=next-goal]", "[data-testid=weekly-keeper]"])).map(selector => `fits ${selector}`));
+      // Owner report: no horizontal scrollbar at ~949 px, on the page or inside the Modes screen.
+      const wide = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth }));
+      assert.ok(wide.sw <= wide.iw, `${label}: the page scrolls sideways ${JSON.stringify(wide)}`);
+      // (in the game font and in the fallback monospace that play:dev showed before its fonts loaded)
+      for (const family of ["", "ui-monospace, monospace"]) {
+        const inner = await game.locator(".pk-modescreen").evaluate((node, family) => {
+          // A classic 17 px vertical scrollbar (Windows Chrome; headless Chromium hides scrollbars) takes 17 px from the
+          // content box: emulated with 17 px more inline-end padding. It must not push the content sideways.
+          const pad = node.style.paddingRight; node.style.paddingRight = `calc(${getComputedStyle(node).paddingRight} + 17px)`;
+          const root = node.closest(".pk"), before = root.style.fontFamily; root.style.fontFamily = family;
+          const wide = [...node.querySelectorAll("*")].filter(el => el.getBoundingClientRect().right > node.getBoundingClientRect().right + 0.5).slice(0, 4).map(el => `${el.tagName}.${el.className}`);
+          const out = { family, sw: node.scrollWidth, cw: node.clientWidth, doc: document.documentElement.scrollWidth, iw: innerWidth, wide };
+          root.style.fontFamily = before; node.style.paddingRight = pad; return out;
+        }, family);
+        assert.ok(inner.sw <= inner.cw + 1 && inner.doc <= inner.iw, `${label}: the Modes screen scrolls sideways ${JSON.stringify(inner)}`);
+      }
+      sizes.push("no sideways scroll");
       await game.getByTestId("ball-shop").click();
       await assertTargets(game, `${label} ball shop`); sizes.push("ball shop");
     },
