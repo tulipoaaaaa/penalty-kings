@@ -40,6 +40,7 @@ import { swipeToFreeKick, keyShot, keyFreeKick, kickSetup, type KeyAim } from ".
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
 import { FIRST_SESSION, FIRST_UNLOCK, bestGoal, bigCelebrationDue } from "./game/firstsession.js";
 import { nextGoal } from "./game/nextgoal.js";
+import { matchAfterKick, matchResultTitle, MATCH_KICKS } from "./game/match.js";
 import { skillZoneOf, streakAfter, checkIn, LOGIN_TRACK, SKILL_ZONE_XP, SKILL_ZONE_LABEL, inOffLabel } from "./game/rewards.js";
 import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
@@ -961,9 +962,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     if (record.perfect && !timedOut) sub += " · PERFECT strike";
     // Big Match: 5 kicks, then sudden death (double points) if 3+ goals (unchanged rule).
     if (current.mode === "match") {
-      const regular = kicks.length <= 5 && !current.suddenDeath;
-      if (regular && kicks.length === 5 && kicks.filter(item => item.result === "goal").length >= 3) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
-      if (current.suddenDeath && !goal) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
+      const step = matchAfterKick(kicks, Boolean(current.suddenDeath)); // kick 5 is regulation: its miss never ends sudden death
+      if (step.starts) { next = { ...next, suddenDeath: true }; sub += " · Sudden death: double points until you miss"; scene?.say("sudden-death"); }
+      if (step.over) sub = `Sudden death over: missed · final score ${kicks.filter(item => item.result === "goal").length} goals from ${kicks.length} kicks`;
     }
     if (recordsDifficulty(current.mode, current.kind)) updateProgress(p => ({ ...p, history: [...p.history, { goal, zone: record.zone }].slice(-20) })); // ladder modes only (BQ-P2-2)
     const text = timedOut ? TIME_UP : current.kind === "target" ? (record.points ? (current.target && record.points >= 250 && record.y > 0.9 ? "CROSSBAR!" : "HIT!") : "MISS") : result === "post" && record.hitBar ? "OFF THE BAR!" : record.screamer ? "SCREAMER!" : record.tipOver ? "TIPPED OVER!" : LABELS[result]; // OFF THE BAR from the engine's hitBar flag (BQ-P2-8)
@@ -992,7 +993,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       startAim(current); return;
     }
     if (current.mode === "match") {
-      const done = current.suddenDeath ? current.kicks[current.kicks.length - 1]?.result !== "goal" : current.kicks.length >= 5 && !current.suddenDeath;
+      const done = matchAfterKick(current.kicks, Boolean(current.suddenDeath) && current.kicks.length > MATCH_KICKS).done;
       if (done) { endSession(current); return; }
       // The same ball again (round 6 C12): the carousel only opens on "Change ball".
       const ball = current.ball, held = ball && bagRef.current.some(record => record.id === ball.recordId && !record.sample);
@@ -1119,7 +1120,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (current.mode === "match") {
         const top10 = raceTable[Math.min(9, raceTable.length - 1)].points, gap = Math.max(0, top10 - race + 1);
         // Results in plain words (round 6 C12), with the true numbers.
-        result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
+        result.title = matchResultTitle(current.kicks, Boolean(current.suddenDeath));
         result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
         result.match = {
           // B9: the RF / $GBOOT / Cup figures count up on Results (<Count> ends on exactly these texts).
