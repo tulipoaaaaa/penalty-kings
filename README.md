@@ -77,8 +77,8 @@ part of `npm run build:site`, and CI fails if dev code reaches `site/` (`npm run
 
 1. Open the Ubuntu (WSL) terminal.
 2. Go to the project: `cd ~/penalty-kings` (or wherever you cloned it; if needed, clone it first with
-   `git clone https://github.com/tulipoaaaaa/penalty-kings.git`).
-3. Get the latest code: `git pull`
+   `git clone -b claude/clever-mccarthy-ay7qv7 https://github.com/tulipoaaaaa/penalty-kings.git`).
+3. Get the latest code: `git checkout claude/clever-mccarthy-ay7qv7 && git pull` (the active branch; `main` is out of date)
 4. Install dependencies (the first time, and after `package-lock.json` changes): `npm ci`
 5. Start dev mode: `npm run play:dev`
 6. In Windows Chrome, open **http://localhost:5199/** (play) or **http://localhost:5199/showroom/**

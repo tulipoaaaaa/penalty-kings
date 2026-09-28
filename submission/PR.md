@@ -18,9 +18,9 @@ Adds `submissions/penalty-kings/README.md`.
   - penalty: the shot is committed first, then the beacon seeds only the keeper's dive.
 
   The pilot ships without $GBOOT.
-- **Source:** https://github.com/tulipoaaaaa/penalty-kings (FriendSDK v0.1.2)
+- **Source:** https://github.com/tulipoaaaaa/penalty-kings/tree/claude/clever-mccarthy-ay7qv7 (FriendSDK v0.1.2)
 - **Playable preview (simulated economy):** https://tulipoaaaaa.github.io/penalty-kings/
-- **Judge path video (59 s):** https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/judge-path.webm
+- **Judge path video (59 s):** https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/media/judge-path.webm
   (showreel → tutorial → Modes with the next goal → Free Kicks → buy/open a pack → Big Match kick)
 - **Requirements:** a browser wallet on Robinhood mainnet (4663) holding a hardwired
   Generations NFT (generation ≥ 1). The real SDK ownership gate is kept.
@@ -44,7 +44,7 @@ Adds `submissions/penalty-kings/README.md`.
     odds are printed on every pack.
   - Rewards are 0–10× the ball price; the top prize is reserved per ball.
   - $GBOOT (100M fixed supply, RF-paired) is a tested, **undeployed** upgrade package, approved as
-    a design only. See [docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/GBOOT-UPGRADE.md).
+    a design only. See [docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/GBOOT-UPGRADE.md).
 - **What is live:** only the builder burner's Friend #336583 hardwire,
   [tx 0xd6a6a8b9…c78d0](https://robinhoodchain.blockscout.com/tx/0xd6a6a8b911e7a7eba8b5e5771a4ad17ed3fe3af785a1b7e16e0640e86acc78d0).
   Nothing else is deployed. Everything economic in the preview is simulated and labelled. The roadmap is in the README.

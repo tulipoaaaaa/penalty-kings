@@ -1,6 +1,6 @@
 # Penalty Kings
 
-[![Penalty Kings in 15 seconds: the cold-open top-bin goal, a shot off the post, a Golden Boot ball reveal, then 3, 5 and 10 goals in a row](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/media/money-shot.gif)](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/money-shot.webm)
+[![Penalty Kings in 15 seconds: the cold-open top-bin goal, a shot off the post, a Golden Boot ball reveal, then 3, 5 and 10 goals in a row](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/media/money-shot.gif)](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/media/money-shot.webm)
 
 *15 s of real play, recorded at full motion in the SDK preview (simulated economy): cold-open goal → off the post → Golden Boot reveal (the demo pins that roll; the real odds are 1%) → 3, 5 and 10 in a row.*
 
@@ -11,12 +11,12 @@ bought with $RAREFRIENDS; each ball's rarity comes from on-chain randomness and 
 **Builder:** tulipo · contact **@phon_ro** · **Category:** Economy Potential (also fits
 Character Spotlight and Token Activity) · **SDK:** FriendSDK v0.1.2 · UX shaped by founder feedback
 
-[Source code](https://github.com/tulipoaaaaa/penalty-kings) ·
-[Economy design](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md) ·
-[Ball market design](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/BALL-MARKET.md) ·
-[Handoff to Rare Friends](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/HANDOFF-RF.md) ·
-[Two random rolls](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/RNG-INTEGRATION.md) ·
-[Action-flow audit](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/FLOW-AUDIT.md)
+[Source code](https://github.com/tulipoaaaaa/penalty-kings/tree/claude/clever-mccarthy-ay7qv7) ·
+[Economy design](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/ECONOMY.md) ·
+[Ball market design](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/BALL-MARKET.md) ·
+[Handoff to Rare Friends](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/HANDOFF-RF.md) ·
+[Two random rolls](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/RNG-INTEGRATION.md) ·
+[Action-flow audit](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/FLOW-AUDIT.md)
 
 **One sentence:** Penalty Kings makes your Rare Friend the striker in a skill-based pixel-art
 shootout. The optional Big Match sells packs of balls for RF whose rarity is decided by
@@ -33,8 +33,8 @@ SDK v0.2.1 brings Google sign-up, embedded wallets, a loaned Friend, Apple/Googl
 backend. So the game keeps only a thin adapter with marked integration points (progress storage and
 the random beacon). The pilot ships **without $GBOOT**; the token design stays a tested, undeployed
 upgrade package. The architecture, entry points and data formats are in
-[docs/RNG-INTEGRATION.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/RNG-INTEGRATION.md)
-and [docs/HANDOFF-RF.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/HANDOFF-RF.md).
+[docs/RNG-INTEGRATION.md](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/RNG-INTEGRATION.md)
+and [docs/HANDOFF-RF.md](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/HANDOFF-RF.md).
 
 **Designed for a ~15-second random beacon.** Waiting up to 15 s for randomness should feel like
 suspense, not lag:
@@ -47,7 +47,7 @@ Short waits skip straight to the payoff, so instant randomness stays as fast as 
 
 ### Judge path (60 s)
 
-**Video (59 s):** [docs/media/judge-path.webm](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/judge-path.webm).
+**Video (59 s):** [docs/media/judge-path.webm](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/media/judge-path.webm).
 It was recorded in the SDK's own test harness (mock wallet, SDK sample Friend #7730, full motion),
 so the economy in it is **SIMULATED**, the same as in the preview.
 
@@ -61,11 +61,11 @@ so the economy in it is **SIMULATED**, the same as in the preview.
 
 | | |
 |---|---|
-| ![Tutorial: the first goal, with the big celebration](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-goal.png) | ![Modes screen with the NEXT GOAL line](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-modes.png) |
-| ![Free Kicks: aiming over the wall](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-freekick.png) | ![Big Match: pack summary after Reveal all (simulated)](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/judge-pack.png) |
+| ![Tutorial: the first goal, with the big celebration](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/screenshots/judge-goal.png) | ![Modes screen with the NEXT GOAL line](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/screenshots/judge-modes.png) |
+| ![Free Kicks: aiming over the wall](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/screenshots/judge-freekick.png) | ![Big Match: pack summary after Reveal all (simulated)](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/screenshots/judge-pack.png) |
 
 No wallet? The [free practice page](https://tulipoaaaaa.github.io/penalty-kings/practice/) plays
-without one ([screenshot](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/screenshots/practice-844x390-kick.png)).
+without one ([screenshot](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/claude/clever-mccarthy-ay7qv7/docs/screenshots/practice-844x390-kick.png)).
 The video and the `judge-*.png` frames are regenerated only by `npm run record:judge`, not by CI.
 
 **Playable preview (simulated economy):** https://tulipoaaaaa.github.io/penalty-kings/
@@ -135,8 +135,8 @@ The pilot ships without $GBOOT. The upgrade package is kept for later:
 - a free-price, RF-backed ball market (BallVault).
 
 It is covered by Foundry unit, fuzz, invariant and mainnet-fork tests. The owner approved it as a **design only**; the recorded defaults (a plain pool with a 1% LP fee and no hook until audited, whose fees are split 50% burned / 50% to the Cup pot; a proposed season-0 bootstrap, what the perk tiers mean) are in
-[docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/GBOOT-UPGRADE.md),
-and the full maths is in [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/ECONOMY.md).
+[docs/GBOOT-UPGRADE.md](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/GBOOT-UPGRADE.md),
+and the full maths is in [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalty-kings/blob/claude/clever-mccarthy-ay7qv7/docs/ECONOMY.md).
 
 ## What is live, simulated, and roadmap
 
@@ -158,7 +158,7 @@ and the full maths is in [docs/ECONOMY.md](https://github.com/tulipoaaaaa/penalt
 Node.js 22+ on Linux or Ubuntu/WSL2.
 
 ```sh
-git clone https://github.com/tulipoaaaaa/penalty-kings.git
+git clone -b claude/clever-mccarthy-ay7qv7 https://github.com/tulipoaaaaa/penalty-kings.git
 cd penalty-kings
 npm ci
 npm run dev          # connect a wallet holding a hardwired Friend
