@@ -1,5 +1,9 @@
 # Penalty Kings
 
+[![Penalty Kings in 15 seconds: the cold-open top-bin goal, a shot off the post, a Golden Boot ball reveal, then 3, 5 and 10 goals in a row](https://raw.githubusercontent.com/tulipoaaaaa/penalty-kings/HEAD/docs/media/money-shot.gif)](https://github.com/tulipoaaaaa/penalty-kings/blob/HEAD/docs/media/money-shot.webm)
+
+*15 s of real play, recorded at full motion in the SDK preview (simulated economy): cold-open goal → off the post → Golden Boot reveal (the demo pins that roll; the real odds are 1%) → 3, 5 and 10 in a row.*
+
 Your hardwired Rare Friend is the striker in a pixel-art football game. You swipe to shoot
 penalties and free kicks against 12 original keepers. In the Big Match you open packs of balls
 bought with $RAREFRIENDS; each ball's rarity comes from on-chain randomness and sets its RF value.
