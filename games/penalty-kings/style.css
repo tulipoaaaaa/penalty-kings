@@ -256,6 +256,12 @@
 /* Polish (owner report, 949x634): in the Modes screen's scrolling flex column an item with an explicit min-height
    could shrink below its text (flex-shrink), so a two-line NEXT GOAL hung below its border. Items keep their height. */
 .pk-modescreen > * { flex-shrink: 0; }
+/* Owner report: a sideways scrollbar at ~949 px. Children sized in cqw (of the whole .pk frame) filled the Modes
+   screen's content box exactly, so a classic (Windows) vertical scrollbar pushed them 17 px past it. Inside the
+   scrolling Modes screen they size to its own content box (%) instead. */
+.pk-modescreen .pk-modes { width: min(100%, 900px); }
+.pk-modescreen .pk-nextgoal, .pk-modescreen.pk-title .pk-weekly, .pk-modescreen .pk-challengebox { max-width: min(560px, 100%); }
+.pk-modescreen .pk-challengebox { width: min(560px, 100%); }
 .pk-nextgoal, .pk .pk-weekly, .pk-resultgoal { height: auto; line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere; }
 .pk-nextgoal { display: block; margin: 0 auto 8px; max-width: min(560px, 92cqw); min-height: 44px; padding: 6px 12px; font-size: max(11px, 0.9em); text-align: left; color: var(--pk-paper); background: #151a33; border: 2px solid var(--pk-volt, #c8ff00); box-shadow: 2px 2px 0 #000; cursor: pointer; }
 .pk-nextgoal b { color: var(--pk-volt, #c8ff00); margin-right: 6px; letter-spacing: 0.06em; }

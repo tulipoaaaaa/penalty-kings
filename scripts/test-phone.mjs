@@ -519,6 +519,23 @@ for (const [width, height] of DESKTOP) {
       await game.getByRole("button", { name: "Change mode", exact: true }).click();
       await assertTargets(game, `${label} mode select`); sizes.push("mode select");
       sizes.push(...(await goalFits(game, `${label} modes`, ["[data-testid=next-goal]", "[data-testid=weekly-keeper]"])).map(selector => `fits ${selector}`));
+      // Owner report: no horizontal scrollbar at ~949 px, on the page or inside the Modes screen.
+      const wide = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth }));
+      assert.ok(wide.sw <= wide.iw, `${label}: the page scrolls sideways ${JSON.stringify(wide)}`);
+      // (in the game font and in the fallback monospace that play:dev showed before its fonts loaded)
+      for (const family of ["", "ui-monospace, monospace"]) {
+        const inner = await game.locator(".pk-modescreen").evaluate((node, family) => {
+          // A classic 17 px vertical scrollbar (Windows Chrome; headless Chromium hides scrollbars) takes 17 px from the
+          // content box: emulated with 17 px more inline-end padding. It must not push the content sideways.
+          const pad = node.style.paddingRight; node.style.paddingRight = `calc(${getComputedStyle(node).paddingRight} + 17px)`;
+          const root = node.closest(".pk"), before = root.style.fontFamily; root.style.fontFamily = family;
+          const wide = [...node.querySelectorAll("*")].filter(el => el.getBoundingClientRect().right > node.getBoundingClientRect().right + 0.5).slice(0, 4).map(el => `${el.tagName}.${el.className}`);
+          const out = { family, sw: node.scrollWidth, cw: node.clientWidth, doc: document.documentElement.scrollWidth, iw: innerWidth, wide };
+          root.style.fontFamily = before; node.style.paddingRight = pad; return out;
+        }, family);
+        assert.ok(inner.sw <= inner.cw + 1 && inner.doc <= inner.iw, `${label}: the Modes screen scrolls sideways ${JSON.stringify(inner)}`);
+      }
+      sizes.push("no sideways scroll");
       await game.getByTestId("ball-shop").click();
       await assertTargets(game, `${label} ball shop`); sizes.push("ball shop");
     },
