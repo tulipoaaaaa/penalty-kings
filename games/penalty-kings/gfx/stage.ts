@@ -593,7 +593,7 @@ export class Stage {
     // Screen-space UI on the canvas.
     this.drawScoreboard(c);
     this.drawCommentary(c);
-    this.feel.drawUI(c, this.commentaryTop, this.reduced, this.time);
+    this.feel.drawUI(c, this.reduced, this.time);
     this.drawBubble(c);
     if (this.mode === "walkout") this.drawWalkout(c);
     if (this.replaying) this.drawReplayCaption(c);

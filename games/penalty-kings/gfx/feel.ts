@@ -105,6 +105,31 @@ type Banner = { text: string; sub: string; t: number; hot: boolean };
 /** Seconds each FX lives. */
 export const FX_LIFE = { star: 0.16, clang: 0.4, banner: 1.5, chant: 3.6 } as const;
 
+/**
+ * Where the DOM result banner (.pk-banner: the big word and its sub line) lands, in logical canvas px, on every
+ * layout in style.css: desktop top 30cqh, landscape phone pitch top + 70, portrait pitch top + 60, with a 22–68 px
+ * word and the sub line under it. Canvas text must stay out of this band at a result.
+ */
+export const DOM_BANNER_BAND = { x0: 0, y0: 56, x1: W, y1: 154 } as const;
+/**
+ * Top of the feel chip's plate: a lower-third caption on the pitch, under the Friend's feet (its planted spot ends at
+ * y ≈ 263 with the shadow) with the sub line ending 2 px above the canvas edge. Clear of the DOM banner band, the goal
+ * mouth (net ripple, keeper reaction), the scoreboard and the DOM Menu/sound buttons (bottom-right). It used to sit at
+ * the commentary strip + 40, inside the banner band, the fifth text layer at top centre.
+ */
+export const CHIP_TOP = 277;
+/**
+ * The feel chip (26 px plate, ≥ 96 px wide) and its sub line (14 px) under it, centred, whole pixels. The widths
+ * are the measured text widths (16 px and 11 px heading face).
+ */
+export function chipLayout(textWidth: number, subWidth: number) {
+  const inner = 2 * Math.ceil(Math.max(96, Math.round(textWidth) + 25) / 2), outer = inner + 4;
+  const chip = { x0: W / 2 - outer / 2, y0: CHIP_TOP, x1: W / 2 + outer / 2, y1: CHIP_TOP + 26 };
+  const sw = 2 * Math.ceil((Math.round(subWidth) + 14) / 2);
+  const sub = { x0: W / 2 - sw / 2, y0: chip.y1 + 1, x1: W / 2 + sw / 2, y1: chip.y1 + 15 };
+  return { chip, sub };
+}
+
 export class FeelFx {
   star: Star | null = null;
   clang: Spark | null = null;
@@ -157,15 +182,17 @@ export class FeelFx {
     }
   }
 
-  /** Screen-space: the "CLANG!" / "SO CLOSE!" / fever banner under the commentator strip. */
-  drawUI(c: CanvasRenderingContext2D, top: number, reduced: boolean, time: number) {
+  /** Screen-space: the "CLANG!" / "SO CLOSE!" / fever chip and its sub line, placed by chipLayout. */
+  drawUI(c: CanvasRenderingContext2D, reduced: boolean, time: number) {
     const b = this.banner;
     if (!b) return;
     const pop = reduced ? 1 : ease.outBack(clamp01(b.t / 0.22)), fade = 1 - clamp01((b.t - FX_LIFE.banner + 0.3) / 0.3);
     // The heading face (PKHead) has one weight: a second pass 1 px right gives the chip its weight.
-    c.save(); c.font = headFont(16); c.textAlign = "center"; c.textBaseline = "middle";
-    const width = Math.max(96, Math.round(c.measureText(b.text).width) + 25), y = top + 40;
-    c.globalAlpha = fade; c.translate(W / 2, y); c.scale(pop, pop);
+    c.save(); c.font = headFont(16); const textWidth = c.measureText(b.text).width;
+    c.font = headFont(11); const subWidth = b.sub ? c.measureText(b.sub).width : 0;
+    const { chip, sub } = chipLayout(textWidth, subWidth), width = chip.x1 - chip.x0 - 4, cx = (chip.x0 + chip.x1) / 2, cy = (chip.y0 + chip.y1) / 2;
+    c.font = headFont(16); c.textAlign = "center"; c.textBaseline = "middle";
+    c.globalAlpha = fade; c.translate(cx, cy); c.scale(pop, pop);
     const jitter = b.hot && !reduced ? Math.round(Math.sin(time * 70)) : 0;
     c.fillStyle = b.hot ? "#ff3b1f" : "#ffd23f"; c.fillRect(-width / 2 - 2 + jitter, -13, width + 4, 26);
     c.fillStyle = "#0b0d1a"; c.fillRect(-width / 2 + jitter, -11, width, 22);
@@ -176,9 +203,8 @@ export class FeelFx {
       const slide = reduced ? 1 : ease.outCubic(clamp01((b.t - 0.3) / 0.25));
       c.save(); c.globalAlpha = fade * slide;
       c.font = headFont(11); c.textAlign = "center"; c.textBaseline = "middle";
-      const sw = Math.round(c.measureText(b.sub).width) + 14;
-      c.fillStyle = "#0b0d1ae6"; c.fillRect(Math.round(W / 2 - sw / 2), y + 14, sw, 14);
-      c.fillStyle = "#f7f7f2"; c.fillText(b.sub, W / 2, y + 21 + Math.round((1 - slide) * 6));
+      c.fillStyle = "#0b0d1ae6"; c.fillRect(sub.x0, sub.y0, sub.x1 - sub.x0, sub.y1 - sub.y0);
+      c.fillStyle = "#f7f7f2"; c.fillText(b.sub, cx, sub.y0 + 7 + Math.round((1 - slide) * 6));
       c.restore();
     }
   }

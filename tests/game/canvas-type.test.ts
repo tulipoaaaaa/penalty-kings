@@ -40,7 +40,7 @@ test("near-miss and fever chips (CLANG! / SO CLOSE! / HAT-TRICK!) draw in the he
   for (const [text, sub, hot] of [["CLANG!", "SO CLOSE!", false], ["HAT-TRICK!", "3 IN A ROW", true], ["TIPPED!", "FINGERTIP SAVE", false]] as const) {
     const fx = new FeelFx(), { context, texts } = recorder();
     fx.say(text, sub, hot); fx.update(0.5);
-    for (const reduced of [false, true]) fx.drawUI(context, 26, reduced, 1);
+    for (const reduced of [false, true]) fx.drawUI(context, reduced, 1);
     assert.ok(texts.some(t => t.text === text) && texts.some(t => t.text === sub), `${text}: both lines drawn`);
     for (const t of texts) {
       assert.ok(t.font.includes(HEAD_FACE), `${t.text} drawn in ${t.font}`);
