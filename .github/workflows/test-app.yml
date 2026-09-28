@@ -1,0 +1,36 @@
+# The owner's TEST APP lane (branch app/test-shell only). Separate from the judged CI job (ci.yml is unchanged):
+# wallet unit/contract tests, test app typecheck + build, Playwright Chromium phone runs and WebKit iPhone runs.
+name: Test app
+on:
+  push:
+    branches: [app/test-shell]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build the test app (simulated wallet; no secrets)
+        run: npm run build:test-app
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+      - name: Wallet tests, typecheck, phone + iPhone flows (first kick < 60 s, pack purchase, offline, update toast)
+        run: npm run test:test-app -- --no-build --no-video
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-test-app
+          path: dist-test-app/
+          retention-days: 14
