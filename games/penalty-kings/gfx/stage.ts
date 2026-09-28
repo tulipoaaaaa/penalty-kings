@@ -4,7 +4,7 @@
  * Choreography: build-up → run-up → strike (hit-stop, flash, ring) → flight → outcome → celebration/reaction.
  */
 import { keeperById, keeperAt, keeperFrame, freeKickKeeperFrame, FK_SHUFFLE_TIME, rigGeometry, flightAt, WALL_DISTANCE, BALL_RADIUS, GOAL_ASPECT, LEG_RADIUS, type KeeperId, type KeeperPlan, type KeeperFrame, type ShotResult, type ShotOutcome, type FreeKickSetup, type FreeKickOutcome, type FlightSample } from "@penalty-kings/engine";
-import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline } from "./core.js";
+import { W, H, ease, clamp01, lerp, Camera, Particles, Timeline, headFont, loadHeadFont } from "./core.js";
 import { drawBackdrop, drawStadiumFx, drawBoards, drawPitch, drawWeather, drawHeatShimmer, drawGoalFrame, glyphText, glyphCols, GOAL, SPOT, THEMES, toScreen, PENALTY_GOAL, type StadiumId, type Weather } from "./stadium.js";
 import { Crowd } from "./crowd.js";
 import { Net } from "./net.js";
@@ -217,6 +217,7 @@ export class Stage {
     Object.assign(this, options);
     this.crowd = new Crowd(this.stadium);
     this.net.color = this.stadium === "pro" ? "#ccff00" : "#e8e8e8";
+    loadHeadFont();
   }
 
   // ── Configuration ─────────────────────────────────────────────────────────
@@ -476,8 +477,9 @@ export class Stage {
   kickPose(t: number): KickPose { return kickPose(this.kickView(), t); }
   /**
    * B11: the Friend's in-flight fade and whole-pixel offset now (null outside a shot). Live and replayed kicks
-   * run the same shot clock, so a replay eases aside exactly like the live kick; full opacity and the planted
-   * spot are back before the reaction beat (strike + flight + 0.1 s) and any celebration.
+   * run the same shot clock, so a replay eases aside exactly like the live kick. It holds through the payoff and
+   * the start of the reaction beat (strike + flight + 0.1 s, drawn under it); full opacity and the planted spot are
+   * back 0.65 s after the crossing, before any celebration (which, like every react/celebrate mode, draws at full).
    */
   get friendAsideNow(): FriendAside | null {
     const shot = this.mode === "shot" ? this.shot : null;
@@ -592,7 +594,7 @@ export class Stage {
     // Screen-space UI on the canvas.
     this.drawScoreboard(c);
     this.drawCommentary(c);
-    this.feel.drawUI(c, this.commentaryTop, this.reduced, this.time);
+    this.feel.drawUI(c, this.reduced, this.time);
     this.drawBubble(c);
     if (this.mode === "walkout") this.drawWalkout(c);
     if (this.replaying) this.drawReplayCaption(c);
@@ -795,8 +797,9 @@ export class Stage {
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
     if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, pose.x, p); y = lerp(360, pose.y, p); walking = p < 1; facing = "up"; }
     // B11: while the ball is in flight the whole Friend layer (sprite + leg overlay) fades and eases aside so the
-    // left of the goal reads; it is back at full opacity and its planted spot before any reaction/celebration beat.
-    const aside = beat ? null : this.friendAsideNow;
+    // left of the goal reads; it stays so through the payoff (over the reaction pose's start too) and is back at
+    // full opacity and its planted spot 0.65 s after the crossing, before any celebration.
+    const aside = this.friendAsideNow;
     if (aside) { x += aside.dx; y += aside.dy; }
     const rows = this.rows(facing, walking, frame);
     drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: aside?.alpha ?? 1 }, { ...this.layers, cape }, this.time);
@@ -972,7 +975,8 @@ export class Stage {
     const banner = ease.outBack(clamp01((t - 0.6) / 0.5));
     c.save(); c.translate(W / 2, 150); c.scale(banner, banner);
     c.fillStyle = "#ffd23f"; c.fillRect(-110, -14, 220, 28); c.fillStyle = "#0b0d1a"; c.fillRect(-108, -12, 216, 24);
-    c.fillStyle = "#ffd23f"; c.font = "bold 12px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(this.friendName.toUpperCase(), 0, 0);
+    c.fillStyle = "#ffd23f"; c.font = headFont(12); c.textAlign = "center"; c.textBaseline = "middle";
+    const name = this.friendName.toUpperCase(); c.fillText(name, 0, 0); c.fillText(name, -1, 0); // two passes: PKHead has one weight
     c.textAlign = "left"; c.textBaseline = "alphabetic"; c.restore();
   }
 
@@ -998,7 +1002,8 @@ export class Stage {
       if (t < 1.2 && !this.reduced) { this.camera.addTrauma(0.15 * (1 + fx.tier)); this.particles.emit(fx.tier >= 4 ? "sparkle" : "confetti", W / 2, REVEAL_Y, 12 + fx.tier * 14, { color: fx.trail.concat(["#ffffff"]), speed: 90 + fx.tier * 20, spread: Math.PI * 2, gravity: 40, life: 1.4 }); }
       c.save(); c.translate(W / 2, REVEAL_Y + 58); c.scale(slam, slam);
       c.fillStyle = fx.accent; c.fillRect(-120, -16, 240, 32); c.fillStyle = "#0b0d1a"; c.fillRect(-117, -13, 234, 26);
-      c.fillStyle = fx.base === "#ffffff" ? fx.accent : fx.base; c.font = "bold 14px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillStyle = fx.base === "#ffffff" ? fx.accent : fx.base; c.font = headFont(16); c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText(RARITY_NAMES[r.rarity].toUpperCase(), -1, 0); // the heading face has one weight: a second pass 1 px left
       c.fillText(RARITY_NAMES[r.rarity].toUpperCase(), 0, 0); c.textAlign = "left"; c.textBaseline = "alphabetic"; c.restore();
     }
     // The TRUE rarity's colour floods the frame edges (thicker for rarer balls).

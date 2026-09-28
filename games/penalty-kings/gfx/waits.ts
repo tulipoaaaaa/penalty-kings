@@ -4,12 +4,12 @@
  *   PENALTY  the ball warms up on the spot (glow + spin), a suspense meter, "THE KEEPER IS DECIDING…".
  *   PACK     a sealed pack that shakes and glows more the longer the wait runs.
  */
-import { W, H, clamp01 } from "./core.js";
+import { W, H, clamp01, headFont } from "./core.js";
 import { drawBall, type RarityFx } from "./ball.js";
 import type { WaitCue } from "../game/suspense.js";
 
 const text = (c: CanvasRenderingContext2D, value: string, x: number, y: number, color: string, size = 8, bold = false) => {
-  c.font = `${bold ? "bold " : ""}${size}px PixelifySans, monospace`; c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = bold ? headFont(size) : `${size}px PixelifySans, monospace`; c.textAlign = "center"; c.textBaseline = "middle";
   c.fillStyle = "#0b0d1a"; c.fillText(value, x + 1, y + 1); c.fillStyle = color; c.fillText(value, x, y);
   c.textAlign = "left"; c.textBaseline = "alphabetic";
 };

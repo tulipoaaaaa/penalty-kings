@@ -21,6 +21,20 @@ export const ease = {
     return n * (t -= 2.625 / d) * t + 0.984375;
   },
 };
+/**
+ * Canvas heading face. Pixelify's BOLD uppercase C closes into an O at Stage sizes ("OLANG!", "HAT-TRIOK!",
+ * "SOUFFED BALL"), so canvas headings use PKHead: the Departure Mono subset style.css declares for the DOM headings
+ * (A–Z, digits, number punctuation; anything else falls back to Pixelify). One weight: never ask for bold.
+ */
+export const HEAD_FACE = "PKHead, PixelifySans, monospace";
+export const headFont = (px: number) => `${px}px ${HEAD_FACE}`;
+/** Canvas text does not start a web-font download by itself: ask for PKHead once so the first chip already has it. */
+export function loadHeadFont() {
+  try {
+    const fonts = (globalThis as { document?: { fonts?: { load(font: string, text?: string): Promise<unknown> } } }).document?.fonts;
+    fonts?.load(headFont(16), "CLANG!").catch(() => undefined);
+  } catch { /* no FontFaceSet */ }
+}
 export const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** Progress of `t` through a window [start, start + duration], eased. */

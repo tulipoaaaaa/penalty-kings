@@ -3,6 +3,7 @@
 // element overlaps the goal mouth or the striker, and records frame times.
 // Usage: node scripts/test-game.mjs [--width 360] [--screenshot path]
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { testGame } from "@rarefriends/friendsdk/testing";
 import { installPriceFixture } from "./lib/price-fixture.mjs";
 import { playInPortraitIfAsked } from "./lib/phone.mjs";
@@ -85,6 +86,32 @@ await testGame("./games/penalty-kings", {
       await game.locator("body").evaluate(() => new Promise(requestAnimationFrame));
       assert.equal((await game.locator("body").evaluate(() => window.__pkStats())).scoreboard, false, "no SCORE box on the title");
       console.log(`title pot line: ${(await counter.innerText()).replace(/\s+/g, " ")}`);
+    }
+    // Polish: canvas headings (CLANG! / SO CLOSE! / HAT-TRICK! chips, the reveal's SCUFFED BALL banner) use the
+    // heading face, whose C is not an O. Rendered in the game's own document, at the sizes the Stage draws C in.
+    {
+      const face = readFileSync(new URL("../games/penalty-kings/gfx/core.ts", import.meta.url), "utf8").match(/export const HEAD_FACE = "([^"]+)"/)?.[1];
+      assert.ok(face, "gfx/core.ts exports HEAD_FACE");
+      const fonts = [16, 12, 11, 10].map(px => `${px}px ${face}`).concat(["bold 16px PixelifySans, monospace"]);
+      const diff = await game.locator("body").evaluate(async (_body, fonts) => {
+        const out = {};
+        for (const font of fonts) {
+          await document.fonts.load(font, "CO");
+          const mask = ch => {
+            const canvas = document.createElement("canvas"); canvas.width = canvas.height = 32;
+            const c = canvas.getContext("2d"); c.font = font; c.textBaseline = "middle"; c.fillStyle = "#fff"; c.fillText(ch, 4, 16);
+            const data = c.getImageData(0, 0, 32, 32).data, bits = [];
+            for (let i = 3; i < data.length; i += 4) bits.push(data[i] > 127);
+            return bits;
+          };
+          const cm = mask("C"), om = mask("O");
+          let xor = 0, union = 0; cm.forEach((on, i) => { if (on !== om[i]) xor++; if (on || om[i]) union++; });
+          out[font] = union ? xor / union : 0;
+        }
+        return out;
+      }, fonts);
+      for (const font of fonts.slice(0, 4)) assert.ok(diff[font] >= 0.2, `C and O differ in ${font}: ${(diff[font] * 100).toFixed(0)} % of their pixels`);
+      console.log(`C vs O pixel difference: ${Object.entries(diff).map(([f, d]) => `${f.split(",")[0]} ${(d * 100).toFixed(0)}%`).join(" · ")}`);
     }
     // Title → modes → Penalties (first time = tutorial).
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
