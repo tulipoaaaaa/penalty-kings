@@ -57,6 +57,8 @@ button { font: inherit; }
 .pp-results li[data-result="goal"] { background: var(--pk-volt); color: var(--pk-ink); border-color: #000; }
 .pp-results li[data-result="save"], .pp-results li[data-result="post"], .pp-results li[data-result="over"], .pp-results li[data-result="wide"] { background: var(--pk-red); color: var(--pk-ink); border-color: #000; }
 .pp-status { min-height: 1.45em; margin: 0; font-size: 13px; }
+.pp-tip { margin: 0; padding: 4px 8px; font-size: 12px; line-height: 1.35; color: var(--pk-paper); background: var(--pk-panel); border-left: 3px solid var(--pk-gold); }
+.pp-tip[hidden] { display: none; }
 .pp-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pp-keys { margin: 0; font-size: 12px; color: #c9cde0; }
 .pp-foot { max-width: 1200px; margin: 0 auto; padding: 4px 12px 16px; font-size: 12px; color: #c9cde0; }

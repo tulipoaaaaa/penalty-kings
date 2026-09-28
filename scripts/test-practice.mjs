@@ -158,7 +158,58 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   await context.close();
 }
 
+/**
+ * Owner: "naive swipes must not score 5/5; keep it welcoming". On the default seed (?seed=DEFAULT_SEED) at the
+ * desktop size where the audit found 5/5: five straight-up centre swipes do NOT all score, five corner swipes
+ * score at least 4, and a saved/missed kick shows a short tip (>= 11 px, inside the side panel, no overlap).
+ */
+// Same seed as BROWSER_SEED in tests/game/practice-tuning.test.ts (which checks it over a grid of paces and heights).
+const DEFAULT_SEED = Number(process.env.PK_PRACTICE_SEED ?? 194426);
+async function balance(dxs, label) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", error => errors.push(String(error)));
+  await page.goto(`${server.url}practice/?seed=${DEFAULT_SEED}`, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__pkPractice?.().shootable === true, null, { timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.__pkPractice().seed), DEFAULT_SEED, "?seed= fixes the first round");
+  const box = await page.locator("#pp-canvas").boundingBox(), scale = Math.min(box.width / 480, box.height / 320);
+  const at = (x, y) => ({ x: box.x + (box.width - 480 * scale) / 2 + x * scale, y: box.y + (box.height - 320 * scale) / 2 + y * scale });
+  const tips = [];
+  for (let kick = 0; kick < 5; kick++) {
+    await page.waitForFunction(() => window.__pkPractice?.().shootable === true, null, { timeout: 20_000 });
+    const start = at(240, 252);
+    await page.mouse.move(start.x, start.y); await page.mouse.down();
+    for (let i = 1; i <= 9; i++) { await page.mouse.move(start.x + i * dxs[kick] * 11 * scale, start.y - i * 11 * scale); await page.waitForTimeout(18); }
+    await page.mouse.up();
+    await page.waitForFunction(n => window.__pkPractice?.().kicks.length === n, kick + 1, { timeout: 20_000 });
+    const state = await page.evaluate(() => window.__pkPractice());
+    if (kick < 4 && state.kicks[kick] !== "goal") {
+      await page.waitForFunction(() => window.__pkPractice?.().tip !== "", null, { timeout: 5_000 });
+      const tip = await page.getByTestId("practice-tip").evaluate(el => {
+        const r = el.getBoundingClientRect(), side = el.parentElement.getBoundingClientRect();
+        const others = [...el.parentElement.children].filter(other => other !== el && other.checkVisibility()).map(other => other.getBoundingClientRect());
+        return { text: el.textContent, size: parseFloat(getComputedStyle(el).fontSize), inside: r.left >= side.left - 0.5 && r.right <= side.right + 0.5, overlap: others.some(o => r.left < o.right && o.left < r.right && r.top < o.bottom && o.top < r.bottom) };
+      });
+      assert(tip.size >= 11 && tip.inside && !tip.overlap && tip.text.length <= 60, `${label}: tip after a miss ${JSON.stringify(tip)}`);
+      tips.push(tip.text);
+    }
+  }
+  const { kicks, goals } = await page.evaluate(() => window.__pkPractice());
+  assert.deepEqual(errors, [], `${label}: page errors`);
+  await context.close();
+  return { kicks, goals, tips };
+}
+
 try {
+  {
+    const naive = await balance([0, 0, 0, 0, 0], "centre swipes");
+    assert(naive.goals < 5, `five naive centre swipes must not score 5/5 on seed ${DEFAULT_SEED} (got ${naive.kicks.join(" ")})`);
+    assert(naive.tips.some(text => /corner/i.test(text)), `a saved centre shot suggests a corner (${naive.tips.join(" | ")})`);
+    const corners = await balance([0.68, -0.68, 0.68, -0.68, 0.68], "corner swipes");
+    assert(corners.goals >= 4, `five corner swipes score at least 4 on seed ${DEFAULT_SEED} (got ${corners.kicks.join(" ")})`);
+    report.push({ name: `balance seed ${DEFAULT_SEED} 1280x800`, results: `centre ${naive.goals}/5 (${naive.kicks.join(" ")}), corners ${corners.goals}/5 (${corners.kicks.join(" ")}); tip: "${naive.tips[0] ?? ""}"`, goals: "-", keepers: "-", lines: 0, requests: "-" });
+  }
   // BQ-P2: no vertical scroll where the page is one screen (landscape phones, where the header wraps on the narrow
   // ones, and a tall portrait phone). A short portrait phone (360 × 640) scrolls to the footer by design, but the
   // whole pitch and the Quick shot button are on the first screen.

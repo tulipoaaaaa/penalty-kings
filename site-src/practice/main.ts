@@ -8,8 +8,8 @@
  * storage; the only stored thing is "rotate hint dismissed", and every storage access is guarded.
  */
 import {
-  keeperById, keeperPlan, kickSeed, resolveShot, swipeToShot, aimedShot, shotTarget, aimWobble, wobbleFor, clamp,
-  DIFFICULTY_LADDER, type ShotInput, type ShotResult, type SwipePoint, type SwipeOptions, type InputKind,
+  keeperById, keeperPlan, kickSeed, swipeToShot, aimedShot, shotTarget, aimWobble, wobbleFor, clamp,
+  type ShotInput, type ShotResult, type SwipePoint, type SwipeOptions, type InputKind,
 } from "@penalty-kings/engine";
 import { Stage, CELEBRATIONS } from "../../games/penalty-kings/gfx/stage.js";
 import { W, H } from "../../games/penalty-kings/gfx/core.js";
@@ -20,6 +20,7 @@ import { keyShot, type KeyAim } from "../../games/penalty-kings/game/input.js";
 import { createCrowd } from "../../games/penalty-kings/audio.js";
 import { isSfx } from "../../games/penalty-kings/audio-core.js";
 import { strikerRows, STRIKER_STAND } from "./striker.js";
+import { PRACTICE_TUNING, practiceKick, missHint } from "./tuning.js";
 import { cardImage, shareAbilities, CARD_TAGLINE } from "../../games/penalty-kings/gfx/sharecard.js";
 import { PUBLIC_URL } from "../../games/penalty-kings/game/challenge.js";
 
@@ -27,8 +28,8 @@ export const PRACTICE_KICKS = 5;
 /** Ad boards without token or cup names (the stadium's usual jokes minus the economy ones). */
 const BOARDS = ["PENALTY KINGS", "FREE PRACTICE", "KEEPERS HATE THIS ONE TRICK", "NO REFUNDS ON SHIN PADS", "TOP BINS MONTHLY", "NUTMEG INSURANCE CO.", "HALF-TIME ORANGES"];
 const LABELS: Record<ShotResult, string> = { goal: "GOAL!", save: "SAVED!", post: "OFF THE POST!", over: "OVER THE BAR!", wide: "WIDE!" };
-/** Easiest rung of the game's invisible difficulty ladder (the game's own start), without a shot clock. */
-const DIFFICULTY = { ...DIFFICULTY_LADDER[0], clock: 0 };
+/** Practice difficulty (site-src/practice/tuning.ts): the game's easiest rung, no shot clock, a keeper who can stay up for the middle. */
+const DIFFICULTY = PRACTICE_TUNING.difficulty;
 
 type Phase = "intro" | "aim" | "shooting" | "done";
 type Kick = { result: ShotResult; keeper: string; zone: string; x: number };
@@ -37,6 +38,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const canvas = $<HTMLCanvasElement>("pp-canvas");
 const context = canvas.getContext("2d")!;
 const count = $("pp-count"), status = $("pp-status"), banner = $("pp-banner"), results = $("pp-results"), end = $("pp-end");
+const tip = $("pp-tip");
 const endScore = $("pp-end-score"), quick = $<HTMLButtonElement>("pp-quick"), again = $<HTMLButtonElement>("pp-again"), soundButton = $<HTMLButtonElement>("pp-sound");
 
 const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -51,11 +53,13 @@ scene.rarity = 7; scene.lucky = false; // the plain warm-up ball: no rarity, no 
 const crowd = createCrowd();
 let soundOn = false;
 
+/** `?seed=N` fixes the FIRST round's seed (tests; a shared practice). "Practice again" always rolls a new one. */
+const fixedSeed = (() => { try { const value = Number(new URLSearchParams(location.search).get("seed")); return Number.isSafeInteger(value) && value > 0 ? value >>> 0 : null; } catch { return null; } })();
 const randomSeed = () => { try { return crypto.getRandomValues(new Uint32Array(1))[0] >>> 1; } catch { return Math.floor(Math.random() * 2 ** 31); } };
 
 const state = {
   phase: "intro" as Phase,
-  seed: randomSeed(),
+  seed: fixedSeed ?? randomSeed(),
   kicks: [] as Kick[],
   goals: 0, streak: 0,
   swipe: null as SwipePoint[] | null,
@@ -88,15 +92,16 @@ function toLogical(event: PointerEvent): SwipePoint {
 const wobble = () => aimWobble(performance.now() / 1000, wobbleFor(DIFFICULTY, state.streak));
 
 // ── Round flow ─────────────────────────────────────────────────────────────
+let rounds = 0;
 function startRound() {
   state.epoch++;
-  state.seed = randomSeed(); state.kicks = []; state.goals = 0; state.streak = 0; state.pending = null; state.afterBeat = null;
+  state.seed = rounds++ === 0 && fixedSeed !== null ? fixedSeed : randomSeed(); state.kicks = []; state.goals = 0; state.streak = 0; state.pending = null; state.afterBeat = null;
   director = createGameDirector(state.seed, { name: scene.friendName, number: "" });
   scene.cancel(); scene.setScore(0); scene.streak = 0; scene.kind = "penalty"; scene.hints = 0;
   const opening = director.startSession({ mode: "penalties", stadium: "park", keeper: "mouse", weather: scene.weather });
   scene.keeper = opening.keeper;
   end.hidden = true; document.body.classList.remove("pp-finished");
-  renderResults(); setBanner(null);
+  renderResults(); setBanner(null); setTip("");
   state.phase = "intro";
   state.opening = opening;
   scene.walkout("walkout"); // "walkout-done" opens the first kick
@@ -127,15 +132,15 @@ function shoot(raw: ShotInput) {
   if (!shootable()) return;
   state.phase = "shooting"; quick.disabled = true;
   const index = state.kicks.length, profile = keeperById(scene.keeper);
-  const shot = aimedShot(raw, wobble(), DIFFICULTY.assist);
-  const outcome = resolveShot(shot, profile, kickSeed(state.seed, index, profile.id), { kickIndex: index, history: state.kicks.map(kick => kick.x) }, DIFFICULTY);
+  // Practice rules on top of the engine (tuning.ts): the reticle's aimed shot, then resolveShot, then the keeper's hold for the middle.
+  const { shot, outcome } = practiceKick(raw, wobble(), profile.id, kickSeed(state.seed, index, profile.id), index, state.kicks.map(kick => kick.x));
   state.pending = { result: outcome.result, keeper: profile.name, zone: outcome.zone, x: outcome.target.x };
   // The Director only reacts: the Stage says its line when the ball arrives.
   const beat = director.afterKick({ kind: "penalty", result: outcome.result, zone: outcome.zone, x: outcome.target.x, y: outcome.target.y, postIn: outcome.postIn, now: performance.now() / 1000 });
   state.afterBeat = beat;
   scene.cue = beat.lines[0] ? cueLine(beat.lines[0]) : null;
   scene.play(outcome, shot.curl);
-  setStatus("");
+  setStatus(""); setTip("");
 }
 
 function onResolved() {
@@ -151,6 +156,8 @@ function onResolved() {
   const where = kick.zone === "bin" ? "top bin" : kick.zone === "corner" ? "in the corner" : kick.zone === "side" ? "to the side" : "down the middle";
   setBanner({ text: LABELS[kick.result], sub: goal ? `${where} · past ${kick.keeper}` : kick.result === "save" ? `${kick.keeper} saves it` : "No goal this time", goal });
   setStatus(`${LABELS[kick.result]} ${state.goals} of ${state.kicks.length}.`);
+  // A miss gets one short, friendly pointer (kept up while the next kick is aimed).
+  if (state.kicks.length < PRACTICE_KICKS) setTip(missHint(kick.result, kick.x));
 }
 
 function onDone() {
@@ -214,6 +221,7 @@ function setBanner(value: { text: string; sub: string; goal: boolean } | null) {
   banner.dataset.tone = value.goal ? "goal" : "miss";
   banner.replaceChildren(Object.assign(document.createElement("strong"), { textContent: value.text }), Object.assign(document.createElement("span"), { textContent: value.sub }));
 }
+const setTip = (text: string) => { tip.textContent = text; tip.hidden = !text; };
 const setStatus = (text: string) => { status.textContent = text; quick.disabled = state.phase !== "aim"; };
 
 // ── Aim (every frame): the same WYSIWYG reticle as the game ─────────────────
@@ -315,7 +323,7 @@ function loop(time: number) {
 
 /** Read-only hook for scripts/test-practice.mjs. */
 (window as unknown as { __pkPractice?: () => unknown }).__pkPractice = () => ({
-  phase: state.phase, shootable: shootable(), kicks: state.kicks.map(kick => kick.result), goals: state.goals, keeper: scene.keeper,
+  phase: state.phase, shootable: shootable(), seed: state.seed, tip: tip.hidden ? "" : tip.textContent, kicks: state.kicks.map(kick => kick.result), goals: state.goals, keeper: scene.keeper,
   keepers: [...scene.stats.keepers], lines: scene.stats.lines.size,
 });
 
