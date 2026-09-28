@@ -426,6 +426,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return () => { cancelAnimationFrame(frame); window.removeEventListener("blur", stopKeys); stage.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+  // QA-7: the canvas SCORE box shows only in a session; with none (title, modes, a Ball shop pack reveal) it is hidden
+  // and reset, so no stale score or streak from the last session shows behind the title card or the reveal.
+  const inSession = Boolean(session);
+  useEffect(() => {
+    const scene = stage.current;
+    if (!scene) return;
+    scene.scoreboard = inSession;
+    if (!inSession) { scene.setScore(0); scene.streak = 0; }
+  }, [inSession, ready]);
 
   // Cold open (first view): the 20–30 s montage on the real Stage; any tap/key skips to the attract loop.
   useEffect(() => {

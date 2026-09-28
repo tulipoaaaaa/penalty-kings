@@ -81,6 +81,9 @@ await testGame("./games/penalty-kings", {
       assert.match(winners, /LAST WEEK[\s\S]*SIMULATED/); assert.match(winners, /#1 Friend #\d{4}\s+[\d,]+ RF/);
       const now = new Date(), night = now.getUTCDay() === 6 && now.getUTCHours() >= 19 && now.getUTCHours() < 21;
       assert.equal((await game.locator("body").evaluate(() => window.__pkStats())).stadium, night ? "champions" : "park", "the Park look outside Champions Night");
+      // QA-7: no canvas SCORE box behind the title card (it belongs to a session).
+      await game.locator("body").evaluate(() => new Promise(requestAnimationFrame));
+      assert.equal((await game.locator("body").evaluate(() => window.__pkStats())).scoreboard, false, "no SCORE box on the title");
       console.log(`title pot line: ${(await counter.innerText()).replace(/\s+/g, " ")}`);
     }
     // Title → modes → Penalties (first time = tutorial).
@@ -207,6 +210,8 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("open-pack").click();
     await page.getByRole("button", { name: "Confirm preview", exact: true }).click();
     await game.getByTestId("pack").waitFor({ timeout: 10_000 });
+    // QA-7: the pack reveal (opened from the Ball shop, no session) shows no stale SCORE box from the tutorial.
+    assert.equal((await game.locator("body").evaluate(() => window.__pkStats())).scoreboard, false, "no stale SCORE box during the pack reveal");
     assert.match(await game.getByTestId("pack").textContent(), /Rarity decided by/);
     assert.match(await game.getByTestId("pack").getByTestId("odds-line").textContent(), /Odds per ball:.*Golden Boot 1%/, "odds printed on the pack being opened");
     await game.getByTestId("reveal-all").click();

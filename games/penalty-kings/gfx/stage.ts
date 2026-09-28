@@ -164,7 +164,9 @@ export class Stage {
     /** Every line shown, with real-time seconds (the QA checks 0 repeats within 60 s). Bounded. */
     lineLog: [] as { text: string; at: number }[],
     /** The Friend sprite's drawn box (logical px, halo and boots included) on the last frame: QA overlap checks. */
-    friendRect: null as { x1: number; y1: number; x2: number; y2: number } | null };
+    friendRect: null as { x1: number; y1: number; x2: number; y2: number } | null,
+    /** The canvas SCORE box was drawn on the last frame (QA-7: only in a session). */
+    scoreboard: false };
 
   private mode: "idle" | "shot" | "celebrate" | "react" | "walkout" = "idle";
   private modeTime = 0;
@@ -464,6 +466,8 @@ export class Stage {
   flipBall(plan: RevealPlan) { this.packTear = null; this.flip = { t: 0, plan }; this.sfx(`rarity-${plan.rarity}` as PackSfx); }
   /** The Mexican wave; its line only when the box is free (a goal's result line is never cut short). */
   wave() { this.crowd.startWave(); this.crowd.react("cheer"); this.stats.waves++; if (!this.said || this.said.t > 1.2) this.say("wave"); }
+  /** QA-7: the SCORE box belongs to a session; the shell hides it on the title, the modes screen and a pack reveal. */
+  scoreboard = false;
   setScore(score: number) { if (score !== this.score) { this.scoreFlip = { from: this.score, t: 0 }; this.score = score; } }
   private finish() { this.mode = "idle"; this.shot = null; this.ballVisible = false; this.onEvent("done"); }
   /** The view the taker runs up in (the penalty camera, or this free kick's camera). */
@@ -910,6 +914,8 @@ export class Stage {
   }
 
   private drawScoreboard(c: CanvasRenderingContext2D) {
+    this.stats.scoreboard = this.scoreboard;
+    if (!this.scoreboard) return;
     const x = W - 92, y = 2, board = this.stadium === "park" ? "#6d4c41" : this.stadium === "pro" ? "#0b0d1a" : "#3d2600";
     c.fillStyle = "#0b0d1a"; c.fillRect(x - 1, y - 1, 90, 20); c.fillStyle = board; c.fillRect(x, y, 88, 18);
     // B4: crisp 4×5 bitmap glyphs (GLYPHS) instead of 8px fillText, which blurred into "SOORE" and S-shaped fives.
