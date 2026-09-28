@@ -114,3 +114,42 @@ export function kickPose(view: KickView, t: number): KickPose {
 }
 /** The foot's point at contact: on the back-left of the ball. */
 export const contactPoint = (view: KickView) => ({ x: view.ball.x - 2, y: view.ball.y + 1 });
+
+// ── B11: the Friend eases aside while the ball is in flight ─────────────────────────────
+// Drawn big in the foreground, the planted Friend hides the left third of the goal while the ball flies, so the
+// arrival and the keeper's save on that side are lost. After the contact frame (the leg is into its follow-through)
+// the whole Friend layer fades to FRIEND_FLIGHT_ALPHA and eases a few whole pixels aside (left, and a touch down,
+// away from the goal); it holds there through the crossing and is back at full opacity and its exact planted
+// position by FRIEND_RESTORE_AFTER s after the crossing, when the reaction beat starts (celebrations begin later).
+// Layering only: the canonical sprite is never redrawn or recoloured; kickPose and its timing are untouched.
+/** Seconds after contact the fade starts: the end of the "contact" leg frame (legFrame), never before it. */
+export const FRIEND_ASIDE_FROM = 0.06;
+/** Seconds the ease aside takes (and the ease back). */
+export const FRIEND_ASIDE_EASE = 0.12;
+/** Seconds after the crossing by which the Friend is fully restored (the Stage's reaction beat starts here). */
+export const FRIEND_RESTORE_AFTER = 0.1;
+/** The Friend's opacity while the ball is in flight. */
+export const FRIEND_FLIGHT_ALPHA = 0.45;
+/** How far it eases aside, in sprite cells (× the sprite scale → screen px): left, and slightly down. */
+export const FRIEND_ASIDE_CELLS = { x: -3, y: 1 } as const;
+export type FriendAside = { alpha: number; dx: number; dy: number };
+
+/**
+ * The Friend's flight alpha and whole-pixel offset `since` s after contact (negative: before the strike), for a
+ * flight of `flight` s and a sprite `scale`. Reduced motion: no movement, an instant alpha step for the flight.
+ */
+export function friendAside(since: number, flight: number, scale: number, reduced = false): FriendAside {
+  const restoreEnd = flight + FRIEND_RESTORE_AFTER;
+  const rest: FriendAside = { alpha: 1, dx: 0, dy: 0 };
+  if (!(since >= FRIEND_ASIDE_FROM) || since >= restoreEnd) return rest;
+  if (reduced) return { alpha: FRIEND_FLIGHT_ALPHA, dx: 0, dy: 0 };
+  // Out: ease-out from the follow-through; back: ease-in-out over the last FRIEND_ASIDE_EASE s before the reaction
+  // (never before the crossing, so the ball's arrival is always seen with the Friend aside).
+  const back = Math.max(flight, restoreEnd - FRIEND_ASIDE_EASE, FRIEND_ASIDE_FROM);
+  let k: number;
+  if (since < back) { const p = Math.min(1, (since - FRIEND_ASIDE_FROM) / FRIEND_ASIDE_EASE); k = 1 - (1 - p) ** 3; }
+  else { const p = Math.min(1, (since - back) / (restoreEnd - back)); k = 1 - (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2); }
+  const peak = Math.min(1, (back - FRIEND_ASIDE_FROM) / FRIEND_ASIDE_EASE); // a (very) short flight never fully eases out
+  k = Math.min(k, 1 - (1 - peak) ** 3);
+  return { alpha: 1 - (1 - FRIEND_FLIGHT_ALPHA) * k, dx: Math.round(k * FRIEND_ASIDE_CELLS.x * scale) || 0, dy: Math.round(k * FRIEND_ASIDE_CELLS.y * scale) || 0 };
+}

@@ -285,7 +285,18 @@ setStadium("park");
 (window as unknown as { __showroom: unknown }).__showroom = { stage, setStadium, toPenalty, freeKickView: () => useSetup(setup), goal: () => { toPenalty(); shoot("goal"); },
   crowd: (mood: CrowdMood) => stage.crowd.react(mood), census: () => stage.crowd.census, drop: BACKDROP_DROP, loadSample: (id: string) => loadSample(id),
   reel: (which: "montage" | "attract" | "off") => playReel(which), reelTime: () => reel?.time ?? -1,
-  feel: (id: string) => FEEL[id](), friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); } };
+  feel: (id: string) => FEEL[id](), friend: () => $("#friend-status").textContent, setFriends: (on: boolean) => { crowdFriends.checked = on; applyCrowd(); },
+  // B11 flight shots: a real engine outcome on the LEFT of the goal (target.x < maxX), penalty or free kick (seed Math.random first).
+  leftPenalty: (result: ShotResult, maxX = -0.45) => { toPenalty(); const { outcome, curl } = findShot(result, stage.keeper, o => o.target.x < maxX); stage.play(outcome, curl); return outcome; },
+  leftFreeKick: (result: "goal" | "save", maxX = -0.45) => {
+    useSetup(freeKickSetup(42, { distance: 22, angle: 0, wallSize: 3, maxWind: 0 }));
+    for (let i = 0; i < 20000; i++) {
+      const shot: FreeKickShot = { aimX: Math.random() * 2 - 1, lift: Math.random(), power: Math.random(), spin: Math.random() * 2 - 1, top: Math.random() };
+      const outcome = resolveFreeKick({ ...setup, seed: setup.seed + i }, shot, keeperById(stage.keeper));
+      if (outcome.result === result && outcome.target.x < maxX) { stage.playFreeKick(outcome); return outcome; }
+    }
+    return null;
+  } };
 select<Weather>("#weather", (["sun", "rain", "snow", "fog", "sunset"] as const).map(value => ({ value, label: value })), value => { stage.weather = value; });
 select<string>("#rarity", RARITY_NAMES.map((name, index) => ({ value: String(index), label: name })), value => { stage.rarity = Number(value); });
 ($<HTMLSelectElement>("#rarity")).value = "7";

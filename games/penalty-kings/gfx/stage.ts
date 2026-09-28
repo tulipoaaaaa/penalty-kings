@@ -13,7 +13,7 @@ import { drawBall, emitTrail, emitLucky, seasonFx, RARITY_FX, flightRadius, ribb
 import { drawFriend, drawKickLeg, drawContactFlash, celebrationBeat, reactionBeat, drawTrophy, CELEBRATIONS, type CelebrationId, type FriendLayers } from "./friend.js";
 import { freshCommentary, drawCommentator, type CommentaryContext } from "./commentary.js";
 import { fkProject, fkBall, drawWall, pathAt, drawPreview, drawZoneHints, drawTargets, drawCrossbarGlow, drawClock, goalTransform, applyGoal, drawPitchMarkings, PENALTY_SETUP, PENALTY_CAMERA } from "./setpieces.js";
-import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, FRIEND_CELL, type KickView, type KickPose } from "./kick.js";
+import { STRIKE_AT, PENALTY_VIEW, freeKickView, kickPose, plantSpot, runupStart, friendAside, FRIEND_CELL, type KickView, type KickPose, type FriendAside } from "./kick.js";
 import type { RevealPlan } from "../game/reveal.js";
 import { waitCue, WAIT_EVENTS, PACK_TEAR_MS, type WaitCue } from "../game/suspense.js";
 import { drawBallWarmup, drawPenaltyWait, drawSealedPack, drawPackTear } from "./waits.js";
@@ -468,6 +468,15 @@ export class Stage {
   kickView(): KickView { return this.kind === "freekick" && this.freeKick ? freeKickView(this.freeKick.setup) : PENALTY_VIEW; }
   /** The taker's pose `t` s after release (the Showroom's slow replay and the geometry test read this). */
   kickPose(t: number): KickPose { return kickPose(this.kickView(), t); }
+  /**
+   * B11: the Friend's in-flight fade and whole-pixel offset now (null outside a shot). Live and replayed kicks
+   * run the same shot clock, so a replay eases aside exactly like the live kick; full opacity and the planted
+   * spot are back before the reaction beat (strike + flight + 0.1 s) and any celebration.
+   */
+  get friendAsideNow(): FriendAside | null {
+    const shot = this.mode === "shot" ? this.shot : null;
+    return shot ? friendAside(this.modeTime - shot.strikeAt, shot.flight, this.kickPose(this.modeTime).scale, this.reduced) : null;
+  }
   private stepDust(t: number) { const pose = this.kickPose(t); this.dust(pose.x, pose.y); }
   private dust(x: number, y: number) { this.particles.emit("dust", x, y, 5, { color: ["#c8b99a", "#a89878"], speed: 25, spread: 1.6, life: 0.5, gravity: -10 }); }
   private sfx(name: Sfx | PackSfx) { this.stats.sfx++; this.onEvent("sfx", name); }
@@ -779,10 +788,19 @@ export class Stage {
     const beat = this.friendBeat();
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
     if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, pose.x, p); y = lerp(360, pose.y, p); walking = p < 1; facing = "up"; }
+    // B11: while the ball is in flight the whole Friend layer (sprite + leg overlay) fades and eases aside so the
+    // left of the goal reads; it is back at full opacity and its planted spot before any reaction/celebration beat.
+    const aside = beat ? null : this.friendAsideNow;
+    if (aside) { x += aside.dx; y += aside.dy; }
     const rows = this.rows(facing, walking, frame);
-    drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: 1 }, { ...this.layers, cape }, this.time);
+    drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: aside?.alpha ?? 1 }, { ...this.layers, cape }, this.time);
     // Overlays on top of the (unaltered) sprite: the kicking leg's pixel frames and the contact flash.
-    if (kicking && pose.leg && !beat) drawKickLeg(c, pose.leg, pose.scale, this.layers.halo, this.layers.boots);
+    if (kicking && pose.leg && !beat) {
+      c.save();
+      if (aside) { c.globalAlpha = aside.alpha; c.translate(aside.dx, aside.dy); }
+      drawKickLeg(c, pose.leg, pose.scale, this.layers.halo, this.layers.boots);
+      c.restore();
+    }
     if (kicking && pose.flash > 0) drawContactFlash(c, view.ball.x, view.ball.y, view.ball.r, pose.flash, this.reduced);
     if (trophy) drawTrophy(c, x, y - FRIEND_CELL * pose.scale - 14);
   }
