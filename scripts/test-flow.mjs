@@ -100,6 +100,10 @@ await testGame("./games/penalty-kings", {
     const goalButton = game.getByTestId("results-next-goal");
     assert.match(await goalButton.getAttribute("class"), /\bpk-primary\b/, "NEXT GOAL is the primary Results button");
     assert.match(await goalButton.innerText(), /^NEXT GOAL\s+\S/, "it names the goal");
+    // QA-2: one "what next" only: no "Next up: Free Kicks…" teaser contradicting the NEXT GOAL; the unlock title stays.
+    assert.equal(await game.getByTestId("teaser").count(), 0, `no next-mode teaser beside NEXT GOAL (${await game.getByTestId("teaser").allInnerTexts()} vs ${await goalButton.innerText()})`);
+    assert.doesNotMatch(await game.getByTestId("results").innerText(), /Next up:/, "no second 'Next up' line");
+    assert.match(await game.getByTestId("results").locator("h3").innerText(), /Level 2: .*unlocked/, "the Level 2 unlock line stays");
     assert.equal(await goalButton.evaluate(el => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(el === document.activeElement))))), true, "and has focus");
     assert.doesNotMatch(await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).getAttribute("class") ?? "", /pk-primary/, "Play again is secondary");
     const still = await pressStyle(game.getByTestId("results").getByRole("button", { name: "Modes", exact: true }));

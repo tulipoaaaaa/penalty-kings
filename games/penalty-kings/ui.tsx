@@ -320,7 +320,8 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
         <div className="pk-unlock-front"><KeeperPortrait id={summary.scouted.keeper} lit /><strong>{keeperById(summary.scouted.keeper).name}</strong></div>
         <div className="pk-unlock-back"><small>Scouting Book · new page</small><strong>{keeperById(summary.scouted.keeper).name} · scouted</strong><small><b>Tell:</b> {keeperById(summary.scouted.keeper).tell}</small></div>
       </div>
-      <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>
+      {/* QA-2: one "what next" only. With a NEXT GOAL button the teaser would name a different mode, so it goes. */}
+      {!goalFirst && <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>}
       {onBook && <button type="button" className="pk-link" onClick={onBook} data-testid="open-book">Open the Scouting Book</button>}
     </div>}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}

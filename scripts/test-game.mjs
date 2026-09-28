@@ -153,9 +153,11 @@ await testGame("./games/penalty-kings", {
     }
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
     assert.match(await game.getByTestId("results").textContent(), /Tutorial complete/);
-    // SIO-2: the keeper-unlock card (flips into the Scouting Book) and the Free Kicks teaser.
+    // SIO-2: the keeper-unlock card (flips into the Scouting Book); Free Kicks is named in the Level 2 unlock title.
+    // QA-2: the NEXT GOAL button is the one "what next", so no separate Free Kicks teaser contradicts it.
     assert.match(await game.getByTestId("unlock-card").textContent(), /New rival scouted: Octavia!/);
-    assert.match(await game.getByTestId("teaser").textContent(), /Free Kicks/);
+    assert.match(await game.getByTestId("results").locator("h3").textContent(), /Level 2: Free Kicks/);
+    assert.equal(await game.getByTestId("teaser").count(), 0);
     // SIO-4: the Scouting Book's Discovery meter.
     // C3c: Results shows the pot and "Your Cup entries this week" (preview: from the simulated race table).
     assert.equal(await game.getByTestId("results").getByTestId("pot-counter").getAttribute("data-place"), "results");
