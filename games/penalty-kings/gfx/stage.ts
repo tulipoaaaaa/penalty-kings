@@ -477,8 +477,9 @@ export class Stage {
   kickPose(t: number): KickPose { return kickPose(this.kickView(), t); }
   /**
    * B11: the Friend's in-flight fade and whole-pixel offset now (null outside a shot). Live and replayed kicks
-   * run the same shot clock, so a replay eases aside exactly like the live kick; full opacity and the planted
-   * spot are back before the reaction beat (strike + flight + 0.1 s) and any celebration.
+   * run the same shot clock, so a replay eases aside exactly like the live kick. It holds through the payoff and
+   * the start of the reaction beat (strike + flight + 0.1 s, drawn under it); full opacity and the planted spot are
+   * back 0.65 s after the crossing, before any celebration (which, like every react/celebrate mode, draws at full).
    */
   get friendAsideNow(): FriendAside | null {
     const shot = this.mode === "shot" ? this.shot : null;
@@ -796,8 +797,9 @@ export class Stage {
     if (beat) { x += beat.dx; y += beat.dy; rotate = beat.rotate; sx = beat.sx; sy = beat.sy; flip = beat.flip; facing = beat.facing; cape = cape || beat.cape; trophy = beat.trophy; }
     if (this.mode === "walkout") { const p = ease.outCubic(clamp01(this.modeTime / 2)); x = lerp(240, pose.x, p); y = lerp(360, pose.y, p); walking = p < 1; facing = "up"; }
     // B11: while the ball is in flight the whole Friend layer (sprite + leg overlay) fades and eases aside so the
-    // left of the goal reads; it is back at full opacity and its planted spot before any reaction/celebration beat.
-    const aside = beat ? null : this.friendAsideNow;
+    // left of the goal reads; it stays so through the payoff (over the reaction pose's start too) and is back at
+    // full opacity and its planted spot 0.65 s after the crossing, before any celebration.
+    const aside = this.friendAsideNow;
     if (aside) { x += aside.dx; y += aside.dy; }
     const rows = this.rows(facing, walking, frame);
     drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: aside?.alpha ?? 1 }, { ...this.layers, cape }, this.time);
