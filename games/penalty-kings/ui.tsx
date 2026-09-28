@@ -288,18 +288,14 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
   const hasNext = Boolean(next && "onNext" in next), goalFirst = !hasNext && Boolean(goal);
   const counting = summary.goals > 0 || summary.points > 0 || summary.xp > 0 || Boolean(summary.match);
   const t = useCountClock(reduced, counting, onTick), final = t >= 1;
-  // The primary button takes focus without scrolling the tiles out of view; once the count lands, it scrolls in.
+  // The primary button takes focus without scrolling the tiles out of view (QA-4: in either motion mode, and never a
+  // scroll after the count): it sits in a sticky footer (.pk-resultfoot), so the tiles and the button are both in view.
   // (A frame later: the SDK GameMenu focuses its dialog in its own mount effect, which runs after this one.)
-  const primary = useRef<HTMLButtonElement>(null), landed = useRef(false);
+  const primary = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => primary.current?.focus({ preventScroll: !reduced }));
+    const frame = requestAnimationFrame(() => primary.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!final || landed.current) return;
-    landed.current = true;
-    if (!reduced) primary.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-  }, [final, reduced]);
+  }, []);
   return <CountClock.Provider value={t}><div className="pk-roundcard" data-testid="results" data-final={final || undefined}>
     <h3>{summary.title}</h3>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
@@ -327,10 +323,12 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     {cup}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
-    {goalFirst && goal && <button type="button" ref={primary} className="pk-primary pk-resultgoal" onClick={goal.onGo} data-testid="results-next-goal" data-mode={goal.mode}><b>NEXT GOAL</b> {goal.text} ▸</button>}
-    <div className="pk-buyrow">
-      {next && "onNext" in next && <button type="button" ref={primary} className="pk-primary" onClick={next.onNext} data-testid="next-level">Next level</button>}
-      <button type="button" ref={hasNext || goalFirst ? undefined : primary} className={hasNext || goalFirst ? undefined : "pk-primary"} onClick={onAgain}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+    <div className="pk-resultfoot">
+      {goalFirst && goal && <button type="button" ref={primary} className="pk-primary pk-resultgoal" onClick={goal.onGo} data-testid="results-next-goal" data-mode={goal.mode}><b>NEXT GOAL</b> {goal.text} ▸</button>}
+      <div className="pk-buyrow">
+        {next && "onNext" in next && <button type="button" ref={primary} className="pk-primary" onClick={next.onNext} data-testid="next-level">Next level</button>}
+        <button type="button" ref={hasNext || goalFirst ? undefined : primary} className={hasNext || goalFirst ? undefined : "pk-primary"} onClick={onAgain}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+      </div>
     </div>
   </div></CountClock.Provider>;
 }
