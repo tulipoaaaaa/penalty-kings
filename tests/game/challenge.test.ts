@@ -7,7 +7,7 @@ import {
   shareRoundOf, CHALLENGE_KICKS, PUBLIC_URL, CHALLENGE_RULE, type Challenge,
 } from "../../games/penalty-kings/game/challenge.ts";
 import { weekKey } from "../../games/penalty-kings/game/rewards.ts";
-import { shareCardLayout, CARD_W, CARD_H, CARD_TAGLINE, GLYPH_EM } from "../../games/penalty-kings/gfx/sharecard.ts";
+import { shareCardLayout, CARD_W, CARD_H, CARD_TAGLINE, GLYPH_EM, HEAD_EM } from "../../games/penalty-kings/gfx/sharecard.ts";
 
 const sample: Challenge = { kind: "penalty", keeper: "sumo", seed: 3_141_592_653, kicks: 5, score: 1420, from: "12345678901234567890" };
 
@@ -102,14 +102,14 @@ test("share card layout: the score, best streak, tagline and public link, all in
   const layout = shareCardLayout({ name: "Friend #12345678901234567890", score: 1420, scoreLabel: "pts", goals: 4, kicks: 5, bestStreak: 3, subtitle: "5 penalties vs Big Bento", link: challengeLink(code), code });
   assert.equal(layout.width, CARD_W); assert.equal(layout.height, CARD_H);
   const all = layout.texts.map(text => text.text);
-  assert.ok(all.includes("1,420 pts"));
+  assert.ok(all.includes("1,420 PTS")); // the heading lines are uppercase in the heading face (sharecard-type.test.ts)
   assert.ok(all.includes("4/5 goals · best streak 3"));
-  assert.ok(all.includes(CARD_TAGLINE) && CARD_TAGLINE === "Beat me at Penalty Kings");
+  assert.ok(all.includes(CARD_TAGLINE.toUpperCase()) && CARD_TAGLINE === "Beat me at Penalty Kings");
   assert.ok(all.some(text => text.startsWith("tulipoaaaaa.github.io/penalty-kings/")));
   assert.ok(all.some(text => text.includes(code)));
   for (const text of layout.texts) {
     assert.ok(text.size >= 11, `${text.text}: ${text.size}px`);
-    assert.ok(text.x >= 0 && text.x + text.text.length * text.size * GLYPH_EM <= CARD_W + 1, `${text.text} fits the width`);
+    assert.ok(text.x >= 0 && text.x + text.text.length * text.size * (text.head ? HEAD_EM : GLYPH_EM) <= CARD_W + 1, `${text.text} fits the width`);
     assert.ok(text.y - text.size >= 0 && text.y <= CARD_H - 4, `${text.text} fits the height`);
   }
   const s = layout.sprite; // 18 × 18 cells (mask + halo) at an integer scale, never resampled

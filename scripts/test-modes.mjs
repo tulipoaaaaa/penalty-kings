@@ -59,6 +59,9 @@ await testGame("./games/penalty-kings", {
     const card = await shareImage.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes) }));
     assert.equal(card.src, "data:image/png;base64,"); assert.deepEqual([card.w, card.h], [640, 360]);
     assert.ok(card.bytes > 5000, `the share card is not empty (${card.bytes} bytes)`);
+    // Polish: its heading lines are drawn in the heading face (PKHead, not bold Pixelify, which drew C like O), loaded
+    // before the card is painted (tests/game/sharecard-type.test.ts checks every line's font).
+    assert.ok(await game.locator("body").evaluate(() => [...document.fonts].some(face => face.family.replace(/"/g, "") === "PKHead" && face.status === "loaded")), "PKHead is loaded for the card");
     assert.equal(await game.getByTestId("share-download").count(), sandbox.origin === "null" ? 0 : 1, "no download link where the sandbox blocks downloads");
     assert.equal(await game.getByTestId("share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");
     console.log(`share card: ${card.w}x${card.h} PNG, ${card.bytes} bytes`);
