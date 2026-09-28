@@ -1,5 +1,14 @@
-# The owner's TEST APP lane (branch app/test-shell only). Separate from the judged CI job (ci.yml is unchanged):
-# wallet unit/contract tests, test app typecheck + build, Playwright Chromium phone runs and WebKit iPhone runs.
+# The owner's TEST APP lane (branch app/test-shell only, or run by hand). Separate from the judged CI job (ci.yml is
+# unchanged) and from the judged site (site/ is never built or published here).
+#   test-app  wallet unit/contract tests, native-bridge unit tests, test app typecheck + build, Playwright Chromium
+#             phone runs and WebKit iPhone runs (the web bundle's behaviour, back button + haptics bridge included).
+#   android   the same web bundle inside the Capacitor Android shell (apps/mobile/android) → release APK.
+#             Signed with the release keystore when the four ANDROID_* secrets exist, else with the debug key
+#             (file named *-debug.apk). Emulator-free smoke: package id, version, signature, bundled web files.
+#   ios       the Capacitor iOS shell (apps/mobile/ios) → UNSIGNED .ipa (no Apple account or credential anywhere;
+#             testers sign it on their own machine: docs/IPHONE-SIDELOAD.md).
+#   release   a GitHub pre-release test-app-<YYYY-MM-DD>-<run_number> with the APK and the unsigned .ipa.
+# Everything in these builds is simulated: wallet, payments, Friends, transactions (TEST BUILD · SIMULATED).
 name: Test app
 on:
   push:
@@ -10,6 +19,9 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+env:
+  # Integer build number for Android versionCode / iOS CFBundleVersion: goes up on every run of this workflow.
+  BUILD_NUMBER: ${{ github.run_number }}
 jobs:
   test-app:
     runs-on: ubuntu-latest
@@ -20,17 +32,226 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
       - run: npm ci
+      - name: Native shell packages (Capacitor, pinned in apps/mobile/package-lock.json)
+        run: npm ci --prefix apps/mobile
       - name: Install Chromium and WebKit
         run: npx playwright install --with-deps chromium webkit
       - name: Build the test app (simulated wallet; no secrets)
         run: npm run build:test-app
-        env:
-          BUILD_NUMBER: ${{ github.run_number }}
-      - name: Wallet tests, typecheck, phone + iPhone flows (first kick < 60 s, pack purchase, offline, update toast)
+      - name: Wallet + native-bridge tests, typecheck, phone + iPhone flows (first kick < 60 s, pack purchase, back button, haptics, offline, update toast)
         run: npm run test:test-app -- --no-build --no-video
       - uses: actions/upload-artifact@v4
         with:
           name: dist-test-app
           path: dist-test-app/
           retention-days: 14
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      apk: ${{ steps.apk.outputs.name }}
+      signing: ${{ steps.keystore.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/*.gradle*
+            apps/mobile/android/app/*.gradle*
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm ci --prefix apps/mobile
+      - name: Build the web bundle (simulated wallet; bundled into the APK, works offline)
+        run: npm run build:test-app
+      - id: version
+        name: Version (0.1.0+<run>.<sha>, the same string the app shows in Settings)
+        run: |
+          version=$(node -p "require('./dist-test-app/version.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "PK_VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "PK_VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
+      - name: Copy the web bundle into the Android project
+        working-directory: apps/mobile
+        run: npx cap sync android
+      - id: keystore
+        name: Release keystore from GitHub secrets (optional; else the debug key)
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+              echo "::error::ANDROID_KEYSTORE_B64 is set but ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS or ANDROID_KEY_PASSWORD is missing"; exit 1
+            fi
+            echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/pk-test-release.keystore"
+            echo "PK_KEYSTORE_FILE=$RUNNER_TEMP/pk-test-release.keystore" >> "$GITHUB_ENV"
+            echo "signing=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No ANDROID_KEYSTORE_B64 secret: the APK is signed with the debug key (named *-debug.apk). See docs/ANDROID-INSTALL.md."
+            echo "signing=debug" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Gradle assembleRelease
+        working-directory: apps/mobile/android
+        env:
+          PK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+      - name: Remove the decoded keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/pk-test-release.keystore"
+      - id: apk
+        name: Name the APK
+        run: |
+          short="0.1.0-build${BUILD_NUMBER}"
+          name="PenaltyKings-Test-${short}$([ "${{ steps.keystore.outputs.signing }}" = debug ] && echo -debug).apk"
+          mkdir -p out && cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "out/$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Smoke (no emulator) — package, version, signature, bundled web files
+        env:
+          APK: out/${{ steps.apk.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          BT=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          badging=$("$BT/aapt" dump badging "$APK")
+          echo "$badging" | grep -E "^package|application-label:"
+          echo "$badging" | grep -q "package: name='com.penaltykings.test' versionCode='${BUILD_NUMBER}' versionName='${VERSION}'"
+          echo "$badging" | grep -q "application-label:'Penalty Kings (Test)'"
+          "$BT/apksigner" verify --print-certs "$APK" | grep "certificate DN"
+          listing=$(unzip -l "$APK")
+          for file in assets/public/index.html assets/public/game/frame.html assets/public/app.js assets/public/version.json assets/capacitor.config.json; do
+            echo "$listing" | grep -q " $file$" || { echo "::error::$file is missing from the APK"; exit 1; }
+          done
+          unzip -p "$APK" assets/public/version.json | grep -q "\"version\":\"${VERSION}\""
+          unzip -p "$APK" assets/public/index.html | grep -q "content=\"${VERSION}\""
+          unzip -p "$APK" assets/capacitor.config.json | grep -q '"appId": "com.penaltykings.test"'
+          "$BT/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -q 'android:host(0x01010028)="auth"'
+          echo "APK smoke OK: com.penaltykings.test ${VERSION} (versionCode ${BUILD_NUMBER}), web bundle + game frame inside, deep link registered"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: out/*.apk
+          retention-days: 14
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix apps/mobile
+      - name: Build the web bundle (simulated wallet; bundled into the app, works offline)
+        run: npm run build:test-app
+      - id: version
+        run: echo "version=$(node -p "require('./dist-test-app/version.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Copy the web bundle into the iOS project
+        working-directory: apps/mobile
+        run: npx cap sync ios
+      - name: xcodebuild archive (unsigned; no Apple credentials)
+        working-directory: apps/mobile/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            MARKETING_VERSION=0.1.0 CURRENT_PROJECT_VERSION="$BUILD_NUMBER" PK_TEST_VERSION="${{ steps.version.outputs.version }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            archive | tail -n 40
+      - name: Package PenaltyKings-Test-unsigned.ipa
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          test -d "$app"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload" out
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/out/PenaltyKings-Test-unsigned.ipa" Payload)
+      - name: Smoke — bundle id, versions, bundled web files, URL scheme
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/ipa/Payload/App.app"
+          plist="$app/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = com.penaltykings.test
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "Penalty Kings (Test)"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD_NUMBER"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :PKTestVersion' "$plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")" = com.penaltykings.test
+          for file in public/index.html public/game/frame.html public/app.js public/version.json capacitor.config.json; do test -f "$app/$file" || { echo "::error::$file is missing from the app"; exit 1; }; done
+          grep -q "\"version\":\"${VERSION}\"" "$app/public/version.json"
+          ls -la out/
+          echo "iOS smoke OK: unsigned com.penaltykings.test ${VERSION} (build ${BUILD_NUMBER})"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: out/PenaltyKings-Test-unsigned.ipa
+          retention-days: 14
+
+  release:
+    needs: [test-app, android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: out
+      - name: Release notes
+        env:
+          VERSION: ${{ needs.android.outputs.version }}
+          SIGNING: ${{ needs.android.outputs.signing }}
+          APK: ${{ needs.android.outputs.apk }}
+          DOCS: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}/docs
+        run: |
+          {
+            echo "**Penalty Kings (Test)** \`com.penaltykings.test\` — version \`${VERSION}\` (build ${BUILD_NUMBER}, commit ${GITHUB_SHA::7})."
+            echo
+            echo "**TEST BUILD · SIMULATED.** Not the judged build. Login, the wallet address, buying RF, the Friend loan, the hardwire transaction and the in-game economy are all simulated: no real payments, no keys, no mainnet transactions. The app works offline."
+            echo
+            echo "| File | For | How to install |"
+            echo "|---|---|---|"
+            echo "| \`${APK}\` | Android ($([ "$SIGNING" = debug ] && echo 'debug-signed: uninstall the previous test build before updating' || echo 'release-signed test key'))  | [docs/ANDROID-INSTALL.md](${DOCS}/ANDROID-INSTALL.md) |"
+            echo "| \`PenaltyKings-Test-unsigned.ipa\` | iPhone (unsigned: you sign it with your own free Apple ID) | [docs/IPHONE-SIDELOAD.md](${DOCS}/IPHONE-SIDELOAD.md) |"
+          } > notes.md
+          cat notes.md
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="test-app-$(date -u +%F)-${BUILD_NUMBER}"
+          gh release create "$tag" out/*.apk out/*.ipa --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md --prerelease

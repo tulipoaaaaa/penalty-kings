@@ -112,3 +112,24 @@ The seam is `WalletProvider`. SDK v0.2.1 can replace `PrivyProvider` entirely: i
 - A sandboxed (opaque-origin) frame is not routed through a service worker, so the game child ships as one self-contained `game/frame.html` (scripts, styles, fonts inline; CSP allows the scripts by SHA-256 hash only) that the shell fetches through the service worker and hands to the SDK as a `blob:` URL. The sandbox is unchanged (`allow-scripts`).
 - Manifest (standalone, landscape, theme `#0b0d1a`), icons, apple-touch-icon and iOS launch images generated from the game's own pixel art (`scripts/gen-test-app-art.mjs`), safe-area insets, no rubber-band scrolling, `noindex`, audio unlock on the first tap (the game unlocks its own audio in-frame as before), the game's rotate overlay unchanged, state in `localStorage` with an in-memory fallback.
 - The version (`apps/mobile/web/package.json` + build number + short sha) is in **Settings**.
+
+## Native app (Capacitor): deep-link return for Google / Privy redirects
+
+The native shells (`apps/mobile/android`, `apps/mobile/ios`, Capacitor 8, app id `com.penaltykings.test`) load the
+same `dist-test-app/` bundle from inside the APK / app (Android: `https://localhost`, iOS: `capacitor://localhost`),
+so a web redirect back to "the current page" cannot work there. The plan, already wired:
+
+| Piece | Where |
+|---|---|
+| Return URL | **`com.penaltykings.test://auth`** (custom scheme = the app id; host `auth`) — `apps/mobile/web/src/deeplink.ts` |
+| Android | intent filter `VIEW` + `BROWSABLE`, `scheme=@string/custom_url_scheme` (`com.penaltykings.test`), `host=auth` — `AndroidManifest.xml` |
+| iOS | `CFBundleURLTypes` → scheme `com.penaltykings.test` — `ios/App/App/Info.plist` |
+| Login start | in the native app `PrivyProvider` gets `redirectUri: () => "com.penaltykings.test://auth"` (`app.tsx`); the OAuth page opens in the **system browser** (Capacitor opens external URLs outside the WebView; Google blocks OAuth inside embedded WebViews) |
+| Return | `@capacitor/app` `appUrlOpen` → `authReturnSearch(url)` keeps **only** `privy_oauth_code`, `privy_oauth_state`, `privy_oauth_provider`, and reloads the shell with them; `PrivyProvider.restore()` completes the login as on the web |
+
+Before it works for real (human gates, not done): allow the redirect `com.penaltykings.test://auth` in the Privy
+dashboard (native app / allowed redirect URLs) and check Privy's current guidance for custom-scheme OAuth in
+Capacitor apps; if Privy requires an https return, switch to Android App Links + iOS Universal Links on a domain
+the owner controls (`assetlinks.json` / `apple-app-site-association`, iOS *Associated Domains*). The simulated
+build (default) makes no OAuth call at all. A custom scheme can be claimed by another app on the same phone, so the
+return carries only the one-time code + state (PKCE/state checked by Privy), never a token.
