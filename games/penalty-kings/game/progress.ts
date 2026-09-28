@@ -21,7 +21,8 @@ export type Progress = {
   /** Invisible dynamic difficulty rung and recent shots. */
   difficulty: number;
   history: ShotRecord[];
-  daily: { date: string; attempts: number; best: number; played: string[] };
+  /** `bestRound`: goals, kicks and best streak of today's best round (the Daily menu shares it). */
+  daily: { date: string; attempts: number; best: number; played: string[]; bestRound?: { goals: number; kicks: number; bestStreak: number } };
   best: { target: number; penalties: number; freekicks: number };
   /** Unlocked cosmetic rewards from stars (ids from economy COSMETICS). */
   rewards: string[];

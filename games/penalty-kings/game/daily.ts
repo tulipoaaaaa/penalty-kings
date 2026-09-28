@@ -21,14 +21,14 @@ export function dailyScenario(date: string): DailyScenario {
   const keeper = pool[seed % pool.length].id;
   const freekick = (seed >>> 8) % 3 === 0;
   if (freekick) {
-    const setup = freeKickSetup(seed, { maxWind: 3, wallHeight: 1.65 + ((seed >>> 12) % 4) * 0.08 });
+    const setup = freeKickSetup(seed, { maxWind: 3, wallHeight: (165 + ((seed >>> 12) % 4) * 8) / 100 }); // whole cm (1.65–1.89 m): a challenge code carries it exactly
     return { date, seed, mode: "freekick", keeper, kicks: 3, setup, title: `${setup.distance} m free kick · wall of ${setup.wallSize}` };
   }
   return { date, seed, mode: "penalty", keeper, kicks: 5, title: `5 penalties vs ${KEEPERS.find(item => item.id === keeper)!.name}` };
 }
 
 /** Attempts left today and the rolled-over record when the date changes. */
-export function dailyState(record: { date: string; attempts: number; best: number; played: string[] }, today: string) {
+export function dailyState(record: { date: string; attempts: number; best: number; played: string[]; bestRound?: { goals: number; kicks: number; bestStreak: number } }, today: string): typeof record {
   return record.date === today ? record : { date: today, attempts: 0, best: 0, played: record.played };
 }
 

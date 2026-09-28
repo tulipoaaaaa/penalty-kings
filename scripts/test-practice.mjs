@@ -125,9 +125,15 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   assert(!/\bRF\b|\$GBOOT|GBOOT|prize|jackpot|\bpot\b/i.test((await page.locator("body").innerText()).replace(cta, "")), `${name}: economy words on the practice page`);
   if (!blockStorage) await page.screenshot({ path: `${SHOTS}/practice-${name}-end.png` });
   // C4 share card: one tap draws a non-empty PNG (a data: URL, so still no network) with the stand-in striker.
+  // Every share entry point (the owner's report): within 2 s of the tap the card shows, with a visible note on how to
+  // save it and copy the link (select on focus: no silent clipboard), and no unhandled promise rejection.
+  await page.evaluate(() => { window.__ppRejections = []; addEventListener("unhandledrejection", event => window.__ppRejections.push(String(event.reason))); });
   await page.getByTestId("practice-share-btn").click();
   const img = page.getByTestId("practice-share-img");
-  await img.waitFor({ state: "visible", timeout: 10_000 });
+  await img.waitFor({ state: "visible", timeout: 2_000 });
+  assert.match(await page.locator("#pp-share-note").innerText(), /Long-press or right-click the image.*tap it to select it, then copy/, `${name}: the share note is shown`);
+  assert(await page.getByTestId("practice-share-link").evaluate(el => { el.focus(); return el.selectionStart === 0 && el.selectionEnd === el.value.length; }), `${name}: focusing the link selects it`);
+  assert.deepEqual(await page.evaluate(() => window.__ppRejections), [], `${name}: no unhandled promise rejections`);
   const card = await img.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes), alt: el.alt, download: !document.getElementById("pp-share-save").hidden }));
   assert.equal(card.src, "data:image/png;base64,", `${name}: the card is a PNG data URL`);
   assert.deepEqual([card.w, card.h], [640, 360], `${name}: card size`);
@@ -245,6 +251,9 @@ try {
     await page.goto(`${server.url}?challenge=${code}`, { waitUntil: "load" });
     assert.equal(await page.getByTestId("host-challenge-code").inputValue(), code, "the host page shows the challenge code");
     assert.deepEqual(await smallTargets(page, ".pk-challenge"), [], "challenge banner tap targets");
+    const walled = "pkc1.f.sloth.21i3v9.f0.5yq.w173.f84d6fac"; // a free kick with its own wall (a Daily's): one part more
+    await page.goto(`${server.url}?challenge=${walled}`, { waitUntil: "load" });
+    assert.equal(await page.getByTestId("host-challenge-code").inputValue(), walled, "the host page shows a code with a wall too");
     await page.goto(`${server.url}?challenge=%3Cimg%20src%3Dx%3E`, { waitUntil: "load" });
     assert.equal(await page.locator(".pk-challenge").isVisible(), false, "a malformed code is ignored");
     report.push({ name: "host challenge banner", results: "code shown; junk ignored", goals: "-", keepers: "-", lines: 0, requests: "-" });

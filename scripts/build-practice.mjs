@@ -67,7 +67,7 @@ export async function buildPractice(outdir, { mainGame = "../" } = {}) {
     <div class="pp-share" data-testid="practice-share">
       <button type="button" class="pp-btn" id="pp-share-btn" data-testid="practice-share-btn">Make my share card</button>
       <img id="pp-share-img" data-testid="practice-share-img" width="640" height="360" alt="" hidden>
-      <p class="pp-share-note" id="pp-share-note" hidden>Long-press or right-click the image to save it, or send the link.</p>
+      <p class="pp-share-note" id="pp-share-note" hidden>Long-press or right-click the image to save it, or send the link: tap it to select it, then copy.</p>
       <div class="pp-end-links" id="pp-share-actions" hidden>
         <button type="button" class="pp-btn" id="pp-share-native" data-testid="practice-share-native" hidden>Share</button>
         <a class="pp-btn pp-btn-link" id="pp-share-save" data-testid="practice-share-save" download="penalty-kings-practice.png" href="#" hidden>Save image</a>

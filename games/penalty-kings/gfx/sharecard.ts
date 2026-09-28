@@ -51,7 +51,7 @@ export function shareCardLayout(input: ShareCardInput): ShareCardLayout {
   head("PENALTY KINGS", 44, 33, GOLD);
   add(input.name, 76, 18, PAPER);
   head(`${input.score.toLocaleString("en-US")} ${input.scoreLabel}`, 142, 55, VOLT);
-  add(`${input.goals}/${input.kicks} goals · best streak ${input.bestStreak}`, 178, 18, PAPER);
+  if (input.kicks > 0) add(`${input.goals}/${input.kicks} goals · best streak ${input.bestStreak}`, 178, 18, PAPER); // kicks 0: a Daily best kept before its round was (score only)
   if (input.subtitle) add(input.subtitle, 204, 15, SKY);
   head(CARD_TAGLINE, 262, 22, GOLD);
   const link = input.link.replace(/^https?:\/\//, "").replace(/[?#].*$/, ""); // the code gets its own line: a link with it does not fit

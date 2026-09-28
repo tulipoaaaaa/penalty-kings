@@ -44,6 +44,55 @@ await testGame("./games/penalty-kings", {
       return banner;
     };
 
+    const quickKicksToResults = async label => {
+      for (let i = 1; i <= 12 && !(await game.getByTestId("results").isVisible()); i++) {
+        await waitShootable(); await game.getByTestId("quick").click();
+        await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
+      }
+      await game.getByTestId("results").waitFor();
+      console.log(`${label}: results`);
+    };
+    // EVERY SHARE ENTRY POINT (owner report: "Share result card in the Daily Challenge not working"): in the real SDK
+    // sandbox each share button, within 2 s, shows a non-empty 640x360 PNG that is on screen and on top (not behind a
+    // menu), the public link (never blob:/about:srcdoc), the challenge code where the round can be replayed, copy
+    // fields that select their whole value on focus and a note telling the player to select/long-press (the sandbox
+    // blocks the clipboard, so there is no silent "Copy" button). No page errors, no unhandled promise rejections.
+    await game.locator("body").evaluate(() => { window.__pkRejections = []; addEventListener("unhandledrejection", event => window.__pkRejections.push(String(event.reason))); });
+    const PUBLIC = "https://tulipoaaaaa.github.io/penalty-kings/";
+    const shared = [];
+    const checkShare = async (entry, { code, trigger = game.getByTestId("share-card") }) => {
+      const started = Date.now();
+      await trigger.click();
+      const image = game.getByTestId("share-image");
+      try { await image.waitFor({ state: "visible", timeout: 2_000 }); }
+      catch { throw new Error(`${entry}: no share card within 2 s of the tap. Visible: ${(await game.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 400)}`); }
+      const ms = Date.now() - started;
+      const card = await image.evaluate(el => {
+        const r = el.getBoundingClientRect(), top = Math.max(r.top, 0), bottom = Math.min(r.bottom, innerHeight);
+        const hit = bottom > top ? document.elementFromPoint(r.left + r.width / 2, (top + bottom) / 2) : null;
+        return { src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes), onScreen: bottom - top >= 40, onTop: hit === el };
+      });
+      assert.equal(card.src, "data:image/png;base64,", `${entry}: a PNG`); assert.deepEqual([card.w, card.h], [640, 360], `${entry}: 640x360`);
+      assert.ok(card.bytes > 5000, `${entry}: the card is not empty (${card.bytes} bytes)`);
+      assert.ok(card.onScreen && card.onTop, `${entry}: the card is on screen and not behind anything (${JSON.stringify(card)})`);
+      const link = await game.getByTestId("share-link").inputValue();
+      assert.ok(link.startsWith(PUBLIC), `${entry}: the public link, not ${link}`);
+      assert.doesNotMatch(link, /blob:|about:|srcdoc/);
+      if (code) {
+        const value = await game.getByTestId("challenge-code").inputValue();
+        assert.match(value, /^pkc1\./, `${entry}: a challenge code`);
+        assert.equal(link, `${PUBLIC}?challenge=${value}`, `${entry}: the challenge link`);
+      } else { assert.equal(await game.getByTestId("challenge-code").count(), 0, `${entry}: no challenge code`); assert.equal(link, PUBLIC); }
+      const selected = await game.getByTestId("share-link").evaluate(el => { el.focus(); return el.selectionStart === 0 && el.selectionEnd === el.value.length; });
+      assert.ok(selected, `${entry}: focusing the link selects all of it, ready to copy`);
+      const words = await game.getByTestId("share-dialog").innerText();
+      assert.match(words, /Long-press or right-click the image/, `${entry}: says how to save the image`);
+      assert.match(words, /select it, then copy/i, `${entry}: says how to copy where the clipboard is blocked`);
+      shared.push({ entry, ms, bytes: card.bytes, code: Boolean(code) });
+      console.log(`share ${entry}: card in ${ms} ms, ${card.bytes} bytes${code ? ", challenge code" : ""}`);
+    };
+
     // Tutorial (unlocks level 2).
     await game.getByTestId("play").click(); // first session: "Kick off" goes straight into the coached tutorial
     for (let i = 1; i <= 3; i++) await kick(`tutorial ${i}`, { dx: i === 2 ? -0.4 : 0.4 });
@@ -53,18 +102,11 @@ await testGame("./games/penalty-kings", {
     // and logged: an opaque origin cannot download (no allow-downloads), so no "Save image" link is offered there.
     const sandbox = await game.locator("body").evaluate(() => ({ origin: window.origin, share: typeof navigator.share, canShare: typeof navigator.canShare, clipboard: typeof navigator.clipboard?.writeText }));
     console.log(`sandbox abilities: ${JSON.stringify(sandbox)}`);
-    await game.getByTestId("share-card").click();
-    const shareImage = game.getByTestId("share-image");
-    await shareImage.waitFor();
-    const card = await shareImage.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes) }));
-    assert.equal(card.src, "data:image/png;base64,"); assert.deepEqual([card.w, card.h], [640, 360]);
-    assert.ok(card.bytes > 5000, `the share card is not empty (${card.bytes} bytes)`);
+    await checkShare("Results: tutorial", { code: false });
     // Polish: its heading lines are drawn in the heading face (PKHead, not bold Pixelify, which drew C like O), loaded
     // before the card is painted (tests/game/sharecard-type.test.ts checks every line's font).
     assert.ok(await game.locator("body").evaluate(() => [...document.fonts].some(face => face.family.replace(/"/g, "") === "PKHead" && face.status === "loaded")), "PKHead is loaded for the card");
     assert.equal(await game.getByTestId("share-download").count(), sandbox.origin === "null" ? 0 : 1, "no download link where the sandbox blocks downloads");
-    assert.equal(await game.getByTestId("share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");
-    console.log(`share card: ${card.w}x${card.h} PNG, ${card.bytes} bytes`);
     await button("Modes").click();
     // C4: Day N (the check-in run) and the Keeper of the Week line on the modes screen.
     assert.match(await game.getByTestId("streak-day").textContent(), /^Day 1/);
@@ -92,7 +134,7 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("results").waitFor();
     // C4 CHALLENGE A FRIEND: the share card carries a challenge code; come back tomorrow for day 2.
     assert.equal(await game.getByTestId("come-back").textContent(), "Come back tomorrow for day 2.");
-    await game.getByTestId("share-card").click();
+    await checkShare("Results: Free Kicks", { code: true });
     const challengeCode = await game.getByTestId("challenge-code").inputValue();
     assert.match(challengeCode, /^pkc1\.f\./, "a free-kick challenge code");
     assert.equal(await game.getByTestId("share-link").inputValue(), `https://tulipoaaaaa.github.io/penalty-kings/?challenge=${challengeCode}`);
@@ -117,12 +159,19 @@ await testGame("./games/penalty-kings", {
     assert.match(verdict, mine > fkScore ? /^You beat Friend #7730's / : mine === fkScore ? /^Level with Friend #7730/ : /^Friend #7730 still leads by /);
     console.log(`challenge: ${fkScore} to beat, scored ${mine}: ${verdict}`);
     await frame.screenshot({ path: `${out}/c4-challenge-result-${width}.png` });
+    await checkShare("Results: challenge round", { code: true });
     await button("Modes").click();
     // Keeper of the Week: a 5-penalty round against the featured keeper (the chip names the mode).
     await game.getByTestId("weekly-keeper").click();
     assert.equal(await game.getByTestId("mode-chip").textContent(), "KEEPER OF THE WEEK");
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    await quickKicksToResults("keeper of the week");
+    await checkShare("Results: Keeper of the Week", { code: true });
+    await button("Modes").click();
+    // Penalties: a free round.
+    await game.getByTestId("mode-penalties").click();
+    await quickKicksToResults("penalties");
+    await checkShare("Results: Penalties", { code: true });
+    await button("Modes").click();
 
     // Target Practice: "60 seconds" is a real minute. The clock runs through each flight and result banner (it used to
     // run only while aiming, so a round of continuous kicks took minutes): kicking non-stop, Results is up within 75 s.
@@ -148,6 +197,7 @@ await testGame("./games/penalty-kings", {
     assert.ok(await targetResults.isVisible(), `a Target Practice round ends on its own (${targetKicks} kicks, ${targetSeconds.toFixed(1)} s)`);
     assert.ok(targetSeconds <= 75, `the 60 s Target round took ${targetSeconds.toFixed(1)} s of real time (${targetKicks} kicks)`);
     console.log(`target: ${targetKicks} kicks, round over in ${targetSeconds.toFixed(1)} s of real time`);
+    await checkShare("Results: Target Practice", { code: false });
     await button("Modes").click();
 
     // World Tour: Park level 1.
@@ -164,6 +214,7 @@ await testGame("./games/penalty-kings", {
     console.log(`tour result: ${tour.replace(/\s+/g, " ").slice(0, 120)}`);
     assert.match(tour, /First Touch/);
     await frame.screenshot({ path: `${out}/tour-results-${width}.png` });
+    await checkShare("Results: World Tour", { code: false });
     // "Next level" opens the following level's brief (Pick a Corner, same city).
     await game.getByTestId("next-level").click();
     await game.getByRole("heading", { name: "Pick a Corner" }).waitFor();
@@ -186,9 +237,22 @@ await testGame("./games/penalty-kings", {
     }
     await game.getByTestId("results").waitFor();
     assert.match(await game.getByTestId("results").textContent(), /Daily/);
+    await checkShare("Results: Daily", { code: true });
+    const dailyCode = await game.getByTestId("challenge-code").inputValue();
+    // The Daily Challenge menu's "Share result card" (the owner's report): it used to call navigator.share (absent in
+    // the sandbox), then the clipboard (blocked), then put the text in a message hidden behind the open Daily menu, so
+    // the tap did nothing visible. It now opens the same share card for today's best Daily round, in the menu.
+    await game.getByRole("button", { name: "Close" }).first().click();
+    await game.locator(".pk-modescreen").waitFor();
+    await game.getByTestId("mode-daily").click();
+    await checkShare("Daily Challenge menu card", { code: true, trigger: game.locator(".pk-daily").getByRole("button", { name: "Share result card", exact: true }) });
+    assert.equal(await game.getByTestId("challenge-code").inputValue(), dailyCode, "the Daily card shares today's best round (the only one played)");
+    await frame.screenshot({ path: `${out}/daily-share-${width}.png` });
+    assert.deepEqual(shared.map(item => item.entry), ["Results: tutorial", "Results: Free Kicks", "Results: challenge round", "Results: Keeper of the Week", "Results: Penalties", "Results: Target Practice", "Results: World Tour", "Results: Daily", "Daily Challenge menu card"], "every in-game share entry point was checked");
+    assert.deepEqual(await game.locator("body").evaluate(() => window.__pkRejections), [], "no unhandled promise rejections");
 
     // Save code round-trip (Settings): copy the code, paste it back, progress is restored.
-    // (Closing Results goes to the Modes screen, QA-8, which has its own Settings button.)
+    // (Closing the Daily menu goes to the Modes screen, which has its own Settings button.)
     await game.getByRole("button", { name: "Close" }).first().click();
     await game.locator(".pk-modescreen").waitFor();
     await game.getByRole("button", { name: "Settings", exact: true }).click();
