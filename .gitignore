@@ -12,3 +12,5 @@ contracts/broadcast/
 .wrangler/
 .dev/
 .claude/worktrees/
+site-ea/
+.build-ea/

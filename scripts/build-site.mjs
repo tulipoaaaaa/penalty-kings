@@ -5,14 +5,22 @@
 //   site/live/…      LIVE builds, only when games/penalty-kings/deployments/<tier>.json exists
 //   site/practice/   Free practice (5 kicks on the real engine + Stage; no wallet, no network): scripts/build-practice.mjs
 // Each tier is a copy of the game directory with that tier's game.json (one SDK ChanceGame per tier).
+// PRESETS (docs/EARLY-ACCESS.md): PK_PRESET=full (default) builds site/ exactly as before. PK_PRESET=early-access
+// (npm run build:site:ea) builds site-ea/: only real-money balls, Practice, Daily Challenge and the Scouting Book, each
+// stadium rolling with the per-Friend rated odds of the preview Friend's generation (tiers/ratings/, config/ratings.json).
 import { cp, rm, mkdir, writeFile, readFile, access, copyFile } from "node:fs/promises";
-import { buildGame, readGameDeployment } from "@rarefriends/friendsdk/build";
 import { buildClubhouse } from "./build-clubhouse.mjs";
 import { buildPractice } from "./build-practice.mjs";
 import { stadiumNav } from "./lib/stadium-nav.mjs";
 import { stripQaHooks } from "./lib/qa-hooks.mjs";
+import { installPreset, presetFromEnv } from "./lib/preset.mjs";
 
-const GAME = "games/penalty-kings", WORK = ".build", SITE = "site";
+const PRESET = presetFromEnv(), EA = PRESET === "early-access";
+installPreset(PRESET); // before the SDK build is imported: its esbuild gets the preset's define
+const { buildGame, readGameDeployment } = await import("@rarefriends/friendsdk/build");
+const GAME = "games/penalty-kings", WORK = EA ? ".build-ea" : ".build", SITE = EA ? "site-ea" : "site";
+/** EARLY ACCESS: the preview Friend's generation picks each stadium's rated ChanceGame (tiers/ratings/<tier>-gen-<n>.json). */
+const EA_GENERATION = EA ? JSON.parse(await readFile(`${GAME}/config/ratings.json`, "utf8")).previewGeneration : null;
 const exists = path => access(path).then(() => true, () => false);
 await rm(WORK, { recursive: true, force: true }); await rm(SITE, { recursive: true, force: true });
 await mkdir(SITE, { recursive: true });
@@ -20,7 +28,7 @@ await mkdir(SITE, { recursive: true });
 async function buildTier(tier, outdir, deploymentFile) {
   const dir = `${WORK}/${tier}${deploymentFile ? "-live" : ""}`;
   await cp(GAME, dir, { recursive: true, filter: source => !source.includes(".friendsdk") });
-  await copyFile(`${GAME}/tiers/${tier}.json`, `${dir}/game.json`);
+  await copyFile(EA ? `${GAME}/tiers/ratings/${tier}-gen-${EA_GENERATION}.json` : `${GAME}/tiers/${tier}.json`, `${dir}/game.json`);
   // Live builds read on-chain cosmetic unlocks from the deployed KitShop.
   if (deploymentFile && await exists(`${GAME}/deployments/live.json`)) await copyFile(`${GAME}/deployments/live.json`, `${dir}/live.json`);
   const deployment = deploymentFile ? await readGameDeployment(deploymentFile) : undefined;
@@ -58,7 +66,7 @@ const liveTiers = new Set();
 /** Trusted host page only (outside the game sandbox): links between stadium builds. */
 async function addStadiumBar(outdir, tier, live) {
   const { root, bar: links, pages } = stadiumNav({ tier, live, liveTiers, clubhouse: await exists(`${GAME}/deployments/live.json`) });
-  const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : "SIMULATED preview"}</span> ${links}</nav>`;
+  const bar = `<nav class="pk-stadiums" aria-label="Stadiums"><span class="${live ? "live" : "sim"}">${live ? "LIVE — real RF" : EA ? "EARLY ACCESS · SIMULATED preview" : "SIMULATED preview"}</span> ${links}</nav>`;
   // BQ-P1-10: the links are 44px tap targets (they were 14px-tall text links).
   const style = "<style>.pk-stadiums{max-width:var(--rf-game-max-width,960px);margin:0 auto;padding:0 8px;display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;font:12px ui-monospace,monospace}.pk-stadiums a{color:#111;display:inline-flex;align-items:center;min-height:44px}.pk-stadiums span{padding:2px 6px;font-weight:700}.pk-stadiums .sim{background:#ffd23f}.pk-stadiums .live{background:#ff5a6e;color:#fff}.pk-stadiums .practice{margin-left:auto;font-weight:700}</style>";
   // BQ-P1-8: without a browser wallet the SDK can only say "No browser wallet found"; the host page offers the
@@ -81,27 +89,44 @@ async function addStadiumBar(outdir, tier, live) {
   const opener = `<script>(()=>{const pages=${JSON.stringify(pages)};addEventListener("message",event=>{const data=event.data;if(!data||data.type!==${JSON.stringify(STADIUM_MESSAGE)}||typeof data.stadium!=="string"||!Object.hasOwn(pages,data.stadium))return;if(![...document.querySelectorAll("iframe")].some(frame=>frame.contentWindow===event.source))return;location.assign(pages[data.stadium])})})()</script>`;
   const file = `${outdir}/index.html`;
   const html = await readFile(file, "utf8");
-  await writeFile(file, html.replace("<body>", `<body>${style}${landingStyle}${challengeStyle}${bar}${challenge}${landing}${opener}`));
+  // EARLY ACCESS hides challenge codes (game/features.ts), so its host pages carry no challenge box.
+  await writeFile(file, html.replace("<body>", EA ? `<body>${style}${landingStyle}${bar}${landing}${opener}` : `<body>${style}${landingStyle}${challengeStyle}${bar}${challenge}${landing}${opener}`));
 }
 
-for (const tier of ["park", "pro", "champions"]) if (await exists(`${GAME}/deployments/${tier}.json`)) liveTiers.add(tier);
+// EARLY ACCESS has no LIVE builds: per-Friend odds need one deployed ChanceGame per rating (docs/EARLY-ACCESS.md).
+for (const tier of ["park", "pro", "champions"]) if (!EA && await exists(`${GAME}/deployments/${tier}.json`)) liveTiers.add(tier);
 await buildTier("park", SITE);
 await buildTier("pro", `${SITE}/pro`);
 await buildTier("champions", `${SITE}/champions`);
-for (const tier of ["park", "pro", "champions"]) {
+for (const tier of EA ? [] : ["park", "pro", "champions"]) {
   const file = `${GAME}/deployments/${tier}.json`;
   if (await exists(file)) await buildTier(tier, tier === "park" ? `${SITE}/live` : `${SITE}/live/${tier}`, file);
 }
 await mkdir(`${SITE}/landing`, { recursive: true });
 await copyFile(LANDING_CLIP, `${SITE}/landing/play.webm`);
 await buildPractice(`${SITE}/practice`);
-console.log("built free practice → site/practice");
+if (EA) await earlyAccessPractice(`${SITE}/practice/index.html`);
+console.log(`built free practice → ${SITE}/practice`);
 // The $GBOOT Clubhouse is part of the undeployed upgrade package (docs/GBOOT-UPGRADE.md): it is only published
 // once its contracts exist (deployments/live.json). The pilot ships without $GBOOT, so the public site has no Clubhouse.
-if (await exists(`${GAME}/deployments/live.json`)) {
+if (!EA && await exists(`${GAME}/deployments/live.json`)) {
   await buildClubhouse(`${SITE}/live/clubhouse`);
   console.log("built clubhouse (live) → site/live/clubhouse");
 }
 await writeFile(`${SITE}/.nojekyll`, "");
 await rm(WORK, { recursive: true, force: true });
-console.log(`site ready in ${SITE}/`);
+console.log(`site ready in ${SITE}/${EA ? " (EARLY ACCESS preset)" : ""}`);
+
+/** EARLY ACCESS copy on the free practice page: it names only the features this preset shows (exact swaps). */
+async function earlyAccessPractice(file) {
+  let html = await readFile(file, "utf8");
+  for (const [from, to] of [
+    ["The full game (the 12-keeper ladder, free kicks, the World Tour, the daily challenge) runs inside", "The early access game (the 12-keeper ladder in Practice, the Daily Challenge, the Scouting Book and real-money balls) runs inside"],
+    ["Get a Friend to play for the pot ↗", "Get a Friend to play for real ↗"],
+    ["Open the full game", "Open the early access game"],
+  ]) {
+    if (!html.includes(from)) throw new Error(`build-site: practice copy changed, update earlyAccessPractice: ${from}`);
+    html = html.replaceAll(from, to);
+  }
+  await writeFile(file, html);
+}
