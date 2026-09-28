@@ -54,6 +54,7 @@
     "test:modes": "node scripts/test-modes.mjs --out ./artifacts/modes",
     "test:skillzones": "node scripts/test-skillzones.mjs && node scripts/test-skillzones.mjs --motion",
     "record:judge": "node scripts/record-judge-path.mjs",
+    "record:money": "node --experimental-strip-types --no-warnings scripts/record-money-shot.mjs",
     "qa:90s": "node scripts/qa-90s.mjs && node scripts/qa-90s.mjs --width 360 && node scripts/qa-90s.mjs --motion && node scripts/qa-90s.mjs --width 360 --motion",
     "test:flow": "node scripts/test-flow.mjs && node scripts/test-flow.mjs --width 360",
     "test:practice": "npm run build:site && node scripts/test-practice.mjs",
