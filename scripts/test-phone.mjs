@@ -74,6 +74,28 @@ async function titleClear(game, where) {
   for (const text of [".pk-attract-top h1", "[data-testid=pot-counter]"]) assert.ok(!hit(boxes[".pk-title-sound"], boxes[text]), `${where}: the sound toggle covers ${text} ${JSON.stringify(boxes)}`);
 }
 
+/** QA-3: while aiming, the tutorial coaching toast (when shown) never covers the player's Friend (its drawn box, from
+ *  the Stage), the ball, the goal mouth or the commentator strip (logical top at canvas[data-commentary-top], 22 px
+ *  tall + its rule, up to 260 px wide, centred). Returns whether a toast was up. Rects in the game frame's px. */
+async function toastOffFriend(game, where) {
+  const toast = game.locator(".pk-toast");
+  if (!(await toast.isVisible())) return false;
+  const r = await game.locator("body").evaluate(() => {
+    const rect = node => { const b = node.getBoundingClientRect(); return { x1: b.left, y1: b.top, x2: b.right, y2: b.bottom }; };
+    const canvas = document.querySelector("canvas.pk-canvas"), c = canvas.getBoundingClientRect(), scale = Math.min(c.width / 480, c.height / 320);
+    const ox = c.left + (c.width - 480 * scale) / 2, oy = c.top + (c.height - 320 * scale) / 2;
+    const toPx = z => ({ x1: ox + z.x1 * scale, y1: oy + z.y1 * scale, x2: ox + z.x2 * scale, y2: oy + z.y2 * scale });
+    const top = Number(canvas.dataset.commentaryTop), friend = window.__pkStats().friendRect;
+    return { toast: rect(document.querySelector(".pk-toast")), friend: friend && toPx(friend),
+      strip: toPx({ x1: 240 - 130, y1: top, x2: 240 + 130, y2: top + 24 }),
+      ball: toPx({ x1: 233, y1: 243, x2: 247, y2: 257 }), goal: toPx({ x1: 168, y1: 146, x2: 312, y2: 212 }) };
+  });
+  const hit = (a, b) => a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+  assert.ok(r.friend, `${where}: the Stage reports the Friend's drawn box`);
+  for (const name of ["friend", "strip", "ball", "goal"]) assert.ok(!hit(r.toast, r[name]), `${where}: the coaching toast covers the ${name === "strip" ? "commentator strip" : name} ${JSON.stringify({ toast: r.toast, [name]: r[name] })}`);
+  return true;
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -218,6 +240,7 @@ for (const [width, height] of SIZES) {
       await sceneVisible(GOAL, "goal");
       await sceneVisible(BALL, "ball");
       await toastClear();
+      if (await toastOffFriend(game, `${label} tutorial kick 1`)) checked.push("toast:friend-1");
       await page.screenshot({ path: `artifacts/phone-${label}-tutorial.png` });
       await fonts("tutorial HUD");
       await reachable(game.getByTestId("quick"), "Quick shot");
@@ -238,6 +261,7 @@ for (const [width, height] of SIZES) {
       // Kicks 2 and 3 with Quick shot (a tap), then the results.
       for (let kick = 2; kick <= 3; kick++) {
         await waitShootable();
+        if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) checked.push(`toast:friend-${kick}`);
         await reachable(game.getByTestId("quick"), "Quick shot");
         await press(game.getByTestId("quick"));
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
@@ -333,12 +357,15 @@ for (const [width, height] of DESKTOP) {
       // BQ-P1-10 on a desktop frame: Results, the menu hub, Settings and the Ball shop.
       const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
       await game.getByTestId("play").click();
+      let toasts = 0;
       for (let kick = 1; kick <= 3; kick++) {
         await waitShootable();
+        if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) toasts++;
         await game.getByTestId("quick").click();
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
         await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       }
+      assert.ok(toasts >= 1, `${label}: the tutorial coaching toast was checked against the Friend`); sizes.push(`toast clear of the Friend/ball/goal/strip x${toasts}`);
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await assertTargets(game, `${label} results`); sizes.push("results");
       await game.getByRole("button", { name: "Close" }).first().click();

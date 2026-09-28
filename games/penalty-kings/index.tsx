@@ -309,6 +309,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     }
     scene.commentaryTop = Math.min(top, 120);
     node.dataset.commentaryTop = String(scene.commentaryTop);
+    node.closest<HTMLElement>("section.pk")?.style.setProperty("--pk-cmt", String(scene.commentaryTop)); // QA-3: the coaching toast sits under the strip
   });
   const raceTable = [...SIM_RACE.map((points, index) => ({ name: RIVALS[index], points, mine: false })), { name: "Your Friend", points: race, mine: true }].sort((a, b) => b.points - a.points);
   const raceRank = raceTable.findIndex(row => row.mine) + 1;

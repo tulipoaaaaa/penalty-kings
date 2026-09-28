@@ -73,6 +73,11 @@
 .pk-art-status, .pk-toast { position: absolute; left: 1.2cqw; bottom: 16cqh; margin: 0; max-width: 46cqw; font-size: clamp(11px, 1.35cqw, 13px); background: #0b0d1ad9; padding: 0.4em 0.8em; pointer-events: none; }
 .pk-art-status { bottom: auto; top: 20cqh; }
 .pk-toast { background: var(--pk-paper); color: var(--pk-ink); }
+/* QA-3: the coaching toast sits in the sky, centred: under the commentator strip (its logical top is --pk-cmt, set by
+   the shell; the strip is 22 px + its rule) and above the crossbar (logical y 146), so the Friend, the ball and the goal
+   stay clear; 40cqw wide keeps it off the discovery toast (top-left) and the kick chip (top-right). */
+.pk-toast { box-sizing: border-box; left: 50%; transform: translateX(-50%); bottom: auto; top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s));
+  width: max-content; max-width: min(40cqw, calc(480 * var(--pk-s) - 12px)); max-height: calc((140 - var(--pk-cmt, 26) - 26) * var(--pk-s)); overflow: hidden; text-align: center; box-shadow: 2px 2px 0 #000; }
 /* Discovery toast ("NEW: Kiss Cam!"): small, non-blocking, top-left above the pitch, clear of the goal
    (starts at ~36% of the width) and the striker (bottom-left), under the HUD chips. */
 .pk-discover { position: absolute; left: 1.2cqw; top: 21cqh; margin: 0; max-width: 28cqw; font-size: clamp(11px, 1.3cqw, 12px); color: var(--pk-ink); background: var(--pk-gold, #ffd23f); border: 2px solid #0b0d1a; box-shadow: 2px 2px 0 #000; padding: 0.3em 0.6em; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: pk-discover-in 0.3s ease-out; }
@@ -633,14 +638,15 @@
   .pk-pot .pk-age-short { display: inline; }
   .pk-actions { right: 6px; bottom: calc(var(--pk-tb) + 4px); gap: 4px; width: clamp(88px, calc(var(--pk-pl) - 12px), 140px); min-width: 0; }
   .pk-actions button { font-size: 12px; min-height: 44px; padding: 0 0.5em; }
-  /* Coaching toast (owner review 3): a banner in the sky, centred over the pitch, under the pot banner and the
-     commentary ticker (logical y ≈ 50) and above the crossbar (y 146), so the striker, the ball and the goal stay clear. */
-  .pk-toast { box-sizing: border-box; left: 50%; transform: translateX(-50%); bottom: auto; top: max(58px, calc(var(--pk-pt) + 52 * var(--pk-s)));
-    width: max-content; max-width: calc(480 * var(--pk-s) - 12px); max-height: calc(var(--pk-pt) + 138 * var(--pk-s) - max(58px, calc(var(--pk-pt) + 52 * var(--pk-s))));
+  /* Coaching toast (owner review 3, QA-3): a banner in the sky across the frame, under the HUD chips and the commentator
+     strip (logical top --pk-cmt, 22 px + rule) and above the crossbar (y 146), so the Friend, the ball and the goal stay clear.
+     The full frame width (the letterbox bars included) keeps the long tutorial tip to three lines in the short sky. */
+  .pk-toast { box-sizing: border-box; left: 50%; transform: translateX(-50%); bottom: auto; top: max(64px, calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s)));
+    width: max-content; max-width: calc(100cqw - 12px); max-height: calc(var(--pk-pt) + 140 * var(--pk-s) - max(64px, calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s))));
     font-size: 11px; line-height: 1.2; padding: 0.3em 0.6em; text-align: center; overflow: hidden; box-shadow: 2px 2px 0 #000; }
-  .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 108 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
+  .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
   /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
-  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 96 * var(--pk-s)); max-width: max(88px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
+  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: max(88px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
   .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
@@ -688,7 +694,7 @@
   .pk-hud > * { text-overflow: clip; }
   .pk-actions { left: 6px; right: 6px; top: calc(var(--pk-pt) + var(--pk-ph) + 8px); bottom: auto; width: auto; min-width: 0; flex-direction: row; gap: 6px; }
   .pk-actions button { flex: 1 1 0; min-width: 0; min-height: 44px; font-size: 13px; padding: 0 0.4em; }
-  .pk-toast { box-sizing: border-box; left: 6px; right: 6px; bottom: auto; top: calc(var(--pk-pt) + var(--pk-ph) + 60px); max-width: none; font-size: 12px; line-height: 1.3;
+  .pk-toast { box-sizing: border-box; left: 6px; right: 6px; bottom: auto; top: calc(var(--pk-pt) + var(--pk-ph) + 60px); max-width: none; font-size: 12px; line-height: 1.3; transform: none; width: auto; text-align: left;
     max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - var(--pk-ph) - 66px); overflow: hidden; }
   .pk-art-status, .pk-discover { left: 6px; top: calc(var(--pk-pt) + 28 * var(--pk-s)); max-width: calc(160 * var(--pk-s)); font-size: 11px; }
   .pk-banner { top: calc(var(--pk-pt) + 60 * var(--pk-s)); width: max-content; max-width: calc(100cqw - 12px); }

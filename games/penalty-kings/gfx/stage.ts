@@ -162,7 +162,9 @@ export class Stage {
   /** What the viewer actually saw (the 90-second QA reads this). */
   stats = { lines: new Set<string>(), contexts: new Set<string>(), celebrations: new Set<string>(), keepers: new Set<string>(), waves: 0, taunts: 0, shots: 0, goals: 0, saves: 0, woodwork: 0, reveals: 0, walkouts: 0, sfx: 0, walkOns: 0, replays: 0,
     /** Every line shown, with real-time seconds (the QA checks 0 repeats within 60 s). Bounded. */
-    lineLog: [] as { text: string; at: number }[] };
+    lineLog: [] as { text: string; at: number }[],
+    /** The Friend sprite's drawn box (logical px, halo and boots included) on the last frame: QA overlap checks. */
+    friendRect: null as { x1: number; y1: number; x2: number; y2: number } | null };
 
   private mode: "idle" | "shot" | "celebrate" | "react" | "walkout" = "idle";
   private modeTime = 0;
@@ -794,6 +796,7 @@ export class Stage {
     if (aside) { x += aside.dx; y += aside.dy; }
     const rows = this.rows(facing, walking, frame);
     drawFriend(c, rows, { x, y, scale: pose.scale, rotate, sx, sy, flip, alpha: aside?.alpha ?? 1 }, { ...this.layers, cape }, this.time);
+    { const s = pose.scale, w = 9 * s * Math.abs(sx || 1); this.stats.friendRect = { x1: Math.floor(x - w), y1: Math.floor(y - 16 * s * (sy || 1)), x2: Math.ceil(x + w), y2: Math.ceil(y + 3 * s) }; }
     // Overlays on top of the (unaltered) sprite: the kicking leg's pixel frames and the contact flash.
     if (kicking && pose.leg && !beat) {
       c.save();
