@@ -1,4 +1,4 @@
-// SIO-5: records the 45-60 s judge path as a video, plus six key frames for the submission README.
+// SIO-5: records the 40-60 s judge path (first kick within 10 s) as a video, plus six key frames for the submission README.
 // Real sandboxed runtime (SDK testGame: mock wallet, SIMULATED economy, sample Friend #7730), real swipes, FULL
 // motion (the SDK harness forces prefers-reduced-motion: reduce; this script overrides it so the showreel plays).
 // Path: cold-open showreel → Skip intro → Kick off → tutorial (3 kicks, first goal = big celebration + wave) →
@@ -98,6 +98,7 @@ await testGame("./games/penalty-kings", {
       await waitShootable();
       await pause(250);
       await swipe(options);
+      note(`${label}: swipe`);
       await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
       const banner = (await game.locator(".pk-banner strong").textContent()).trim();
       note(`${label}: ${banner}`);
@@ -113,9 +114,9 @@ await testGame("./games/penalty-kings", {
     // 1. Cold open: the showreel plays behind the title.
     await game.getByTestId("skip-intro").waitFor();
     await say("1 · Cold open: the showreel plays behind the title");
-    await pause(4500);
+    await pause(2000);
     await shoot("title");
-    await pause(3000);
+    await pause(800); // owner requirement: the first kick lands within 10 s of the start
     await game.getByTestId("skip-intro").click();
     note("skip intro");
     await pause(700);
@@ -176,7 +177,7 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("pack-summary").waitFor();
     note(`pack: ${(await game.locator(".pk-card strong").allTextContents()).join(", ")}`);
     await pause(1100); // let the flip settle
-    await shoot("pack");
+    await shoot("pack-summary"); // judge-pack.png was the pre-B4 font; the README points here
     await pause(900);
     await game.getByTestId("to-bag").click();
     await game.getByTestId("ball").first().waitFor();
@@ -194,7 +195,7 @@ await testGame("./games/penalty-kings", {
     await waitShootable();
     note(`HUD: ${(await game.locator(".pk-hud-left .pk-stat").textContent()).trim()} · flow ${JSON.stringify((await flow())?.phase ?? "")}`);
     await say("Penalty Kings · FriendSDK v0.1.2 · preview economy is SIMULATED");
-    await pause(2500);
+    await pause(Math.max(800, Math.min(2500, 57_500 - (Date.now() - started)))); // stay under 60 s
     await caption?.dispose?.();
     await page.screencast.stop();
     note("stopped");
@@ -215,7 +216,7 @@ renameSync(raw, videoOut);
 rmSync(temporary, { recursive: true, force: true });
 const bytes = statSync(videoOut).size;
 console.log(`\n${videoOut}: ${Number.isFinite(seconds) ? seconds.toFixed(1) : "?"} s, ${(bytes / 1024 / 1024).toFixed(2)} MB`);
-console.log(`frames: ${["title", "goal", "modes", "freekick", "pack", "bigmatch"].map(name => join(shotsOut, `judge-${name}.png`)).join(", ")}`);
+console.log(`frames: ${["title", "goal", "modes", "freekick", "pack-summary", "bigmatch"].map(name => join(shotsOut, `judge-${name}.png`)).join(", ")}`);
 assert.ok(bytes <= MAX_BYTES, `video is ${bytes} bytes (cap ${MAX_BYTES})`);
-if (Number.isFinite(seconds)) assert.ok(seconds >= 40 && seconds <= 65, `video length ${seconds.toFixed(1)} s is outside 40-65 s`);
+if (Number.isFinite(seconds)) assert.ok(seconds >= 40 && seconds <= 60, `video length ${seconds.toFixed(1)} s is outside 40-60 s`);
 console.log("PASS judge path recorded");
