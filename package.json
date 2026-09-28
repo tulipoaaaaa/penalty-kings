@@ -57,6 +57,7 @@
     "record:money": "node --experimental-strip-types --no-warnings scripts/record-money-shot.mjs",
     "qa:90s": "node scripts/qa-90s.mjs && node scripts/qa-90s.mjs --width 360 && node scripts/qa-90s.mjs --motion && node scripts/qa-90s.mjs --width 360 --motion",
     "test:flow": "node scripts/test-flow.mjs && node scripts/test-flow.mjs --width 360",
+    "test:overflow": "npm run build:site && node scripts/test-overflow.mjs",
     "test:practice": "npm run build:site && node scripts/test-practice.mjs",
     "test:landing": "npm run build:site && node scripts/test-landing.mjs",
     "shot:c4": "node scripts/shot-c4.mjs"
