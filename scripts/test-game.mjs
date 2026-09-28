@@ -220,8 +220,8 @@ await testGame("./games/penalty-kings", {
     assert.ok(Number(/Seen (\d+)/.exec(meter)[1]) >= 1 && Number(/(\d+)\/12 keepers/.exec(meter)[1]) >= 3, `discovery after the first session: ${meter}`);
     console.log(`scouting book: ${meter}`);
     await game.getByRole("button", { name: "Close" }).first().click();
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    await game.getByTestId("results").waitFor({ timeout: 3000 }); // the Book opened from Results closes back to them
+    await button("Modes").click();
 
     // Big Match, founder flow: BUY a pack → OPEN (SDK play + settle) → REVEAL ALL → true summary → BAG →
     // choose a ball → KICK (the ball is not consumed) → REDEEM one ball for RF.
@@ -306,7 +306,7 @@ await testGame("./games/penalty-kings", {
     await game.getByRole("button", { name: "Close" }).first().click();
     await game.getByTestId("menu").click();
     await button("Cups").click();
-    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, cup entries and wildcards\./);
+    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, Cup entries and wildcards\./);
     const potBefore = await game.getByText(/^Pot \$GBOOT:/).textContent();
     await game.getByTestId("wildcard").click();
     await game.getByTestId("wildcard-confirm").waitFor();

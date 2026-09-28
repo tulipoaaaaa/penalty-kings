@@ -23,26 +23,40 @@ export type ShareCardInput = {
   /** A challenge code, printed small under the link (optional). */
   code?: string;
 };
-export type CardText = { text: string; x: number; y: number; size: number; color: string; bold: boolean; align: "left" | "center" };
+/** One line of the card. `head`: a heading line in PKHead; `font`: the exact canvas font it is drawn (and loaded) in. */
+export type CardText = { text: string; x: number; y: number; size: number; color: string; head: boolean; font: string; align: "left" | "center" };
 export type ShareCardLayout = { width: number; height: number; sprite: { x: number; y: number; scale: number }; texts: CardText[] };
 
 const INK = "#0b0d1a", GOLD = "#ffd23f", VOLT = "#ccff00", PAPER = "#f7f7f2", SKY = "#7fd3ff";
 /** Monospace/pixel faces run about 0.62 em per glyph: used to shrink long lines to fit. */
 export const GLYPH_EM = 0.62;
+/**
+ * Heading face: PKHead, the Departure Mono subset style.css declares (A–Z, digits, number punctuation), as the
+ * DOM and Stage headings use it. Bold Pixelify drew C like O ("PENALTY KINOS"-style misreads on a shared image).
+ * Its glyphs sit on an 11 px grid, 7 px apart: heading sizes are whole multiples of 11 so every pixel lands whole.
+ */
+export const HEAD_EM = 7 / 11;
+const HEAD_GRID = 11;
+export const headCardFont = (px: number) => `${px}px PKHead, PixelifySans, ui-monospace, monospace`;
+export const bodyCardFont = (px: number) => `400 ${px}px PixelifySans, ui-monospace, monospace`;
 const fit = (text: string, size: number, room: number) => Math.max(11, Math.min(size, Math.floor(room / (Math.max(1, text.length) * GLYPH_EM))));
+/** The largest grid size (≤ `size`) at which a heading fits `room`. */
+const fitHead = (text: string, size: number, room: number) => Math.max(HEAD_GRID, Math.floor(Math.min(size, room / (Math.max(1, text.length) * HEAD_EM)) / HEAD_GRID) * HEAD_GRID);
 
 export function shareCardLayout(input: ShareCardInput): ShareCardLayout {
   const left = 230, room = CARD_W - left - 24, texts: CardText[] = [];
-  const add = (text: string, y: number, size: number, color: string, bold = false, x = left, align: CardText["align"] = "left", width = room) => texts.push({ text, x, y, size: fit(text, size, width), color, bold, align });
-  add("PENALTY KINGS", 44, 30, GOLD, true);
+  const add = (text: string, y: number, size: number, color: string, x = left, align: CardText["align"] = "left", width = room) => { const px = fit(text, size, width); texts.push({ text, x, y, size: px, color, head: false, font: bodyCardFont(px), align }); };
+  // Heading lines: uppercase (the subset has no lowercase, and no glyph may fall back mid-word), on the 11 px grid.
+  const head = (text: string, y: number, size: number, color: string) => { const upper = text.toUpperCase(), px = fitHead(upper, size, room); texts.push({ text: upper, x: left, y, size: px, color, head: true, font: headCardFont(px), align: "left" }); };
+  head("PENALTY KINGS", 44, 33, GOLD);
   add(input.name, 76, 18, PAPER);
-  add(`${input.score.toLocaleString("en-US")} ${input.scoreLabel}`, 142, 54, VOLT, true);
+  head(`${input.score.toLocaleString("en-US")} ${input.scoreLabel}`, 142, 55, VOLT);
   add(`${input.goals}/${input.kicks} goals · best streak ${input.bestStreak}`, 178, 18, PAPER);
   if (input.subtitle) add(input.subtitle, 204, 15, SKY);
-  add(CARD_TAGLINE, 264, 30, GOLD, true);
+  head(CARD_TAGLINE, 262, 22, GOLD);
   const link = input.link.replace(/^https?:\/\//, "").replace(/[?#].*$/, ""); // the code gets its own line: a link with it does not fit
-  add(link, 304, 20, PAPER, false, 24, "left", CARD_W - 48);
-  if (input.code) add(`Challenge code: ${input.code}`, 336, 16, SKY, false, 24, "left", CARD_W - 48);
+  add(link, 304, 20, PAPER, 24, "left", CARD_W - 48);
+  if (input.code) add(`Challenge code: ${input.code}`, 336, 16, SKY, 24, "left", CARD_W - 48);
   return { width: CARD_W, height: CARD_H, sprite: { x: 118, y: 222, scale: 8 }, texts };
 }
 
@@ -68,25 +82,34 @@ export function renderShareCard(canvas: HTMLCanvasElement, layout: ShareCardLayo
   c.fillStyle = PAPER; c.beginPath(); c.arc(x + 70, y - 6, 9, 0, Math.PI * 2); c.fill(); // the ball
   c.fillStyle = INK; c.fillRect(x + 66, y - 10, 4, 4); c.fillRect(x + 71, y - 4, 4, 4);
   for (const text of layout.texts) {
-    c.font = `${text.bold ? 700 : 400} ${text.size}px PixelifySans, ui-monospace, monospace`;
-    c.textAlign = text.align; c.textBaseline = "alphabetic";
-    c.fillStyle = "#000000"; c.fillText(text.text, text.x + 2, text.y + 2);
+    c.font = text.font; c.textAlign = text.align; c.textBaseline = "alphabetic";
+    // Headings drop a hard shadow one font pixel (size / 11) down-right: a pixel-true offset at every grid size.
+    const drop = text.head ? text.size / HEAD_GRID : 2;
+    c.fillStyle = "#000000"; c.fillText(text.text, text.x + drop, text.y + drop);
     c.fillStyle = text.color; c.fillText(text.text, text.x, text.y);
   }
   c.fillStyle = GOLD; c.fillRect(0, 0, layout.width, 4); c.fillRect(0, layout.height - 4, layout.width, 4);
   return true;
 }
 
-/** Wait (briefly) for the pixel font so the card never falls back to a system face; never throws. */
-export async function cardFontsReady() {
-  try { await Promise.race([Promise.all([document.fonts.load("700 30px PixelifySans"), document.fonts.load("400 18px PixelifySans")]), new Promise(resolve => setTimeout(resolve, 800))]); } catch { /* no FontFaceSet: system font */ }
+/**
+ * Wait (briefly) for every face and size the card draws (PKHead headings, Pixelify lines) so it never paints in a
+ * fallback face: canvas text alone does not start a web-font download. Never throws.
+ */
+export async function cardFontsReady(layout: ShareCardLayout) {
+  try {
+    const fonts = (globalThis as { document?: { fonts?: { load(font: string, text?: string): Promise<unknown> } } }).document?.fonts;
+    if (!fonts) return;
+    await Promise.race([Promise.all(layout.texts.map(text => fonts.load(text.font, text.text))), new Promise(resolve => setTimeout(resolve, 1500))]);
+  } catch { /* no FontFaceSet: system font */ }
 }
 
 /** Render to an offscreen canvas: a PNG data URL (for <img> and downloads) and, when the browser can, a File for Web Share. */
 export async function cardImage(input: ShareCardInput, rows: readonly string[] | null, halo?: string): Promise<{ url: string; file: File | null; bytes: number }> {
-  await cardFontsReady();
+  const layout = shareCardLayout(input);
+  await cardFontsReady(layout);
   const canvas = document.createElement("canvas");
-  renderShareCard(canvas, shareCardLayout(input), rows, halo);
+  renderShareCard(canvas, layout, rows, halo);
   const url = canvas.toDataURL("image/png");
   let file: File | null = null;
   try {

@@ -132,6 +132,7 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   assert.equal(card.src, "data:image/png;base64,", `${name}: the card is a PNG data URL`);
   assert.deepEqual([card.w, card.h], [640, 360], `${name}: card size`);
   assert(card.bytes > 5000, `${name}: the card is not empty (${card.bytes} bytes)`);
+  assert(await page.evaluate(() => [...document.fonts].some(face => face.family.replace(/"/g, "") === "PKHead" && face.status === "loaded")), `${name}: the card's heading face (PKHead) is loaded before it is drawn`);
   assert.match(card.alt, /Beat me at Penalty Kings/);
   assert.equal(card.download, true, `${name}: a normal page can save the image`);
   assert.equal(await page.getByTestId("practice-share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");

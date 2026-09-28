@@ -28,7 +28,7 @@ import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
-import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
+import { spawnTargets, targetAt, resolveTargetShot, gameClockRunning, TARGET_SECONDS, type Target } from "./game/target.js";
 import { revealPlan } from "./game/reveal.js";
 import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/randomness.js";
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
@@ -232,7 +232,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
    * Target Practice motion (round 6 C8): seconds of target movement. It runs during the shot (the
    * targets keep moving on screen while the ball flies; during the shot it follows the Stage's own
    * kick clock, so the drawn positions at the crossing are exactly the judged ones) and stops in menus.
-   * The 60 s countdown (clockNow) is frozen during the shot animation instead.
+   * The 60 s countdown (clockNow) runs too: only menus, overlays, pause and a hidden tab stop it.
    */
   const targetMotion = useRef<{ t: number; release: number | null }>({ t: 0, release: null });
   /** The target hit by the kick in flight (judged at release, shown when the ball arrives). */
@@ -407,8 +407,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let frame = 0, last = performance.now();
     const loop = (time: number) => {
       const current = live.current, frozen = current.paused || document.hidden;
-      // Target Practice: the 60 s clock also stops while a shot plays (round 6 C8).
-      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
+      // Target Practice's 60 s is a real minute: it runs through the flight and the result banner (gameClockRunning).
+      if (current.session && !gameClockRunning({ kind: current.session.kind, frozen, menu: Boolean(current.menu), overlay: current.pack || current.carousel, moment: scene.moment, inFlight: inFlight.current > 0 })) frozenMs.current += time - last;
       // Clamped at 0: the first rAF timestamp can be earlier than the performance.now() above, and a negative dt
       // made Stage.time negative (keeper sway phase −1 → missing sprite frame → the render loop threw and stopped).
       const dt = frozen ? 0 : Math.max(0, Math.min(0.05, (time - last) / 1000)); last = time;
@@ -1284,10 +1284,17 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     stage.current?.cancel(); // ends the sealed pack's wait and any card reveal on the Stage
     live.current = { ...live.current, pack: false }; setPack(null);
   }
+  /**
+   * "Open the Scouting Book" from Results: closing the Book (× or Escape) goes back to those Results, figures already
+   * counted (final at once). The dialog keeps focus when the link that opened the Book unmounts, so Escape still works.
+   */
+  const bookFromResults = useRef(false), countedSummary = useRef<SessionSummary | null>(null);
   /** Close a menu. With no session and no pack on the pitch (a pack opened from the modes screen ends in the Bag), back to the modes screen. */
   function closeMenu() {
     // QA-8: closing Results (× or Escape) leaves the finished session exactly like its "Modes" button: never a dead pitch.
     if (menu === "results") { toModes(); return; }
+    if (menu === "book" && bookFromResults.current && summary) { bookFromResults.current = false; setMenu("results"); return; }
+    bookFromResults.current = false;
     setMenu(null); if (live.current.screen === "play" && !live.current.session && !live.current.pack) setScreen(progress.tutorialDone ? "modes" : "title");
   }
   /** A finished session → the Modes screen (Results "Modes", and closing Results). */
@@ -1718,9 +1725,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
-      {menu === "results" && summary && <Results summary={summary} next={tourNext} reduced={reducedMotion} onTick={index => playSfx(`rarity-${index}`)}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} reduced={reducedMotion || countedSummary.current === summary} onTick={index => playSfx(`rarity-${index}`)}
         goal={(() => { const goal = nextGoal(progress, LEVELS, today); return { text: goal.text, mode: goal.mode, onGo: () => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); startMode(goal.mode); } }; })()}
-        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => setMenu("book")} onModes={toModes}
+        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => { bookFromResults.current = true; countedSummary.current = summary; setMenu("book"); requestAnimationFrame(() => document.querySelector<HTMLElement>(".rf-frame-menu")?.focus({ preventScroll: true })); }} onModes={toModes}
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }

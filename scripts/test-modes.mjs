@@ -59,6 +59,9 @@ await testGame("./games/penalty-kings", {
     const card = await shareImage.evaluate(el => ({ src: el.src.slice(0, 22), w: el.naturalWidth, h: el.naturalHeight, bytes: Number(el.dataset.bytes) }));
     assert.equal(card.src, "data:image/png;base64,"); assert.deepEqual([card.w, card.h], [640, 360]);
     assert.ok(card.bytes > 5000, `the share card is not empty (${card.bytes} bytes)`);
+    // Polish: its heading lines are drawn in the heading face (PKHead, not bold Pixelify, which drew C like O), loaded
+    // before the card is painted (tests/game/sharecard-type.test.ts checks every line's font).
+    assert.ok(await game.locator("body").evaluate(() => [...document.fonts].some(face => face.family.replace(/"/g, "") === "PKHead" && face.status === "loaded")), "PKHead is loaded for the card");
     assert.equal(await game.getByTestId("share-download").count(), sandbox.origin === "null" ? 0 : 1, "no download link where the sandbox blocks downloads");
     assert.equal(await game.getByTestId("share-link").inputValue(), "https://tulipoaaaaa.github.io/penalty-kings/");
     console.log(`share card: ${card.w}x${card.h} PNG, ${card.bytes} bytes`);
@@ -121,13 +124,31 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("menu").click();
     await button("Change mode").click();
 
-    // Target Practice: a few kicks against moving targets (the 60 s clock keeps running).
+    // Target Practice: "60 seconds" is a real minute. The clock runs through each flight and result banner (it used to
+    // run only while aiming, so a round of continuous kicks took minutes): kicking non-stop, Results is up within 75 s.
+    const targetStarted = Date.now();
     await game.getByTestId("mode-target").click();
     await page.waitForTimeout(500);
     await frame.screenshot({ path: `${out}/target-${width}.png` });
-    for (let i = 1; i <= 2; i++) await kick(`target ${i}`, { dx: i === 1 ? 0.3 : -0.3 });
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    const targetResults = game.getByTestId("results");
+    let targetKicks = 0;
+    while (Date.now() - targetStarted < 120_000) {
+      const next = await game.locator("body").evaluate(() => new Promise(resolve => {
+        const start = Date.now();
+        const poll = () => (document.querySelector("[data-testid=results]") ? resolve("results") : window.__pkFlow?.().shootable ? resolve("shoot") : Date.now() - start > 15000 ? resolve("stuck") : setTimeout(poll, 50));
+        poll();
+      }));
+      if (next !== "shoot") break;
+      await swipe({ dx: targetKicks % 2 ? -0.3 : 0.3 }); targetKicks++;
+      await game.locator(".pk-banner").waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }).catch(() => undefined);
+    }
+    const targetSeconds = (Date.now() - targetStarted) / 1000;
+    await targetResults.waitFor({ timeout: 5_000 }).catch(() => undefined);
+    assert.ok(await targetResults.isVisible(), `a Target Practice round ends on its own (${targetKicks} kicks, ${targetSeconds.toFixed(1)} s)`);
+    assert.ok(targetSeconds <= 75, `the 60 s Target round took ${targetSeconds.toFixed(1)} s of real time (${targetKicks} kicks)`);
+    console.log(`target: ${targetKicks} kicks, round over in ${targetSeconds.toFixed(1)} s of real time`);
+    await button("Modes").click();
 
     // World Tour: Park level 1.
     await game.getByTestId("mode-tour").click();
