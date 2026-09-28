@@ -1,8 +1,8 @@
 /**
  * EARLY ACCESS screens (game/features.ts): the Ball shop and the odds with the player's per-Friend RATING (payout
- * rate by Friend generation, game/ratings.ts). Rendered only when the build defines globalThis.PK_EARLY_ACCESS; the
- * full build folds every use away, so nothing here reaches it. Styles reuse the game's own classes (style.css is
- * shared with the full build and stays untouched); the few extras are inline.
+ * rate by Friend generation, game/ratings.ts). Used only from early access regions (scripts/lib/ea-regions.mjs), so
+ * the full build never includes it. Styles reuse the game's own classes (style.css is shared with the full build and
+ * stays untouched); the few extras are inline.
  *
  * Where the rating comes from:
  *  - the odds the stadium ROLLS with are its ChanceGame definition (`definition`): the rating is computed from it,

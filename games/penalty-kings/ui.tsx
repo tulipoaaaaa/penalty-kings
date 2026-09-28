@@ -15,6 +15,7 @@ import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPric
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 import { SHOT_RULES } from "./game/shots.js";
 import { COUNT_UP_MS, countUpText, ticksAt } from "./game/countup.js";
+/*EA+ import { visibleModes } from "./game/features.js"; +EA*/
 
 // One shared 90 ms ticker drives every spinning ball on screen (drawing = one drawImage from a cached strip).
 const spinners = new Set<(frame: number) => void>();
@@ -140,7 +141,7 @@ export function TokenExplainer() {
 export function ModeSelect({ progress, onPick }: { progress: Progress; onPick: (mode: ModeId) => void }) {
   const { level } = levelFromXp(progress.xp);
   return <div className="pk-modes">
-    {MODES.map(mode => {
+    {/*EA{ visibleModes("early-access") }*/MODES/*}EA*/.map(mode => {
       const open = isUnlocked(mode.id, progress);
       return <button key={mode.id} type="button" className={mode.paid ? "pk-mode pk-mode-paid" : "pk-mode"} disabled={!open} onClick={() => onPick(mode.id)} data-testid={`mode-${mode.id}`}>
         <strong>{mode.name}</strong><small>{open ? mode.blurb : `Unlocks at level ${mode.level} (you are ${level})`}</small>
@@ -236,7 +237,7 @@ export function ScoutingBook({ progress, discovery }: { progress: Progress; disc
       <li><b>PERFECT strike:</b> {SHOT_RULES.perfect}</li>
       <li><b>Keepers:</b> each card shows how often the keeper dives the right way (before your challenge level) and the points multiplier for scoring past them.</li>
       <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>
-      <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
+      {/*EA{ null }*/}<li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>{/*}EA*/}
     </ul>
   </div>;
 }
@@ -353,7 +354,7 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
       {!goalFirst && <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>}
       {onBook && <button type="button" className="pk-link" onClick={onBook} data-testid="open-book">Open the Scouting Book</button>}
     </div>}
-    {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
+    {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li>{/*EA{ null }*/}<li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li>{/*}EA*/}<li>Your kicks never change what your balls are worth.</li></ul>}
     {cup}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
     <div className="pk-resultfoot">

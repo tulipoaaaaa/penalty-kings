@@ -1,11 +1,12 @@
 /**
  * EARLY ACCESS feature flags: the ONE place that says what each build preset shows (docs/EARLY-ACCESS.md).
  *
- * The preset is a build-time constant: `globalThis.PK_EARLY_ACCESS` (scripts/lib/preset.mjs defines it for
- * `npm run build:site` / `build:site:ea`; builds without the define, like the SDK's own CLI, get the full game).
- * Every consumer (menus, modes, NEXT GOAL, HUD, Results) reads it as `globalThis.PK_EARLY_ACCESS ? <early access> : <full>`,
- * which esbuild folds at build time, and asks THIS module what early access shows. Hidden features are hidden, never
- * deleted: switching one back on is one line here (plus, for a whole screen, the gate that renders it).
+ * The preset is chosen at build time (PK_PRESET, scripts/lib/preset.mjs). Every consumer (menus, modes screen, NEXT
+ * GOAL, HUD, Results, Rules) has an early access REGION (syntax in scripts/lib/ea-regions.mjs): a comment holding the
+ * early access code next to the full code, which the early access build compiles and the full build ignores (so the
+ * full build is byte-identical to the judged one). Region code asks THIS module what early access shows. Hidden features are hidden, never deleted:
+ * switching one back on is `earlyAccess: true` in FEATURES below (tests/game/features.test.ts lists what each flag
+ * controls; a whole screen also needs its region to render it).
  *
  * Early access shows exactly four features:
  *   1. real-money balls: Big Match, Ball shop, My Bag, packs (odds) and redeem

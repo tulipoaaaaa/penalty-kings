@@ -14,3 +14,4 @@ contracts/broadcast/
 .claude/worktrees/
 site-ea/
 .build-ea/
+.build-ea-types/

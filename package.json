@@ -26,6 +26,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "typecheck": "tsc -p .",
+    "typecheck:ea": "node scripts/typecheck-ea.mjs",
     "check": "friendsdk check ./games/penalty-kings",
     "test:smoke": "friendsdk test ./games/penalty-kings --screenshot ./artifacts/game.png && friendsdk test ./games/penalty-kings --width 360 --screenshot ./artifacts/game-360.png",
     "test:game": "node scripts/test-game.mjs --screenshot ./artifacts/kick.png && node scripts/test-game.mjs --width 360 --screenshot ./artifacts/kick-360.png",
