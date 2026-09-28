@@ -41,6 +41,7 @@ const endScore = $("pp-end-score"), quick = $<HTMLButtonElement>("pp-quick"), ag
 
 const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const scene = new Stage({ stadium: "park", weather: weatherForDay(), keeper: "mouse" });
+scene.scoreboard = true; // practice is always a session: the SCORE box stays (QA-7 hides it outside sessions in the game)
 scene.setReduced(reducedMotion);
 scene.rows = strikerRows;
 scene.friendName = "The Trialist";

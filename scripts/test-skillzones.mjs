@@ -128,8 +128,9 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("results").waitFor();
 
     // Settings → save code: difficulty rung 0 (no wobble), a clean XP level start.
+    // (Closing Results goes to the Modes screen, QA-8, which has its own Settings button.)
     await game.getByRole("button", { name: "Close" }).first().click();
-    await game.getByTestId("menu").click();
+    await game.locator(".pk-modescreen").waitFor();
     await button("Settings").click();
     const code = await game.getByTestId("save-code-out").inputValue();
     const saved = JSON.parse(Buffer.from(code.split(".")[1], "base64url").toString("utf8"));
@@ -138,8 +139,7 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("save-code-restore").click();
     await game.getByTestId("save-code-note").filter({ hasText: /restored/ }).waitFor();
     await game.getByRole("button", { name: "Close" }).first().click();
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    await game.locator(".pk-modescreen").waitFor();
 
     // World Tour, park-1.
     await game.getByTestId("mode-tour").click();

@@ -13,7 +13,8 @@
 //   - saves artifacts/phone-<w>x<h>.png (or --out docs/screenshots to refresh the docs) (the phone's screen while aiming, after the first kick).
 // Also (BQ-P1-9): at 960×640 and 1280×800 the title's Kick off is >= 44 CSS px (cold open and attract card).
 // PK_TAP_SURVEY=1 lists every small tap target instead of failing on the first.
-// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only] [--out docs/screenshots]
+// QA-4: at 844x390 (reduced and full motion) the Results tiles and the primary button are both in view.
+// Usage: node scripts/test-phone.mjs [--size 360x800 | --desktop-only | --results-only] [--out docs/screenshots]
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { testGame } from "@rarefriends/friendsdk/testing";
@@ -23,7 +24,7 @@ installPriceFixture(); // answers the live RF/USD pool reads with recorded value
 
 const args = process.argv.slice(2);
 const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
+const SIZES = (option("--size") ? [option("--size")] : args.includes("--desktop-only") || args.includes("--results-only") ? [] : ["360x800", "390x844", "800x360", "844x390"]).map(size => size.split("x").map(Number));
 const OUT = option("--out") ?? "artifacts";
 const MIN_FONT = 11;
 const MIN_TAP = 44; // BQ-P1-10: every tap target (was 32)
@@ -72,6 +73,28 @@ async function titleClear(game, where) {
   for (const other of [".pk-attract-top", ".pk-attract-bottom", ".pk-title-sound"]) assert.ok(!hit(boxes[".pk-pot"], boxes[other]), `${where}: the pot banner overlaps ${other} ${JSON.stringify(boxes)}`);
   assert.ok(!hit(top, boxes[".pk-attract-bottom"]), `${where}: the title card overlaps the Kick off card ${JSON.stringify(boxes)}`);
   for (const text of [".pk-attract-top h1", "[data-testid=pot-counter]"]) assert.ok(!hit(boxes[".pk-title-sound"], boxes[text]), `${where}: the sound toggle covers ${text} ${JSON.stringify(boxes)}`);
+}
+
+/** QA-3: while aiming, the tutorial coaching toast (when shown) never covers the player's Friend (its drawn box, from
+ *  the Stage), the ball, the goal mouth or the commentator strip (logical top at canvas[data-commentary-top], 22 px
+ *  tall + its rule, up to 260 px wide, centred). Returns whether a toast was up. Rects in the game frame's px. */
+async function toastOffFriend(game, where) {
+  const toast = game.locator(".pk-toast");
+  if (!(await toast.isVisible())) return false;
+  const r = await game.locator("body").evaluate(() => {
+    const rect = node => { const b = node.getBoundingClientRect(); return { x1: b.left, y1: b.top, x2: b.right, y2: b.bottom }; };
+    const canvas = document.querySelector("canvas.pk-canvas"), c = canvas.getBoundingClientRect(), scale = Math.min(c.width / 480, c.height / 320);
+    const ox = c.left + (c.width - 480 * scale) / 2, oy = c.top + (c.height - 320 * scale) / 2;
+    const toPx = z => ({ x1: ox + z.x1 * scale, y1: oy + z.y1 * scale, x2: ox + z.x2 * scale, y2: oy + z.y2 * scale });
+    const top = Number(canvas.dataset.commentaryTop), friend = window.__pkStats().friendRect;
+    return { toast: rect(document.querySelector(".pk-toast")), friend: friend && toPx(friend),
+      strip: toPx({ x1: 240 - 130, y1: top, x2: 240 + 130, y2: top + 24 }),
+      ball: toPx({ x1: 233, y1: 243, x2: 247, y2: 257 }), goal: toPx({ x1: 168, y1: 146, x2: 312, y2: 212 }) };
+  });
+  const hit = (a, b) => a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+  assert.ok(r.friend, `${where}: the Stage reports the Friend's drawn box`);
+  for (const name of ["friend", "strip", "ball", "goal"]) assert.ok(!hit(r.toast, r[name]), `${where}: the coaching toast covers the ${name === "strip" ? "commentator strip" : name} ${JSON.stringify({ toast: r.toast, [name]: r[name] })}`);
+  return true;
 }
 
 for (const [width, height] of SIZES) {
@@ -218,6 +241,7 @@ for (const [width, height] of SIZES) {
       await sceneVisible(GOAL, "goal");
       await sceneVisible(BALL, "ball");
       await toastClear();
+      if (await toastOffFriend(game, `${label} tutorial kick 1`)) checked.push("toast:friend-1");
       await page.screenshot({ path: `artifacts/phone-${label}-tutorial.png` });
       await fonts("tutorial HUD");
       await reachable(game.getByTestId("quick"), "Quick shot");
@@ -231,6 +255,26 @@ for (const [width, height] of SIZES) {
       assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "1");
       checked.push(`swipe:${banner}`);
       await fonts("kick banner");
+      // QA-9: the discovery toast is never truncated: it wraps (at most 2 lines, >= 11 px), even for the longest
+      // moment name (measured by swapping the longest label into the shown toast, then restoring it).
+      {
+        const toast = game.getByTestId("discover-toast");
+        await toast.waitFor({ timeout: 5000 });
+        const fit = await toast.evaluate(node => {
+          const measure = () => { const s = getComputedStyle(node), line = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+            return { sw: node.scrollWidth, cw: node.clientWidth, sh: node.scrollHeight, ch: node.clientHeight, lines: Math.round((node.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / line), font: parseFloat(s.fontSize), text: node.textContent }; };
+          const shown = measure(), original = node.textContent;
+          node.textContent = "NEW: Crowd chants your Friend's number!";
+          const longest = measure();
+          node.textContent = original;
+          return { shown, longest };
+        });
+        for (const [name, m] of Object.entries(fit)) {
+          assert.ok(m.sw <= m.cw && m.sh <= m.ch + 1, `${label}: the discovery toast is truncated (${name}) ${JSON.stringify(m)}`);
+          assert.ok(m.lines <= 2 && m.font >= MIN_FONT, `${label}: the discovery toast takes over 2 lines or is under 11px (${name}) ${JSON.stringify(m)}`);
+        }
+        checked.push("discover:unclipped");
+      }
       await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       await waitShootable();
       await fonts("after the kick (discovery toast)");
@@ -238,6 +282,7 @@ for (const [width, height] of SIZES) {
       // Kicks 2 and 3 with Quick shot (a tap), then the results.
       for (let kick = 2; kick <= 3; kick++) {
         await waitShootable();
+        if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) checked.push(`toast:friend-${kick}`);
         await reachable(game.getByTestId("quick"), "Quick shot");
         await press(game.getByTestId("quick"));
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
@@ -246,7 +291,9 @@ for (const [width, height] of SIZES) {
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await fonts("results");
       await targets("results");
-      await game.getByRole("button", { name: "Close" }).first().click();
+      // (Closing Results goes to the Modes screen, QA-8; Play again keeps a session on the pitch for the menu hub.)
+      await press(game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }));
+      await waitShootable();
       await reachable(game.getByTestId("menu"), "Menu");
       await press(game.getByTestId("menu"));
       await fonts("menu hub");
@@ -309,7 +356,7 @@ for (const [width, height] of SIZES) {
 // BQ-P1-9: on frames taller than 519px (desktop), the title's main CTA "Kick off" is a real button too (>= 44 CSS px),
 // in the cold open and on the attract card after "Skip intro". BQ-P1-10: and every tap target in Results, the menu
 // hub, Settings, mode select and the Ball shop.
-const DESKTOP = option("--size") ? [] : [[960, 640], [1280, 800]];
+const DESKTOP = option("--size") || args.includes("--results-only") ? [] : [[960, 640], [1280, 800]];
 for (const [width, height] of DESKTOP) {
   const label = `${width}x${height}`, sizes = [];
   await testGame("./games/penalty-kings", {
@@ -333,15 +380,19 @@ for (const [width, height] of DESKTOP) {
       // BQ-P1-10 on a desktop frame: Results, the menu hub, Settings and the Ball shop.
       const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
       await game.getByTestId("play").click();
+      let toasts = 0;
       for (let kick = 1; kick <= 3; kick++) {
         await waitShootable();
+        if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) toasts++;
         await game.getByTestId("quick").click();
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
         await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       }
+      assert.ok(toasts >= 1, `${label}: the tutorial coaching toast was checked against the Friend`); sizes.push(`toast clear of the Friend/ball/goal/strip x${toasts}`);
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
       await assertTargets(game, `${label} results`); sizes.push("results");
-      await game.getByRole("button", { name: "Close" }).first().click();
+      await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).click(); // (× goes to Modes, QA-8)
+      await waitShootable();
       await game.getByTestId("menu").click();
       await assertTargets(game, `${label} menu hub`); sizes.push("hub");
       await game.locator(".pk-hub").getByRole("button", { name: "Settings", exact: true }).click();
@@ -357,4 +408,36 @@ for (const [width, height] of DESKTOP) {
   });
   console.log(`PASS title CTA ${label}: ${sizes.join(", ")}`);
 }
-console.log(`PASS phone layouts: ${SIZES.map(s => s.join("x")).join(", ")}; screenshots in ${OUT}/`);
+// QA-4: on a landscape phone the Results tiles stay in view once Results land (no focus jump, no scroll to the
+// button after the count-up), and the primary button is visible and tappable too, in both motion modes.
+for (const [width, height, motion] of option("--size") ? [] : [[844, 390, "reduce"], [844, 390, "no-preference"]]) {
+  const label = `${width}x${height} ${motion === "reduce" ? "reduced motion" : "full motion"}`;
+  await testGame("./games/penalty-kings", {
+    width, height, timeout: 60_000,
+    check: async ({ page, game }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      const waitShootable = () => game.locator("body").evaluate(() => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > 15000 ? reject(new Error("never shootable")) : setTimeout(poll, 50)); poll(); }));
+      if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
+      await game.getByTestId("play").click();
+      for (let kick = 1; kick <= 3; kick++) {
+        await waitShootable();
+        await game.getByTestId("quick").click();
+        await game.locator(".pk-banner").waitFor({ timeout: 8000 });
+        await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
+      }
+      await game.locator('[data-testid="results"][data-final]').waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(1500); // any smooth scroll after the count has finished
+      const seen = await game.locator("body").evaluate(() => {
+        const at = (node, fx, fy) => { const r = node.getBoundingClientRect(), hitNode = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy); return Boolean(hitNode && node.contains(hitNode)); };
+        const tiles = document.querySelector("[data-testid=results] .pk-tiles"), primary = document.querySelector("[data-testid=results] .pk-primary");
+        const r = tiles.getBoundingClientRect(), p = primary.getBoundingClientRect();
+        return { tiles: [at(tiles, 0.5, 0.05), at(tiles, 0.5, 0.5), at(tiles, 0.5, 0.95)], tilesRect: [r.top, r.bottom].map(Math.round), inViewport: r.top >= 0 && r.bottom <= innerHeight,
+          primary: at(primary, 0.5, 0.5), primaryRect: [p.top, p.bottom, p.height].map(Math.round), primaryText: primary.textContent.slice(0, 30) };
+      });
+      assert.ok(seen.inViewport && seen.tiles.every(Boolean), `${label}: the Results tiles are scrolled out of view ${JSON.stringify(seen)}`);
+      assert.ok(seen.primary && seen.primaryRect[2] >= 44, `${label}: the primary Results button is not visible and tappable ${JSON.stringify(seen)}`);
+      console.log(`PASS Results in view ${label}: tiles ${seen.tilesRect.join("-")}, primary "${seen.primaryText.trim()}" ${seen.primaryRect.slice(0, 2).join("-")}`);
+    },
+  });
+}
+console.log(`PASS phone layouts:${SIZES.map(s => s.join("x")).join(", ")}; screenshots in ${OUT}/`);

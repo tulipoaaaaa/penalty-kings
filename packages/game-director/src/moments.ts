@@ -12,6 +12,8 @@ export type MomentContext = Readonly<{
   /** Set after the kick only. */
   result: KickResult | null; nearMiss: boolean; closePost: boolean; zone: string | null;
   suddenDeath: boolean; freePlay: boolean; friendNumber: string; glow: BallGlow;
+  /** The shell's shot clock is running for this kick (QA-5: never "shot clock pressure" without one). */
+  shotClock: boolean;
   /** The keeper rotation wants a new keeper for the next kick. */
   keeperChangeDue: boolean;
 }>;
@@ -31,7 +33,7 @@ export const MOMENTS: readonly MomentDef[] = [
   { id: "crowd-hush", name: "Crowd hush", tier: "micro", slot: "before", phases: ["build-up", "peak"], weight: 3, cooldown: 1 },
   { id: "keeper-taunt", name: "Keeper taunt", tier: "micro", slot: "before", phases: ["build-up", "peak"], weight: 3, cooldown: 1 },
   { id: "keeper-tell", name: "Keeper tell", tier: "micro", slot: "before", phases: ["build-up"], weight: 2, cooldown: 3 },
-  { id: "shot-clock", name: "Shot clock pressure", tier: "micro", slot: "before", phases: ["build-up"], weight: 2, cooldown: 2, when: c => c.mode !== "tutorial" },
+  { id: "shot-clock", name: "Shot clock pressure", tier: "micro", slot: "before", phases: ["build-up"], weight: 2, cooldown: 2, when: c => c.shotClock && c.mode !== "tutorial" },
   { id: "drumbeat", name: "Drummer in the stands", tier: "micro", slot: "before", phases: ["build-up"], weight: 1, cooldown: 4 },
   { id: "ref-whistle", name: "Ref points to the spot", tier: "micro", slot: "before", phases: ["build-up", "relax"], weight: 1, cooldown: 4 },
   { id: "keeper-banter", name: "Keeper banter", tier: "micro", slot: "before", phases: ["relax", "build-up"], weight: 2, cooldown: 3 },

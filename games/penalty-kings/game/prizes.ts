@@ -67,3 +67,13 @@ export function jumbotronSlides(source: PrizeSource, now: number, extra: { rank:
     extra.lastBigPull ? `${extra.lastBigPull}${tag}` : `ODDS + 90% AVERAGE RETURN: TAP SEE ODDS`,
   ];
 }
+
+/**
+ * The HUD pot banner's text after the USD figure (QA-6): the price tag ("on-chain snapshot" / "live · updated Xs ago"),
+ * then one detail line that adds only what the tag does not say (the snapshot's block) and the Cup draw, joined by " · "
+ * with no leading or trailing separator.
+ */
+export function potHudTail(pot: PrizeLine, draw: string) {
+  const block = /· (block [\d,]+)$/.exec(pot.priceNote)?.[1] ?? "";
+  return { tag: pot.usdAge, detail: [block, draw].filter(Boolean).join(" · ") };
+}

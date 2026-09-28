@@ -100,6 +100,10 @@ await testGame("./games/penalty-kings", {
     const goalButton = game.getByTestId("results-next-goal");
     assert.match(await goalButton.getAttribute("class"), /\bpk-primary\b/, "NEXT GOAL is the primary Results button");
     assert.match(await goalButton.innerText(), /^NEXT GOAL\s+\S/, "it names the goal");
+    // QA-2: one "what next" only: no "Next up: Free Kicks…" teaser contradicting the NEXT GOAL; the unlock title stays.
+    assert.equal(await game.getByTestId("teaser").count(), 0, `no next-mode teaser beside NEXT GOAL (${await game.getByTestId("teaser").allInnerTexts()} vs ${await goalButton.innerText()})`);
+    assert.doesNotMatch(await game.getByTestId("results").innerText(), /Next up:/, "no second 'Next up' line");
+    assert.match(await game.getByTestId("results").locator("h3").innerText(), /Level 2: .*unlocked/, "the Level 2 unlock line stays");
     assert.equal(await goalButton.evaluate(el => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(el === document.activeElement))))), true, "and has focus");
     assert.doesNotMatch(await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).getAttribute("class") ?? "", /pk-primary/, "Play again is secondary");
     const still = await pressStyle(game.getByTestId("results").getByRole("button", { name: "Modes", exact: true }));
@@ -107,7 +111,11 @@ await testGame("./games/penalty-kings", {
     assert.match(still.pressed.shadow, /0px 0px 0px/, `reduced motion: the press still shows as the shadow going (${still.pressed.shadow})`);
     assert.notEqual(still.pressed.filter, still.rest.filter, "reduced motion: and a colour change");
     ok("B9 reduced motion: Results final at once (no count-up); NEXT GOAL primary; press by shadow + colour only");
-    await game.getByRole("button", { name: "Modes", exact: true }).click();
+    // QA-8: Escape closes Results onto the Modes screen (never a dead pitch: "kick 3/3", no prompt).
+    await page.keyboard.press("Escape");
+    await game.locator(".pk-modescreen").waitFor({ timeout: 3000 });
+    assert.equal(await game.getByTestId("round").count(), 0, "no finished round left on the pitch after Escape");
+    ok("QA-8: Escape on Results goes to the Modes screen");
 
     // The Kit shop and the Rules are one tap from the modes screen (≥ 44 px targets).
     const modes = game.locator(".pk-modescreen");
@@ -318,7 +326,12 @@ await testGame("./games/penalty-kings", {
     await waitIdleKick();
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
     ok("swipe released outside the canvas shoots once (tutorial finished on 3 kicks)");
-    await game.getByRole("button", { name: "Modes", exact: true }).click();
+    // QA-8: the Results × goes to the Modes screen like a finished session (never a dead pitch: "kick 3/3", no prompt).
+    await game.getByRole("button", { name: /^Close/ }).first().click();
+    await game.locator(".pk-modescreen").waitFor({ timeout: 3000 });
+    assert.equal(await game.getByTestId("round").count(), 0, "no finished round left on the pitch after ×");
+    assert.equal((await flow()).session, false, "no session after closing Results");
+    ok("QA-8: × on Results goes to the Modes screen");
 
     // 5a. Round 6 C14: no shot clock in the first 3 matches after the tutorial (no bar, no timeout).
     await game.getByTestId("mode-penalties").click();

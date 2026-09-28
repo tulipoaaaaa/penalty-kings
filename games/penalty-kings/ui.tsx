@@ -288,18 +288,14 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
   const hasNext = Boolean(next && "onNext" in next), goalFirst = !hasNext && Boolean(goal);
   const counting = summary.goals > 0 || summary.points > 0 || summary.xp > 0 || Boolean(summary.match);
   const t = useCountClock(reduced, counting, onTick), final = t >= 1;
-  // The primary button takes focus without scrolling the tiles out of view; once the count lands, it scrolls in.
+  // The primary button takes focus without scrolling the tiles out of view (QA-4: in either motion mode, and never a
+  // scroll after the count): it sits in a sticky footer (.pk-resultfoot), so the tiles and the button are both in view.
   // (A frame later: the SDK GameMenu focuses its dialog in its own mount effect, which runs after this one.)
-  const primary = useRef<HTMLButtonElement>(null), landed = useRef(false);
+  const primary = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => primary.current?.focus({ preventScroll: !reduced }));
+    const frame = requestAnimationFrame(() => primary.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!final || landed.current) return;
-    landed.current = true;
-    if (!reduced) primary.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-  }, [final, reduced]);
+  }, []);
   return <CountClock.Provider value={t}><div className="pk-roundcard" data-testid="results" data-final={final || undefined}>
     <h3>{summary.title}</h3>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
@@ -310,7 +306,7 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
         {summary.xp > 0 && <Tile value={<>+<Count text={String(summary.xp)} /></>} label="XP earned" tone="sky" />}
       </div>}
     {summary.final && summary.xp > 0 && <p className="pk-note">You earned <Count text={String(summary.xp)} /> XP.</p>}
-    {summary.bestStreak !== undefined && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
+    {Boolean(summary.bestStreak) && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
     {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
     {summary.scouted && <div className="pk-unlockcard" data-testid="unlock-card">
@@ -320,16 +316,19 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
         <div className="pk-unlock-front"><KeeperPortrait id={summary.scouted.keeper} lit /><strong>{keeperById(summary.scouted.keeper).name}</strong></div>
         <div className="pk-unlock-back"><small>Scouting Book · new page</small><strong>{keeperById(summary.scouted.keeper).name} · scouted</strong><small><b>Tell:</b> {keeperById(summary.scouted.keeper).tell}</small></div>
       </div>
-      <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>
+      {/* QA-2: one "what next" only. With a NEXT GOAL button the teaser would name a different mode, so it goes. */}
+      {!goalFirst && <p className="pk-note" data-testid="teaser">{summary.scouted.teaser}</p>}
       {onBook && <button type="button" className="pk-link" onClick={onBook} data-testid="open-book">Open the Scouting Book</button>}
     </div>}
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     {cup}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
-    {goalFirst && goal && <button type="button" ref={primary} className="pk-primary pk-resultgoal" onClick={goal.onGo} data-testid="results-next-goal" data-mode={goal.mode}><b>NEXT GOAL</b> {goal.text} ▸</button>}
-    <div className="pk-buyrow">
-      {next && "onNext" in next && <button type="button" ref={primary} className="pk-primary" onClick={next.onNext} data-testid="next-level">Next level</button>}
-      <button type="button" ref={hasNext || goalFirst ? undefined : primary} className={hasNext || goalFirst ? undefined : "pk-primary"} onClick={onAgain}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+    <div className="pk-resultfoot">
+      {goalFirst && goal && <button type="button" ref={primary} className="pk-primary pk-resultgoal" onClick={goal.onGo} data-testid="results-next-goal" data-mode={goal.mode}><b>NEXT GOAL</b> {goal.text} ▸</button>}
+      <div className="pk-buyrow">
+        {next && "onNext" in next && <button type="button" ref={primary} className="pk-primary" onClick={next.onNext} data-testid="next-level">Next level</button>}
+        <button type="button" ref={hasNext || goalFirst ? undefined : primary} className={hasNext || goalFirst ? undefined : "pk-primary"} onClick={onAgain}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+      </div>
     </div>
   </div></CountClock.Provider>;
 }

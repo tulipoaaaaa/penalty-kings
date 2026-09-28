@@ -93,3 +93,9 @@ export function countUpValue(from: number, to: number, k: number) {
 
 /** Preview only: a simulated rival Friend buys a Pro ball every 15 s, so the simulated pot visibly ticks up. */
 export const SIM_TRICKLE_MS = 15_000;
+
+/** The Cups page's stadium weights (QA-10): the same numbers as the shop's stadiumRaceLine, "tonight" on Champions Night. */
+export function cupWeightsLine(now: number) {
+  const multiplier = racePointMultiplier(now);
+  return `${TIERS.map(tier => `${tier.name} ×${(tier.raceWeight * multiplier).toLocaleString("en-US")}`).join(", ")}${multiplier !== 1 ? " tonight" : ""}`;
+}

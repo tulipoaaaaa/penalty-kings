@@ -31,6 +31,7 @@ import { isFingertip, nearFrame } from "../../games/penalty-kings/gfx/feel.js";
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 const canvas = $<HTMLCanvasElement>("#stage"), context = canvas.getContext("2d")!;
 const stage = new Stage({ stadium: "park", weather: "sun", keeper: "squirrel" });
+stage.scoreboard = true; // the game shows the SCORE box in a session only (QA-7); the showroom always shows it
 const meter = new FrameMeter();
 let paused = false, stepOnce = false, sprites: GenerationSprites | null = null;
 

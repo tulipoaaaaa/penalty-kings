@@ -6,7 +6,9 @@ import type { KeeperId, Zone } from "../src/types.ts";
 export const LADDER: readonly KeeperId[] = ["mouse", "squirrel", "sloth", "peacock", "octopus", "mime", "disco", "sumo", "chameleon", "robot", "ghost", "finalwall"];
 
 export type Step = { session: Beat | null; before: Beat; after: Beat; facts: KickFacts };
-export type SimOptions = { seed: number; kicks: number; mode?: PlayMode; stadium?: StadiumId; keeper?: KeeperId; perSession?: number; timeOfDay?: TimeOfDay; weather?: Weather; friendNumber?: string; director?: GameDirector; secondsPerKick?: number };
+export type SimOptions = { seed: number; kicks: number; mode?: PlayMode; stadium?: StadiumId; keeper?: KeeperId; perSession?: number; timeOfDay?: TimeOfDay; weather?: Weather; friendNumber?: string; director?: GameDirector; secondsPerKick?: number;
+  /** The shell's shot clock is running for these kicks (QA-5: the shot-clock moment needs it). */
+  shotClock?: boolean };
 
 export const newDirector = (seed: number, friendNumber = "336583") => new GameDirector({ seed, keepers: KEEPERS, ladder: LADDER, friendName: "Friend #336583", friendNumber });
 
@@ -30,7 +32,7 @@ export function simulate(options: SimOptions): { director: GameDirector; steps: 
     let session: Beat | null = null;
     if (k % perSession === 0) sessions.push(session = director.startSession({ mode, stadium: options.stadium ?? "park", keeper: options.keeper ?? "squirrel", weather: options.weather ?? "sun", timeOfDay: options.timeOfDay ?? "evening" }));
     const now = (k + 1) * secondsPerKick;
-    const before = director.beforeKick({ now: now - secondsPerKick / 2, suddenDeath: k % perSession === perSession - 1 && rng.next() < 0.3 });
+    const before = director.beforeKick({ now: now - secondsPerKick / 2, suddenDeath: k % perSession === perSession - 1 && rng.next() < 0.3, shotClock: options.shotClock });
     const facts = fakeKick(rng, kind, now);
     const after = director.afterKick(facts);
     steps.push({ session, before, after, facts });
