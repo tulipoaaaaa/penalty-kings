@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.36;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IGBootPriceFeed, ISinkLedger } from "./interfaces/IGBootPriceFeed.sol";
 
 interface ISkillGenerations {
@@ -25,6 +27,8 @@ interface ISkillToken {
 /// one entry per Friend per hour, WEEKLY_LIMIT per week. Cheap Gen 5/6 Friends cannot be used to
 /// multiply entries. The referee accepts kicks only for entries recorded here. No owner.
 contract SkillCup is ISinkLedger {
+    using SafeERC20 for IERC20;
+
     /// @notice Entry price in RF (wei): 10 RF, = 100 $GBOOT at the 0.1 RF launch price.
     uint256 public constant ENTRY_RF = 10e18;
     uint8 public constant MAX_GENERATION = 4;
@@ -89,9 +93,9 @@ contract SkillCup is ISinkLedger {
         entryFriend[entryId] = friendId;
         uint256 burned = cost / 2;
         burnedInWeek[current - 1] += burned;
-        gboot.transferFrom(msg.sender, address(this), cost);
+        IERC20(address(gboot)).safeTransferFrom(msg.sender, address(this), cost);
         gboot.burn(burned);
-        gboot.transfer(pot, cost - burned);
+        IERC20(address(gboot)).safeTransfer(pot, cost - burned);
         emit Entered(entryId, friendId, msg.sender, current);
     }
 }

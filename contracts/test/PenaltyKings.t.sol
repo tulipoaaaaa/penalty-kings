@@ -5,7 +5,8 @@ import { Test } from "forge-std/Test.sol";
 import { GBoot } from "../src/GBoot.sol";
 import { KitShop, IGBoot } from "../src/KitShop.sol";
 import { IGBootPriceFeed } from "../src/interfaces/IGBootPriceFeed.sol";
-import { FixedPriceFeed } from "./Mocks.sol";
+import { FixedPriceFeed, FalseReturnToken } from "./Mocks.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { GBootFixedPrice } from "../src/GBootFixedPrice.sol";
 
 contract GBootTest is Test {
@@ -79,6 +80,24 @@ contract KitShopTest is Test {
         assertEq(shop.quote(2), 133_333_333_333_333_332_889, "40e18 x 1e18 / (3e17 + 1), rounded up");
         vm.stopPrank();
         assertEq(token.balanceOf(player), 980e18);
+    }
+
+    /// A $GBOOT whose transferFrom returns false instead of reverting must not unlock for free
+    /// (SafeERC20).
+    function testFalseReturningTokenReverts() public {
+        FalseReturnToken bad = new FalseReturnToken();
+        uint256[] memory pricesRf = new uint256[](1);
+        pricesRf[0] = 6e18;
+        KitShop badShop = new KitShop(IGBoot(address(bad)), IGBootPriceFeed(address(feed)), block.timestamp, pricesRf);
+        bad.mint(player, 1_000e18);
+        bad.setFail(false, true);
+        vm.startPrank(player);
+        bad.approve(address(badShop), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(bad)));
+        badShop.buy(7730, 0, type(uint256).max);
+        vm.stopPrank();
+        assertFalse(badShop.unlocked(7730, 0));
+        assertEq(bad.balanceOf(player), 1_000e18);
     }
 }
 

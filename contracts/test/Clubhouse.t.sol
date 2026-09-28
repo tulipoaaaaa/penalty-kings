@@ -6,7 +6,8 @@ import { GBoot } from "../src/GBoot.sol";
 import { SkillCup, ISkillGenerations, ISkillToken } from "../src/SkillCup.sol";
 import { Wildcards, IWildcardGenerations, IWildcardToken, IWildcardEntropy } from "../src/Wildcards.sol";
 import { IGBootPriceFeed } from "../src/interfaces/IGBootPriceFeed.sol";
-import { FixedPriceFeed } from "./Mocks.sol";
+import { FixedPriceFeed, FalseReturnToken } from "./Mocks.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract MockGenerations {
     mapping(uint256 => address) public ownerOf;
@@ -134,6 +135,27 @@ contract SkillCupTest is Test {
         vm.warp(later.start() + 1 weeks);
         assertEq(later.week(), 2);
     }
+
+    /// A $GBOOT that returns false instead of reverting must not yield a free entry (SafeERC20):
+    /// neither on the pull from the entrant nor on the pot payment.
+    function testFalseReturningTokenReverts() public {
+        FalseReturnToken bad = new FalseReturnToken();
+        SkillCup badCup = new SkillCup(ISkillGenerations(address(gens)), ISkillToken(address(bad)), IGBootPriceFeed(address(feed)), pot, block.timestamp);
+        bad.mint(player, 1_000e18);
+        vm.prank(player); bad.approve(address(badCup), type(uint256).max);
+
+        bad.setFail(true, true); // transferFrom (and transfer) return false
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(bad)));
+        badCup.enter(7730, type(uint256).max);
+
+        bad.setFail(true, false); // pot transfer returns false
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(bad)));
+        badCup.enter(7730, type(uint256).max);
+        assertEq(badCup.entries(), 0);
+        assertEq(bad.balanceOf(player), 1_000e18);
+    }
 }
 
 contract WildcardsTest is Test {
@@ -227,5 +249,29 @@ contract WildcardsTest is Test {
         dice.fulfil(wild, 1, provider, bytes32(uint256(5000)));
         vm.expectRevert(Wildcards.InvalidRandomness.selector);
         dice.fulfil(wild, 1, provider, bytes32(uint256(1)));
+    }
+
+    /// A $GBOOT that returns false instead of reverting must not yield a free draw (SafeERC20):
+    /// neither on the pull from the buyer nor on the pot payment.
+    function testFalseReturningTokenReverts() public {
+        uint256 fee = dice.FEE();
+        FalseReturnToken bad = new FalseReturnToken();
+        Wildcards badWild = new Wildcards(
+            IWildcardGenerations(address(gens)), IWildcardToken(address(bad)), IGBootPriceFeed(address(feed)), IWildcardEntropy(address(dice)), provider, pot, block.timestamp
+        );
+        bad.mint(player, 1_000e18);
+        vm.prank(player); bad.approve(address(badWild), type(uint256).max);
+
+        bad.setFail(true, true); // transferFrom (and transfer) return false
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(bad)));
+        badWild.draw{ value: fee }(7730, type(uint256).max);
+
+        bad.setFail(true, false); // pot transfer returns false
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(bad)));
+        badWild.draw{ value: fee }(7730, type(uint256).max);
+        assertEq(badWild.draws(), 0);
+        assertEq(bad.balanceOf(player), 1_000e18);
     }
 }

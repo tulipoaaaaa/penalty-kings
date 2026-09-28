@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.36;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IGBootPriceFeed, ISinkLedger } from "./interfaces/IGBootPriceFeed.sol";
 
 interface IGBoot {
@@ -15,6 +17,8 @@ interface IGBoot {
 /// the $GBOOT is burned and recorded per week (the RewardsDistributor's sink ledger). There is no
 /// owner. Cosmetics carry no RF value or redemption promise.
 contract KitShop is ISinkLedger {
+    using SafeERC20 for IERC20;
+
     IGBoot public immutable gboot;
     IGBootPriceFeed public immutable feed;
     uint256 public immutable start;
@@ -57,7 +61,7 @@ contract KitShop is ISinkLedger {
         unlocked[friendId][itemId] = true;
         if (cost != 0) {
             burnedInWeek[week()] += cost;
-            gboot.transferFrom(msg.sender, address(this), cost);
+            IERC20(address(gboot)).safeTransferFrom(msg.sender, address(this), cost);
             gboot.burn(cost);
         }
         emit Unlocked(friendId, itemId, msg.sender, cost);
