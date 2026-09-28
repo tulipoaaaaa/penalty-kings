@@ -131,3 +131,12 @@ A read-only audit played the whole judge path at 1280×800, 844×390 and 390×84
 | Live stadiums would claim "×2 tonight" Cup points on Champions Night, but the weekly Cup report never doubles | fixed: only the simulated preview race doubles | `25ed6da` | `tests/game/weekly.test.ts`, `copy-qa10.test.ts` |
 
 Left as they are (design, or for the owner): Target Practice's clock pauses during flight (R6-C8 design, so a round takes longer than 60 s of real time); canvas commentary is drawn at 8 px on the 480×320 canvas; in Big Match the next kick unlocks while the Friend is still walking back.
+
+### Final design audit (before the freeze)
+
+| Item | Status | Commit | Test (what failed before) |
+|---|---|---|---|
+| Pixelify's fi/fl ligatures drew "ﬁ"/"ﬂ" glyphs in the DOM and on the canvas | fixed (`font-variant-ligatures: none`; a zero-width non-joiner on canvas) | `1006ece` | `test-game` ligature scan (DOM and canvas) |
+| The Friend came back over the goal while the result banner was still up | fixed (stays aside until the banner clears) | `0e058c5` | `tests/game/friend-aside.test.ts` |
+| Phone title: the winners ticker ran past the title card | fixed | `e85d088` | `test-phone` winnersFit, both motion modes |
+| Cold open: TOP BIN! overlapped the KINGS crowd banner; a raw "leg!" label | fixed | `5780822` | `tests/game/showreel.test.ts` |

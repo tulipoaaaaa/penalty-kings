@@ -75,8 +75,26 @@ The goal is to close the gap between "good" and "great" where a judge's first 30
 
 **Build order**, after Part A P0/P1 are green: B1 → B3 → B4 → B5 → B2 → B10 (recorded after B1–B5) → B6 → B7 → B8 → B9. B11 and B12 are cut first if time runs short. Feature work stops at Sep 29 10:00 UTC.
 
-## After (filled in as builds land)
+## After (scored at the freeze by the final design audit)
+
+Same five lenses and the same scoring as the baseline; the audit replayed the judge path at 1280×800, 844×390
+and 390×844 in full and reduced motion.
 
 | # | Surface | Before | After | Shipped |
 |---|---|---|---|---|
-| (filled at the freeze) | | | | |
+| 1 | Title / showreel / attract | 5.5 | **6.5** | B8 cold open leads with a top-bin goal (`f29f161`); labels clear of the crowd banners (`5780822`); phone winners ticker fits the title card (`e85d088`) |
+| 2 | The kick | 5 | **7** | B1 hit-stop, camera punch, net ripple; B2 near-miss drama (`8afef07`); B11 Friend eases aside (`d2ccb8e`, `0e058c5`); C2 shot feel |
+| 3 | Celebrations and reactions | 5 | **6.5** | B12 anticipation → overshoot → follow-through (`a0f6ab2`); B6 streak fever (`8afef07`) |
+| 4 | 12 keepers + THE FINAL WALL | 6.5 | **6.5** | unchanged by design (keeper masks still match the art) |
+| 5 | Stadiums + weather | 6.5 | **7** | crowd band and floodlight pool behind the goal (`b75a359`) |
+| 6 | Balls and rarity | 5.5 | **7** | B7 bigger outlined ball with a rarity ribbon trail (`05acfca`); shop display case (`cb1f100`) |
+| 7 | Pack → reveal → Bag → choose | 4 | **7** | B5 the reveal owns the stage, odds pinned, skippable (`f40bf76`) |
+| 8 | HUD, menus, Modes, Results, shops, Cups | 5 | **6** | B9 press states, eased entries, count-up Results (`a377c31`); 44 px tap targets and the CI overflow sweep |
+| 9 | Typography and numbers | 3 | **6** | B4 Departure Mono digits and bitmap canvas digits (`47b773d`); no fi/fl ligatures (`1006ece`) |
+| 10 | Sound (structural audit) | 4 | **6.5** | B3 every Sfx voiced, master limiter, hush and swell, visible toggle (`2644dc8`) |
+| 11 | Onboarding + practice | 5 | **6** | free practice no longer a guaranteed 5/5, friendly miss tip (`5537b8c`) |
+| 12 | Scouting Book, submission, README hero | 4 | **6.5** | B10 money shot, README hero, cast sheet (`67d2392`); Scouting Book sticker album (`1061938`) |
+| | **Average** | **4.9** | **6.5** | |
+
+Not reached (in the PROJECT-STOP.md polish backlog): count-up pack summary tiles, the no-wallet landing page,
+a three-line pot banner at 1280 px, plain keeper dive arms, one music loop for every stadium.

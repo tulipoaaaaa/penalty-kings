@@ -212,7 +212,7 @@ npm run build:site   # static site in site/ (Park /, Pro /pro/, Champions /champ
 
 **Checks** (in GitHub Actions; the preview only redeploys after a fully green CI run):
 - typecheck, `friendsdk check`, the secret scan, and the site build with no dev-only code;
-- game-logic tests (206): levels, progress, save codes, daily, target, the reveal ethics rule,
+- game-logic tests (209): levels, progress, save codes, daily, target, the reveal ethics rule,
   prizes, the live-price maths, pitch geometry, Bag honesty, share cards and challenge codes, the
   weekly clock, game feel, audio, and an action-flow state machine covering every action in every state;
 - engine tests (54): zones, keepers, the swipe mapping regression table, free-kick physics;

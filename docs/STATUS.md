@@ -51,7 +51,7 @@ That is the only transaction. **No game contract, $GBOOT token, pool or vault is
 - Every push runs the full CI ([ci.yml](../.github/workflows/ci.yml)).
 - The public preview redeploys only after a fully green run.
 - Latest branch head `d51e550`: CI run 143 green, mainnet-fork rehearsal run 101 green.
-- Local counts on `d51e550`: game-logic 206, engine 54, Match Director 27, referee 15, weekly Cup 9, Foundry 206 offline (plus the `Fork` suites in CI).
+- Local counts at the freeze: game-logic 209, engine 54, Match Director 27, referee 15, weekly Cup 9, Foundry 206 offline (plus the `Fork` suites in CI).
 - Browser suites in CI: `test:smoke`, `test:practice`, `test:landing`, `test:game`, `test:phone`, `test:modes`, `test:skillzones`, `qa:90s`, `test:flow`, `test:real-gate`, and `test:overflow:ci` (its own job).
 - `judging-stable-1` = `18b4bc8` (tagged). Later work (from `135c2db`) goes into `judging-stable-2` at the freeze, Sep 29 ([RELEASES](RELEASES.md)).
 

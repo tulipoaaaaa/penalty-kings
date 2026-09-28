@@ -69,7 +69,7 @@ Adds `submissions/penalty-kings/README.md`.
     doubled race points. The roadmap is in the README.
 - **Checks** (all run in GitHub Actions):
   - typecheck, `friendsdk check`, the secret scan, and a site build with no dev-only code;
-  - game-logic (206), engine (54), Match Director (27), Skill Cup referee (15) and weekly Cup (9) tests;
+  - game-logic (209), engine (54), Match Director (27), Skill Cup referee (15) and weekly Cup (9) tests;
   - browser suites: the SDK harness at 960 and 360 px, the buy → redeem flow, every mode, Skill
     Zones, an action-flow audit (including 2 s and 5 s randomness waits), phone
     layouts at 360×800 / 390×844 / 800×360 / 844×390, the free practice page and no-wallet

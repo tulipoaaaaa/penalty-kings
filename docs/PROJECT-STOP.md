@@ -1,6 +1,6 @@
 # Where we stopped, and the natural next steps
 
-The build phase ends at the **code freeze, Sep 29 2026 12:00 UTC**. From then on the Rare Friends founder
+The build phase ended early, at the **freeze on Sep 28 2026** (ahead of the Sep 29 12:00 UTC code freeze). From then on the Rare Friends founder
 takes the project forward; we stay available for opinions and help. No new features after this point.
 The judged branch only gets critical fixes (a crash, a soft-lock or a wrong label), each with a test,
 and only after telling the owner first.
@@ -9,11 +9,11 @@ and only after telling the owner first.
 
 | Branch / tag | What it holds | State at the stop |
 |---|---|---|
-| `judging-stable-2` (tag) | The judged Vibeathon build, frozen | sha: _filled in at the freeze_ (created by the owner) |
+| `judging-stable-2` (tag) | The judged Vibeathon build, frozen | the head of `claude/clever-mccarthy-ay7qv7` at the freeze (Sep 28); the owner creates the tag on the sha given in the final report |
 | `judging-stable-1` (tag) = `18b4bc8` | The first judged snapshot | frozen, never touched |
 | [`claude/clever-mccarthy-ay7qv7`](https://github.com/tulipoaaaaa/penalty-kings/tree/claude/clever-mccarthy-ay7qv7) | Active branch; the judged build lives here | full local suite + CI green before every push |
-| [`early-access`](https://github.com/tulipoaaaaa/penalty-kings/tree/early-access) | The founder's Early Access preset (4 features, per-Friend rating) | never merged into the judged branch |
-| [`app/test-shell`](https://github.com/tulipoaaaaa/penalty-kings/tree/app/test-shell) | Test app: wallet seam, simulated sign-up, Android APK + unsigned iPhone .ipa, handoff docs | Release `test-app-*` (prerelease) |
+| [`early-access`](https://github.com/tulipoaaaaa/penalty-kings/tree/early-access) | The founder's Early Access preset (4 features, per-Friend rating) | `41e43be`; never merged into the judged branch |
+| [`app/test-shell`](https://github.com/tulipoaaaaa/penalty-kings/tree/app/test-shell) | Test app: wallet seam, simulated sign-up, Android APK + unsigned iPhone .ipa, handoff docs | `699b43e`; Release `test-app-2026-09-28-3` (prerelease) |
 | `main` | Out of date (Sep 27); its README points to the active branch | not used |
 
 **Read first:** [EARLY-ACCESS.md](EARLY-ACCESS.md) (on `early-access`) · [HANDOFF-RF.md](HANDOFF-RF.md) ·
