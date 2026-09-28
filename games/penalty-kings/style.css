@@ -256,6 +256,8 @@
 /* Polish (owner report, 949x634): in the Modes screen's scrolling flex column an item with an explicit min-height
    could shrink below its text (flex-shrink), so a two-line NEXT GOAL hung below its border. Items keep their height. */
 .pk-modescreen > * { flex-shrink: 0; }
+/* A button scrolled into view (focus, find, scrollIntoView) stops above the SDK toolbar that overlays the frame's bottom. */
+.pk-modescreen { scroll-padding-bottom: calc(var(--pk-tb) + 8px); }
 /* Owner report: a sideways scrollbar at ~949 px. Children sized in cqw (of the whole .pk frame) filled the Modes
    screen's content box exactly, so a classic (Windows) vertical scrollbar pushed them 17 px past it. Inside the
    scrolling Modes screen they size to its own content box (%) instead. */
