@@ -671,8 +671,9 @@
     width: max-content; max-width: calc(100cqw - 12px); max-height: calc(var(--pk-pt) + 140 * var(--pk-s) - max(64px, calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s))));
     font-size: 11px; line-height: 1.2; padding: 0.3em 0.6em; text-align: center; overflow: hidden; box-shadow: 2px 2px 0 #000; }
   .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
-  /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
-  .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
+  /* Discovery toast: in the left letterbox bar, under the Friend-art status line (the coaching toast has the sky, the
+     right bar holds the kick chip and the action column: at 667x375 a two-line toast there ran into "Change ball"). */
+  .pk-discover { left: 6px; right: auto; top: calc(var(--pk-pt) + 146 * var(--pk-s) + 40px); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
   /* Polish: a one-line headline in the sky right under the commentator strip (logical top --pk-cmt, 22 px + rule),
      sub line under it, all above the crossbar and clear of the Friend at the payoff. The Stage's CLANG!/fever chip
      belongs below this band (logical y > ~150) or not under it. */

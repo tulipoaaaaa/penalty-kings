@@ -144,6 +144,19 @@ async function sweepGame([width, height], font) {
       const flow = () => evaluate(() => window.__pkFlow?.() ?? null);
       const waitShootable = (ms = 15000) => evaluate(ms => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkFlow?.().shootable ? resolve(true) : Date.now() - start > ms ? reject(new Error("never shootable: " + JSON.stringify(window.__pkFlow?.()))) : setTimeout(poll, 50)); poll(); }), ms);
       const modes = game.locator(".pk-modescreen");
+      // Discovery toasts depend on which Director moments fire, so a real one may or may not be up in a given state. To
+      // cover its placement deterministically, a toast with the longest moment name is also put where the game renders
+      // it (a p.pk-discover in .pk-stage) when none is shown, scanned, and removed again.
+      const withDiscover = async state => {
+        const injected = await evaluate(() => {
+          const stage = document.querySelector(".pk-stage");
+          if (!stage || stage.querySelector(".pk-discover")) return false;
+          const toast = Object.assign(document.createElement("p"), { className: "pk-discover", textContent: "NEW: Crowd chants your Friend's number!" });
+          toast.dataset.testid = "discover-toast"; toast.dataset.injected = "true"; toast.style.animation = "none";
+          stage.append(toast); return true;
+        });
+        try { await scan(`${state} + discovery toast`, { stress: false }); } finally { if (injected) await evaluate(() => document.querySelector(".pk-discover[data-injected]")?.remove()); }
+      };
       const hostHscroll = async state => { const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (over > 1) raw.push({ check: "hscroll", sel: "host page html", text: "", detail: `host page scrolls sideways by ${over}px`, rect: { x: 0, y: 0, w: width, h: 10 }, state, stress: false, viewport, font, surface: "host" }); };
 
       /** Back to the Modes screen from anywhere. */
@@ -175,7 +188,7 @@ async function sweepGame([width, height], font) {
         const text = (await game.locator(".pk-banner strong").textContent().catch(() => "")) ?? "";
         const sub = (await game.locator(".pk-banner span").textContent().catch(() => "")) ?? "";
         const kind = /sudden death/i.test(sub) ? "sudden-death" : text;
-        if (!banners.has(kind)) { banners.add(kind); await scan(`banner: ${text}${kind === "sudden-death" ? " (sudden death)" : ""}`); }
+        if (!banners.has(kind)) { banners.add(kind); await scan(`banner: ${text}${kind === "sudden-death" ? " (sudden death)" : ""}`); if (banners.size === 1) await withDiscover(`banner: ${text}`); }
         if (await visible(game.getByTestId("discover-toast"))) await scan("discovery toast", { once: true });
         await banner.waitFor({ state: "detached", timeout: 15_000 });
         return text;
@@ -230,7 +243,7 @@ async function sweepGame([width, height], font) {
       await step("tutorial", async () => {
         await game.getByTestId("play").click();
         await waitShootable();
-        await scan("tutorial aim (coaching toast, HUD, pot banner, Quick shot)");
+        await scan("tutorial aim (coaching toast, HUD, pot banner, Quick shot)"); await withDiscover("tutorial aim");
         await playOut(3);
         await scan("results: tutorial");
         await game.getByTestId("share-card").click();
@@ -344,12 +357,12 @@ async function sweepGame([width, height], font) {
         await game.getByTestId("shoot-ball").first().waitFor();
         await scan("menu: My Bag (balls)");
         await game.getByTestId("shoot-ball").first().click();
-        await waitShootable(); await scan("HUD: Big Match");
+        await waitShootable(); await scan("HUD: Big Match"); await withDiscover("HUD: Big Match");
         await kick();
         await waitShootable();
         await game.getByTestId("change-ball").click();
         await game.getByTestId("carousel").waitFor({ timeout: 5000 });
-        await scan("ball carousel");
+        await scan("ball carousel"); await withDiscover("ball carousel");
         await game.getByTestId("kick-with-ball").click();
         await playOut(30); await scan("results: Big Match");
       });
