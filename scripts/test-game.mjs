@@ -257,7 +257,7 @@ await testGame("./games/penalty-kings", {
     await game.getByRole("button", { name: "Close" }).first().click();
     await game.getByTestId("menu").click();
     await button("Cups").click();
-    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, cup entries and wildcards\./);
+    assert.match(await game.getByTestId("token-lines").textContent(), /\$GBOOT: the game's token\. Spend it on kits, Cup entries and wildcards\./);
     const potBefore = await game.getByText(/^Pot \$GBOOT:/).textContent();
     await game.getByTestId("wildcard").click();
     await game.getByTestId("wildcard-confirm").waitFor();
