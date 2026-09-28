@@ -127,6 +127,28 @@ await testGame("./games/penalty-kings", {
       assert.ok(fonts.letterWidth, "letters are not drawn by the monospaced digit face");
       console.log(`digit font: ${fonts.digitFace.range} (${fonts.digitFace.status}), tabular`);
     }
+    // Polish: Pixelify's bold C/c close into O/o ("Oups", "Souffed"). Bold C and c draw the open 400 glyph (a
+    // unicode-range face at weight 700), so a bold C's pixel mask is the regular C's and clearly differs from a bold O.
+    {
+      const glyphs = await game.getByTestId("pot").evaluate(async node => {
+        const doc = node.ownerDocument;
+        await doc.fonts.load("700 48px PixelifySans", "CcOo"); await doc.fonts.load("48px PixelifySans", "CcOo"); await doc.fonts.ready;
+        const mask = (weight, ch) => {
+          const canvas = doc.createElement("canvas"); canvas.width = 64; canvas.height = 64;
+          const c = canvas.getContext("2d"); c.font = `${weight} 48px PixelifySans`; c.textBaseline = "top"; c.fillText(ch, 4, 4);
+          return [...c.getImageData(0, 0, 64, 64).data].filter((_, i) => i % 4 === 3).map(a => (a > 127 ? 1 : 0));
+        };
+        const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+        const out = {};
+        for (const [c, o] of [["C", "O"], ["c", "o"]]) out[c] = { boldVsRegular: diff(mask(700, c), mask(400, c)), boldVsO: diff(mask(700, c), mask(700, o)) };
+        return out;
+      });
+      for (const [ch, d] of Object.entries(glyphs)) {
+        assert.equal(d.boldVsRegular, 0, `bold ${ch} draws the open regular glyph (mask diff ${JSON.stringify(glyphs)})`);
+        assert.ok(d.boldVsO > 40, `bold ${ch} is clearly not an O (mask diff ${JSON.stringify(glyphs)})`);
+      }
+      console.log(`bold C/c: open glyph ${JSON.stringify(glyphs)}`);
+    }
     assert.deepEqual(await overlaps(), [], "no UI over the goal or striker (tutorial)");
     // BQ-P1-11: the commentator strip (Stage.drawCommentary, 22 logical px tall at canvas[data-commentary-top]) never sits under the pot banner.
     {

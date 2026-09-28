@@ -73,6 +73,18 @@ async function run({ width, height, name, mobile, blockStorage = false }) {
   });
   assert.deepEqual(small, [], `${name}: text under 11px`);
   assert.deepEqual(await smallTargets(page), [], `${name}: tap targets under ${MIN_TAP} CSS px`);
+  // Polish: bold C/c draw Pixelify's open 400 glyph (bold Pixelify closes them into O/o), as in the game.
+  const glyphs = await page.evaluate(async () => {
+    await document.fonts.load("700 48px PixelifySans", "CcOo"); await document.fonts.load("48px PixelifySans", "CcOo"); await document.fonts.ready;
+    const mask = (weight, ch) => {
+      const c = Object.assign(document.createElement("canvas"), { width: 64, height: 64 }).getContext("2d");
+      c.font = `${weight} 48px PixelifySans`; c.textBaseline = "top"; c.fillText(ch, 4, 4);
+      return [...c.getImageData(0, 0, 64, 64).data].filter((_, i) => i % 4 === 3).map(a => (a > 127 ? 1 : 0));
+    };
+    const diff = (a, b) => a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+    return Object.fromEntries([["C", "O"], ["c", "o"]].map(([c, o]) => [c, { boldVsRegular: diff(mask(700, c), mask(400, c)), boldVsO: diff(mask(700, c), mask(700, o)) }]));
+  });
+  for (const d of Object.values(glyphs)) assert.ok(d.boldVsRegular === 0 && d.boldVsO > 40, `${name}: bold C/c draw the open glyph ${JSON.stringify(glyphs)}`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert(overflow <= 0, `${name}: horizontal scroll of ${overflow}px`);
   // The whole pitch is on screen (landscape: no scrolling to reach the ball).

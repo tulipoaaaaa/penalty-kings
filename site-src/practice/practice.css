@@ -1,6 +1,8 @@
 /* Free practice page (public site, outside the SDK sandbox). Every text is >= 11 CSS px. */
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* Polish: bold C/c from the open 400 file (Pixelify's bold C/c close into O/o), as in the game's style.css. */
+@font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0043, U+0063; }
 /* B4: digits and number punctuation from Departure Mono (SIL OFL 1.1; assets/DepartureMono-OFL.txt), as in the game's style.css. */
 @font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
 @font-face { font-family: PixelifySans; src: url("./assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }

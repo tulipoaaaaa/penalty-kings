@@ -1,6 +1,9 @@
 /* Penalty Kings — pixel UI kit inside the SDK sandbox. Scales with the frame (container units). */
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+/* Polish: Pixelify's bold C/c close into O/o ("Oups", "Souffed", "OLANG!" on the canvas), so at weight 700 C and c
+   (U+0043, U+0063) come from the open 400 file. Declared after the 700 face, so the browser checks it first for them. */
+@font-face { font-family: PixelifySans; src: url("./assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0043, U+0063; }
 /* B4 legible numbers: Pixelify draws 5≈S, 2≈Z/8, 8≈B, 0≈O and has no tabular figures ("20 RF" read as "80 RF").
    Digits and number punctuation (0-9 + , - . % × −) come from Departure Mono (SIL OFL 1.1, Helena Zhang, v1.500;
    assets/DepartureMono-OFL.txt), a monospaced pixel face, so digits are tabular. These faces are declared AFTER the
