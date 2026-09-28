@@ -78,7 +78,7 @@ export class GameDirector {
   private used = new Map<string, number>();
   /** Recent picks [id, kick], newest last (the no-repeat window). */
   private picks: [string, number][] = [];
-  private phase: Phase = "relax"; private suddenDeath = false; private now = 0;
+  private phase: Phase = "relax"; private suddenDeath = false; private now = 0; private shotClock = false;
 
   constructor(options: DirectorOptions) {
     this.keepers = options.keepers;
@@ -106,8 +106,9 @@ export class GameDirector {
   }
 
   /** Before each kick (when aiming starts): the keeper for this kick, the phase, pre-kick moments. */
-  beforeKick(options: { suddenDeath?: boolean; now?: number; glow?: BallGlow } = {}): Beat {
+  beforeKick(options: { suddenDeath?: boolean; now?: number; glow?: BallGlow; shotClock?: boolean } = {}): Beat {
     this.suddenDeath = Boolean(options.suddenDeath);
+    this.shotClock = Boolean(options.shotClock); // the shell's clock runs for this kick (off unless it says so)
     if (options.now !== undefined) this.now = options.now;
     if (options.glow) this.setup = { ...this.setup, glow: options.glow };
     const moments: Moment[] = [], lines: Line[] = [];
@@ -277,7 +278,7 @@ export class GameDirector {
       phase: this.phase, intensity: this.intensity(), mode: this.setup.mode, stadium: this.setup.stadium, weather: this.weather, timeOfDay: this.setup.timeOfDay,
       keeper: this.currentKeeper(), kickInRound: this.kick % ROUND_KICKS, streak: this.streak, misses: this.misses,
       result: after?.facts.result ?? null, nearMiss: after?.near ?? false, closePost: after?.closePost ?? false, zone: after?.facts.zone ?? null,
-      suddenDeath: this.suddenDeath, freePlay: this.freePlay(), friendNumber: this.friendNumber, glow: this.setup.glow,
+      suddenDeath: this.suddenDeath, freePlay: this.freePlay(), friendNumber: this.friendNumber, glow: this.setup.glow, shotClock: this.shotClock,
       keeperChangeDue: after?.changeDue ?? false,
     };
   }

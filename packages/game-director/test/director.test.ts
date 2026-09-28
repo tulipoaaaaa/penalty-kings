@@ -140,3 +140,11 @@ test("BQ-P2-8: crossbar and in-off-the-bar lines come from the engine's hitBar f
   assert.equal(goal(), "first:post-in");
   assert.ok(LINE_BANK["goal:bar-in"].length >= 3 && LINE_BANK["first:bar-in"].length >= 1);
 });
+
+test("QA-5: the shot-clock moment ('Shot clock pressure', 'The shot clock is running') plays only when the shell's clock runs", () => {
+  const ids = (shotClock: boolean) => simulate({ seed: 5, kicks: 400, shotClock }).steps.flatMap(step => step.before.moments.map(m => m.id));
+  assert.equal(ids(false).filter(id => id === "shot-clock").length, 0, "no clock: never the shot-clock moment");
+  assert.ok(ids(true).includes("shot-clock"), "a running clock: the moment can play");
+  const quiet = simulate({ seed: 5, kicks: 400 }).steps;
+  assert.ok(quiet.every(step => !step.before.shotClock && !step.before.lines.some(line => /shot clock/i.test(line.text))), "no clock by default: no shot-clock line or hint");
+});

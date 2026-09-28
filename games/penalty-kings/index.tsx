@@ -755,7 +755,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         } else soon(index === 0 ? 2600 : 300, () => { priorityLine(); stage.current?.say(plan.intro as "tutorial-1"); });
       } else {
         // The Director, per kick: the keeper for THIS kick (set before keeperPlan/resolveShot), then the pre-kick moments.
-        const beat = director().beforeKick({ suddenDeath: Boolean(current.suddenDeath), now: clockNow() / 1000, glow: glowOf(current) });
+        const beat = director().beforeKick({ suddenDeath: Boolean(current.suddenDeath), now: clockNow() / 1000, glow: glowOf(current), shotClock: clockFor(current) > 0 }); // QA-5
         if (current.kind !== "target" && beat.keeper !== current.keeper) {
           current = { ...current, keeper: beat.keeper }; setSessionNow(current);
           if (current.kind === "freekick" && current.setup) scene.freeKick = { setup: current.setup, wall: resolveFreeKick(current.setup, { aimX: 0, lift: 0.5, power: 0.5, spin: 0, top: 0 }, keeperById(current.keeper)).wall };
