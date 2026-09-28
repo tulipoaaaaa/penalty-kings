@@ -309,8 +309,8 @@
 
 .pk .rf-frame-scrim { background: #0b0d1ab3; color: var(--pk-paper); font: 13px/1.4 PixelifySans, ui-monospace, Menlo, Consolas, monospace; padding: 12px 12px max(40px, 12cqh); }
 .pk .rf-frame-menu { width: min(620px, 100%); height: auto; max-width: 100%; max-height: 100%; background: var(--pk-panel); color: var(--pk-paper);
-  border: 2px solid var(--pk-paper); border-radius: 0; box-shadow: 4px 4px 0 #000; outline: none; animation: pk-menu-in 0.2s steps(5, end) both; }
-/* Pixel-snapped entry: 10px in five 2px steps. */
+  border: 2px solid var(--pk-paper); border-radius: 0; box-shadow: 4px 4px 0 #000; outline: none; animation: pk-menu-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* Entry: 10px up and in over 200 ms, eased out (B9; was five 2px steps). Reduced motion: none (below). */
 @keyframes pk-menu-in { from { transform: translateY(10px); opacity: 0; } }
 
 /* Header: stadium turf stripes (Park green, Pro night blue, Champions purple), an accent rule, a pixel icon badge. */
@@ -379,7 +379,7 @@
 .pk-tile[data-tone="sky"] { --tone: var(--pk-sky); }
 .pk .rf-frame-menu-body .pk-tile b { font: 700 24px/1 PixelifySans, ui-monospace, monospace; color: var(--tone, var(--pk-paper)); text-shadow: 2px 2px 0 #000; white-space: nowrap; }
 .pk .rf-frame-menu-body .pk-tile b small { font-size: 14px; opacity: 0.85; }
-.pk-tile span { font-size: 11px; line-height: 1.2; color: var(--pk-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.pk-tile > span { font-size: 11px; line-height: 1.2; color: var(--pk-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .pk-callout { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
 .pk-callout .pk-tile { flex: none; min-width: 96px; }
 .pk .rf-frame-menu-body .pk-callout p { margin: 0; }
@@ -778,3 +778,38 @@
 .pk .rf-frame-menu-body .pk-tiercard .pk-tierrace { color: var(--pk-gold); }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tiergo { display: grid; justify-items: start; align-content: center; min-height: 44px; margin: 4px 8px 0; padding: 2px 8px; text-align: left; font-weight: 700; }
 .pk .rf-frame-menu-body .pk-tiercard .pk-tiergo small { padding: 0; font-weight: 400; }
+
+/* ── B9 UI feel: one press/hover for every pixel button, eased screen entries, count-up Results tiles. ──
+   Press = 2 px depth: the 2px hard shadow goes to 0 and the button moves 2px into it. Hover (fine pointers only) lifts
+   1px with a 3px shadow. Reduced motion (OS or Settings): no transitions, no lift, no translate; the press stays as an
+   instant shadow + colour change. .pk-pot is centred with a transform, so it presses by shadow + colour only. */
+.pk { --pk-ease: cubic-bezier(0.2, 0.8, 0.2, 1); }
+.pk :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card):not(:disabled):active,
+.pk .pk-pot:not(:disabled):active { box-shadow: 0 0 0 #000; filter: brightness(0.86); }
+@media (prefers-reduced-motion: no-preference) {
+  .pk:not(.pk-reduce-motion) :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card),
+  .pk:not(.pk-reduce-motion) .pk-pot { transition: transform 90ms var(--pk-ease), box-shadow 90ms var(--pk-ease), background-color 120ms linear, filter 90ms linear; }
+  .pk:not(.pk-reduce-motion) :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card):not(:disabled):active { transform: translate(2px, 2px); }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .pk:not(.pk-reduce-motion) :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card):not(:disabled):hover:not(:active) { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 #000; }
+}
+/* Reduced motion: the kit's older 2px press translate goes too (the shadow + colour press above stays). */
+.pk.pk-reduce-motion :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card):active { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pk :is(.pk-actions, .pk-title, .pk-reveal, .pk-pack, .pk-carousel, .pk-carouselactions, .pk-rotate, .rf-frame-menu-body, .rf-frame-menu-heading) button:not(.pk-link):not(.pk-card):active { transform: none; }
+}
+
+/* Screen entries: title → modes and back fade up 6px over 220 ms; menus rise 10px over 200 ms (pk-menu-in) over a
+   150 ms scrim fade. Fill "backwards" only, so no transform is left on the screen afterwards. */
+@keyframes pk-screen-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes pk-fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .pk:not(.pk-reduce-motion) .pk-title { animation: pk-screen-in 220ms var(--pk-ease) backwards; }
+  .pk:not(.pk-reduce-motion) .rf-frame-scrim { animation: pk-fade-in 150ms ease-out backwards; }
+}
+
+/* Results: NEXT GOAL is the primary button (unless a World Tour "Next level" is); count-up figures stay one width. */
+.pk .rf-frame-menu-body .pk-roundcard .pk-resultgoal { display: block; width: 100%; min-height: 44px; margin: 10px 0 0; padding: 8px 12px; text-align: left; line-height: 1.3; }
+.pk .rf-frame-menu-body .pk-roundcard .pk-resultgoal b { color: var(--pk-ink); margin-right: 6px; letter-spacing: 0.06em; }
+.pk-count { font-variant-numeric: tabular-nums; }

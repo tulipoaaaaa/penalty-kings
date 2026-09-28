@@ -1,5 +1,5 @@
 /** Screens and widgets for the game shell (all state lives in index.tsx). */
-import { useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
 import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
@@ -14,6 +14,7 @@ import { prizeLine, type PrizeSource } from "./game/prizes.js";
 import { NO_PRICE, usdForRf, rfPriceText, priceAgeLabel, isShowable, type RfPrice } from "./game/price.js";
 import { dailyStreak, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
 import { SHOT_RULES } from "./game/shots.js";
+import { COUNT_UP_MS, countUpText, ticksAt } from "./game/countup.js";
 
 // One shared 90 ms ticker drives every spinning ball on screen (drawing = one drawImage from a cached strip).
 const spinners = new Set<(frame: number) => void>();
@@ -235,6 +236,40 @@ function KeeperFacts({ id }: { id: KeeperId }) {
   </>;
 }
 
+/** B9: the Results count-up clock (0 → 1). Outside Results it is 1, so a Count there shows its final text. */
+const CountClock = createContext(1);
+
+/** A figure that counts up from 0 to `text` with the Results clock; `data-final` marks the exact final value. */
+export function Count({ text }: { text: string }) {
+  const t = useContext(CountClock);
+  return <span className="pk-count" data-value={text} data-final={t >= 1 || undefined}>{t >= 1 ? text : countUpText(text, t)}</span>;
+}
+
+/**
+ * The clock behind every Count on one Results card: COUNT_UP_MS long, eased per figure, with a rising tick
+ * (`onTick(0…6)`) as it goes. Reduced motion (OS or Settings) or nothing to count: final at once, no ticks.
+ */
+function useCountClock(reduced: boolean, active: boolean, onTick?: (index: number) => void) {
+  const still = reduced || !active || typeof requestAnimationFrame === "undefined";
+  const [t, setT] = useState(still ? 1 : 0);
+  const tick = useRef(onTick); tick.current = onTick;
+  useEffect(() => {
+    if (still) { setT(1); return; }
+    const began = performance.now();
+    let frame = 0, played = 0;
+    const step = (now: number) => {
+      const k = Math.min(1, Math.max(0, (now - began) / COUNT_UP_MS)), due = ticksAt(k);
+      while (played < due) tick.current?.(played++);
+      setT(k);
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    const safety = window.setTimeout(() => { cancelAnimationFrame(frame); setT(1); }, COUNT_UP_MS + 400); // a hidden tab pauses rAF: still end on the true values
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(safety); };
+  }, [still]);
+  return t;
+}
+
 export type SessionSummary = { title: string; kicks: number; goals: number; points: number; xp: number; stars?: number; stamp?: string; unlocked?: string[];
   /** C2: the most goals in a row this session, and whether it beat the all-time BEST STREAK. */
   bestStreak?: number; newBest?: boolean;
@@ -242,19 +277,39 @@ export type SessionSummary = { title: string; kicks: number; goals: number; poin
   final?: string;
   /** First session: the keeper-unlock card that flips into the Scouting Book, plus the next-mode teaser. */
   scouted?: { keeper: KeeperId; card: string; teaser: string };
-  match?: { rf: string; gboot: string; race: string; toTop10: string } };
-export function Results({ summary, onAgain, onModes, next, onBook, cup }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null; onBook?: () => void; /** C3c: the Cup pot and your entries this week. */ cup?: ReactNode }) {
-  const hasNext = Boolean(next && "onNext" in next);
-  return <div className="pk-roundcard" data-testid="results">
+  /** Big Match lines (their RF / $GBOOT / Cup figures are <Count>s, so they count up with the tiles). */
+  match?: { rf: ReactNode; gboot: ReactNode; race: ReactNode; toTop10: string } };
+export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, reduced = false, onTick }: { summary: SessionSummary; onAgain: () => void; onModes: () => void; next?: { onNext: () => void } | { locked: string } | null;
+  /** B9: the NEXT GOAL (game/nextgoal.ts), the primary button when there is no World Tour "Next level". */
+  goal?: { text: string; mode: string; onGo: () => void } | null;
+  onBook?: () => void; /** C3c: the Cup pot and your entries this week. */ cup?: ReactNode;
+  /** B9: reduced motion (OS or Settings): figures final at once; `onTick(i)` plays the i-th rising count-up tick. */
+  reduced?: boolean; onTick?: (index: number) => void }) {
+  const hasNext = Boolean(next && "onNext" in next), goalFirst = !hasNext && Boolean(goal);
+  const counting = summary.goals > 0 || summary.points > 0 || summary.xp > 0 || Boolean(summary.match);
+  const t = useCountClock(reduced, counting, onTick), final = t >= 1;
+  // The primary button takes focus without scrolling the tiles out of view; once the count lands, it scrolls in.
+  // (A frame later: the SDK GameMenu focuses its dialog in its own mount effect, which runs after this one.)
+  const primary = useRef<HTMLButtonElement>(null), landed = useRef(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => primary.current?.focus({ preventScroll: !reduced }));
+    return () => cancelAnimationFrame(frame);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!final || landed.current) return;
+    landed.current = true;
+    if (!reduced) primary.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [final, reduced]);
+  return <CountClock.Provider value={t}><div className="pk-roundcard" data-testid="results" data-final={final || undefined}>
     <h3>{summary.title}</h3>
     {summary.stars !== undefined && <p className="pk-stars" aria-label={`${summary.stars} stars`}>{"★".repeat(summary.stars)}{"☆".repeat(3 - summary.stars)}</p>}
     {summary.final ? <p className="pk-final">{summary.final}</p>
       : <div className="pk-tiles">
-        <Tile value={<>{summary.goals}<small>/{summary.kicks}</small></>} label={`goal${summary.goals === 1 ? "" : "s"} scored`} tone="volt" />
-        <Tile value={formatNumber(summary.points)} label="points" tone="gold" />
-        {summary.xp > 0 && <Tile value={`+${summary.xp}`} label="XP earned" tone="sky" />}
+        <Tile value={<><Count text={String(summary.goals)} /><small>/{summary.kicks}</small></>} label={`goal${summary.goals === 1 ? "" : "s"} scored`} tone="volt" />
+        <Tile value={<Count text={formatNumber(summary.points)} />} label="points" tone="gold" />
+        {summary.xp > 0 && <Tile value={<>+<Count text={String(summary.xp)} /></>} label="XP earned" tone="sky" />}
       </div>}
-    {summary.final && summary.xp > 0 && <p className="pk-note">You earned {summary.xp} XP.</p>}
+    {summary.final && summary.xp > 0 && <p className="pk-note">You earned <Count text={String(summary.xp)} /> XP.</p>}
     {summary.bestStreak !== undefined && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
     {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
@@ -271,11 +326,12 @@ export function Results({ summary, onAgain, onModes, next, onBook, cup }: { summ
     {summary.match && <ul className="pk-plain" data-testid="match-summary"><li>{summary.match.rf}</li><li>{summary.match.gboot}</li><li>{summary.match.race} {summary.match.toTop10}</li><li>Your kicks never change what your balls are worth.</li></ul>}
     {cup}
     {next && "locked" in next && <p className="pk-note" data-testid="next-locked">{next.locked}</p>}
+    {goalFirst && goal && <button type="button" ref={primary} className="pk-primary pk-resultgoal" onClick={goal.onGo} data-testid="results-next-goal" data-mode={goal.mode}><b>NEXT GOAL</b> {goal.text} ▸</button>}
     <div className="pk-buyrow">
-      {next && "onNext" in next && <button type="button" className="pk-primary" onClick={next.onNext} autoFocus data-testid="next-level">Next level</button>}
-      <button type="button" className={hasNext ? undefined : "pk-primary"} onClick={onAgain} autoFocus={!hasNext}>Play again</button><button type="button" onClick={onModes}>Modes</button>
+      {next && "onNext" in next && <button type="button" ref={primary} className="pk-primary" onClick={next.onNext} data-testid="next-level">Next level</button>}
+      <button type="button" ref={hasNext || goalFirst ? undefined : primary} className={hasNext || goalFirst ? undefined : "pk-primary"} onClick={onAgain}>Play again</button><button type="button" onClick={onModes}>Modes</button>
     </div>
-  </div>;
+  </div></CountClock.Provider>;
 }
 
 /** Difficulty rung → a friendly name (the numbers stay invisible). */

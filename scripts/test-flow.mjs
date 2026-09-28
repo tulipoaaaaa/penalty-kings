@@ -21,6 +21,33 @@ const editSaveCode = (code, friendId, change) => {
   const next = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")), ...change }), "utf8").toString("base64url");
   return `${prefix}.${next}.${crc32(`${friendId}:${next}`)}`;
 };
+/**
+ * B9 UI feel probes. Results figures count up from 0 and `data-final` marks their true values; `__pkCounts` records
+ * every figure seen before it was final (proof the count ran, or under reduced motion that it did not).
+ * The SDK harness runs with prefers-reduced-motion: reduce, so the full-motion checks emulate "no-preference".
+ */
+const b9Helpers = (page, game) => ({
+  settled: () => game.locator('[data-testid="results"][data-final]').waitFor({ timeout: 5000 }),
+  watchCounts: () => game.locator("body").evaluate(() => {
+    window.__pkCounts = [];
+    window.__pkCountObs ??= new MutationObserver(() => { for (const el of document.querySelectorAll(".pk-count:not([data-final])")) window.__pkCounts.push([el.textContent, el.dataset.value]); });
+    window.__pkCountObs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["data-final"] });
+  }),
+  countsSeen: () => game.locator("body").evaluate(() => window.__pkCounts),
+  figures: () => game.getByTestId("results").locator(".pk-count").evaluateAll(els => els.map(el => ({ text: el.textContent, value: el.dataset.value, final: el.dataset.final ?? null }))),
+  /** A button's computed style at rest and while the pointer holds it down (released off the button: no click). */
+  pressStyle: async locator => {
+    const style = () => locator.evaluate(el => { const s = getComputedStyle(el); return { transform: s.transform, shadow: s.boxShadow, filter: s.filter }; });
+    await locator.scrollIntoViewIfNeeded();
+    await page.mouse.move(1, 1); await page.waitForTimeout(200);
+    const rest = await style(), box = await locator.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); await page.waitForTimeout(200);
+    const pressed = await style();
+    await page.mouse.move(1, 1); await page.mouse.up(); await page.waitForTimeout(100);
+    return { rest, pressed };
+  },
+});
+const plainNumber = text => Number(String(text).replace(/[^\d.]/g, ""));
 
 // UI Bug Quest P2 (a fresh visit: 20 simulated RF, an empty Bag). `--p2-only` stops after this run.
 await testGame("./games/penalty-kings", {
@@ -32,6 +59,8 @@ await testGame("./games/penalty-kings", {
     const stats = () => game.locator("body").evaluate(() => window.__pkStats());
     const quickKick = async () => { await waitShootable(); await game.getByTestId("quick").click(); await game.locator(".pk-banner").waitFor({ timeout: 10_000 }); const text = await game.locator(".pk-banner strong").textContent(); await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }); return text; };
     const hold = async (key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
+    const { settled, watchCounts, countsSeen, figures, pressStyle } = b9Helpers(page, game);
+    await watchCounts();
     if (await game.getByTestId("skip-intro").isVisible()) await game.getByTestId("skip-intro").click();
     // The pot line opens the odds (how the pot works) on the title, the modes screen and the HUD alike; closing goes back.
     const potOpensOdds = async (pot, where, back) => {
@@ -56,7 +85,28 @@ await testGame("./games/penalty-kings", {
     await game.locator("body").evaluate((_, before) => new Promise((resolve, reject) => { const start = Date.now(); const poll = () => (window.__pkStats().replays > before ? resolve(true) : Date.now() - start > 8000 ? reject(new Error("no net-cam replay")) : setTimeout(poll, 20)); poll(); }), replaysBefore);
     assert.equal(await game.locator(".pk-toast").isVisible(), false, "no coaching toast over the net-cam replay");
     await game.getByTestId("results").waitFor({ timeout: 15_000 });
+    const finalAtOnce = await game.getByTestId("results").getAttribute("data-final");
     ok("BQ-X7: the tutorial's net-cam replay plays with no coaching toast over it");
+
+    // B9 under the device's reduced motion (the harness default): no count-up, every figure final on the first frame.
+    assert.equal(await game.locator("section.pk").evaluate(node => node.classList.contains("pk-reduce-motion")), true, "reduced motion is on");
+    assert.equal(finalAtOnce, "true", "reduced motion: Results are final the moment they open");
+    assert.deepEqual(await countsSeen(), [], "reduced motion: no figure is ever shown part-way");
+    const landed = await figures();
+    assert.ok(landed.length >= 3, `goals, points and XP are count-up figures (${landed.length})`);
+    for (const figure of landed) assert.deepEqual([figure.text, figure.final], [figure.value, "true"], `${figure.value}: shown final at once`);
+    assert.match(await game.getByTestId("results").locator(".pk-tile").filter({ hasText: "XP earned" }).locator("b").textContent(), /^\+\d+$/, "the XP tile shows +N");
+    // NEXT GOAL is the primary Results button (no World Tour "Next level" here), and it has focus.
+    const goalButton = game.getByTestId("results-next-goal");
+    assert.match(await goalButton.getAttribute("class"), /\bpk-primary\b/, "NEXT GOAL is the primary Results button");
+    assert.match(await goalButton.innerText(), /^NEXT GOAL\s+\S/, "it names the goal");
+    assert.equal(await goalButton.evaluate(el => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(el === document.activeElement))))), true, "and has focus");
+    assert.doesNotMatch(await game.getByTestId("results").getByRole("button", { name: "Play again", exact: true }).getAttribute("class") ?? "", /pk-primary/, "Play again is secondary");
+    const still = await pressStyle(game.getByTestId("results").getByRole("button", { name: "Modes", exact: true }));
+    assert.equal(still.pressed.transform, "none", `reduced motion: no press movement (${still.pressed.transform})`);
+    assert.match(still.pressed.shadow, /0px 0px 0px/, `reduced motion: the press still shows as the shadow going (${still.pressed.shadow})`);
+    assert.notEqual(still.pressed.filter, still.rest.filter, "reduced motion: and a colour change");
+    ok("B9 reduced motion: Results final at once (no count-up); NEXT GOAL primary; press by shadow + colour only");
     await game.getByRole("button", { name: "Modes", exact: true }).click();
 
     // The Kit shop and the Rules are one tap from the modes screen (≥ 44 px targets).
@@ -67,6 +117,22 @@ await testGame("./games/penalty-kings", {
       assert.ok(box && box.width >= 44 && box.height >= 44, `${name} on the modes screen, ≥ 44 px (${box && `${box.width}×${box.height}`})`);
     }
     ok("Kit shop and Rules on the modes screen, ≥ 44 px");
+
+    // B9 (full motion): every pixel button presses 2 px into its shadow (transform + shadow change on :active), and
+    // releasing it elsewhere does nothing.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await game.locator("section.pk:not(.pk-reduce-motion)").waitFor({ state: "attached", timeout: 3000 });
+    for (const [name, button] of [["Rules (modes)", modes.getByRole("button", { name: "Rules", exact: true })], ["NEXT GOAL (modes)", modes.getByTestId("next-goal")], ["a mode card", modes.getByTestId("mode-penalties")]]) {
+      const { rest, pressed } = await pressStyle(button);
+      assert.match(rest.shadow, /2px 2px 0px/, `${name}: a 2px hard shadow at rest (${rest.shadow})`);
+      assert.equal(pressed.transform, "matrix(1, 0, 0, 1, 2, 2)", `${name}: pressed 2px down-right (${pressed.transform})`);
+      assert.match(pressed.shadow, /0px 0px 0px/, `${name}: its shadow shrinks to nothing when pressed (${pressed.shadow})`);
+      assert.notEqual(pressed.filter, rest.filter, `${name}: and darkens`);
+    }
+    assert.equal(await game.locator("section.pk").getAttribute("data-screen"), "modes", "a press released off the button is not a click");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await game.locator("section.pk.pk-reduce-motion").waitFor({ state: "attached", timeout: 3000 });
+    ok("B9: modes-screen buttons press 2px into their shadow on :active");
 
     // A menu opened from the modes screen closes back to it (Close or Escape), also after a pack opened from the
     // Ball shop has sent the player to the Bag (it used to leave an empty pitch with no session).
@@ -107,6 +173,7 @@ await testGame("./games/penalty-kings", {
         if (await game.locator("body").evaluate(() => new Promise(resolve => { const poll = () => { const f = window.__pkFlow(); if (f.menu) resolve(true); else if (f.shootable) resolve(false); else setTimeout(poll, 50); }; poll(); }))) break;
       }
       await game.getByTestId("results").waitFor({ timeout: 5000 });
+      await settled(); // B9: read the figures once they have landed
       return game.getByTestId("results").innerText();
     };
     await game.getByTestId("mode-match").click();
@@ -191,6 +258,7 @@ await testGame("./games/penalty-kings", {
       if (before) await before();
       if (up) await page.mouse.up();
     };
+    const { settled, watchCounts, countsSeen, figures } = b9Helpers(page, game);
     const noBanner = async (ms = 1200) => { await page.waitForTimeout(ms); assert.equal(await game.locator(".pk-banner").count(), 0, "no kick happened"); };
 
     // 0. Sound (B3): a visible ≥ 44 px toggle on the title and in the HUD; the first gesture turns sound on,
@@ -283,13 +351,28 @@ await testGame("./games/penalty-kings", {
         await page.keyboard.down("ArrowRight"); await page.waitForTimeout(250); await page.keyboard.up("ArrowRight");
         await page.keyboard.down("ArrowUp"); await page.waitForTimeout(600); await page.keyboard.up("ArrowUp");
       }
+      if (kick === 4) { // B9: full motion for this session's Results, to watch the count-up
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await game.locator("section.pk:not(.pk-reduce-motion)").waitFor({ state: "attached", timeout: 3000 });
+        await watchCounts();
+      }
       await game.getByTestId("quick").click();
       await game.locator(".pk-banner").waitFor({ timeout: 10_000 });
       if (/GOAL/.test(await game.locator(".pk-banner strong").textContent())) goals5a2++;
       await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 });
     }
     await game.getByTestId("results").waitFor({ timeout: 10_000 });
+    await settled(); // B9: the XP tile counts up; read it once it has landed
     const resultsText = await game.getByTestId("results").textContent();
+    // B9: the tiles counted up from 0 (seen part-way, never past) and landed on exactly their true values (data-final).
+    const landed = await figures(), counted = await countsSeen();
+    for (const figure of landed) assert.deepEqual([figure.text, figure.final], [figure.value, "true"], `${figure.value}: ends on its true value`);
+    assert.ok(counted.some(([text, value]) => plainNumber(text) < plainNumber(value)), `figures were seen part-way up (${counted.length} samples)`);
+    assert.ok(counted.every(([text, value]) => plainNumber(text) <= plainNumber(value)), "never past the true value");
+    assert.equal(await game.getByTestId("results").locator(".pk-tile").filter({ hasText: "XP earned" }).locator(".pk-count").getAttribute("data-value"), resultsText.match(/\+(\d+)\s*XP earned/)?.[1], "the XP tile's final figure is the one read below");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await game.locator("section.pk.pk-reduce-motion").waitFor({ state: "attached", timeout: 3000 });
+    ok(`B9: Results tiles count up from 0 and end on their exact values (${counted.length} part-way samples)`);
     const resultsXp = Number(resultsText.match(/\+(\d+)\s*XP earned/)?.[1] ?? 0), xpAfter = await hudXp();
     console.log(`  ${goals5a2} goals · HUD XP ${xpBefore} → ${xpAfter} · Results +${resultsXp}`);
     assert.ok(goals5a2 > 0, "at least one goal (needed for kick XP)");
