@@ -8,14 +8,16 @@
  *
  * METHOD (solveChances). Start from today's table, which is exactly 90.00%:
  *   3150 / 2700 / 2000 / 1100 / 700 / 250 / 100 basis points (bps; 10,000 bps = 100%).
- * For a rating r (in hundredths of a percent, 9300 = 93.00%) let d = r − 9000 and write d = 5q + rem (0 ≤ rem < 5):
- *   Match +q+rem, Pro +q, Silver +q, and Scuffed −(3q + rem) so the chances still sum to 10,000.
- * One step q adds 1× + 1.5× + 2.5× = 5 bps of return, and each `rem` bps moved from Scuffed (0×) to Match (1×) adds
- * 1 bp, so the expected return is exactly r (integer arithmetic, no rounding). A whole-percent step is q = 20: every
- * chance stays a whole multiple of 10 bps. Gold and Golden Boot are untouched, so the jackpot chance and the prize
+ * A rating r is written in hundredths of a percent (9300 = 93.00%) and must be a multiple of 0.05% (5). Let
+ * q = (r − 9000) / 5 and move q bps from Scuffed to EACH of Match (1×), Pro (1.5×) and Silver (2.5×):
+ *   Scuffed −3q, Match +q, Pro +q, Silver +q      (Training, Gold and Golden Boot unchanged)
+ * The chances still sum to 10,000, and each step q adds (1 + 1.5 + 2.5) × 1 bp = 5 bps of return, so the expected
+ * return is exactly r: integer arithmetic, no rounding, no search. One whole percent is q = 20, so every chance of a
+ * whole-percent rating is a multiple of 10 bps. Gold and Golden Boot are untouched, so the jackpot chance and the prize
  * bank reserve (one top prize = 10 × price per ball in flight) are the same for every rating. The ladder stays
  * monotone (each rarer ball no more likely than the one before) for 67.50% ≤ r ≤ 97.50%; outside that the solver
- * throws. Across ratings it is monotone too: a higher rating never lowers any paying chance.
+ * throws. Across ratings it is monotone too: a higher rating lowers only Scuffed and never lowers a paying chance.
+ * (The 0.05% grid is what makes both true: a 0.01% step could only go to Match, and undoing it later would lower Match.)
  *
  * Pure module: no top-level calls (the full build tree-shakes it away completely).
  */
@@ -28,6 +30,8 @@ export const BASE_CHANCES: readonly number[] = [3150, 2700, 2000, 1100, 700, 250
 export const BASE_RTP_BPS = 9000;
 /** The range the solver keeps monotone (see METHOD). */
 export const MIN_SOLVABLE_BPS = 6750, MAX_SOLVABLE_BPS = 9750;
+/** Ratings and the bonus are multiples of 0.05% (5 hundredths of a percent): see METHOD. */
+export const RATING_STEP_BPS = 5;
 export const GENERATIONS: readonly number[] = [1, 2, 3, 4, 5, 6];
 
 export type RatingConfig = Readonly<{
@@ -57,7 +61,7 @@ export function ratingConfigErrors(raw: unknown): string[] {
   const bonusBps = bonus && typeof bonus.points === "number" ? percentToBps(bonus.points) : null;
   if (bonus && typeof bonus.points === "number") {
     if (!(bonus.points >= 0)) errors.push(`bonus.points must be ≥ 0 (got ${bonus.points})`);
-    else if (bonusBps === null) errors.push(`bonus.points must have at most 2 decimals (got ${bonus.points})`);
+    else if (bonusBps === null || bonusBps % RATING_STEP_BPS !== 0) errors.push(`bonus.points must be a multiple of 0.05 (got ${bonus.points})`);
     if (typeof bonus.cosmetic === "string" && !bonus.cosmetic.trim()) errors.push("bonus.cosmetic must name a cosmetic");
   }
   for (const generation of GENERATIONS) if (!(String(generation) in gens)) errors.push(`generation ${generation} is missing`);
@@ -67,7 +71,7 @@ export function ratingConfigErrors(raw: unknown): string[] {
     if (percent < 0) { errors.push(`gen-${key}: rating ${percent}% is below 0%`); continue; }
     if (percent >= 100) { errors.push(`gen-${key}: rating ${percent}% must be below 100%`); continue; }
     const bps = percentToBps(percent);
-    if (bps === null) { errors.push(`gen-${key}: rating ${percent}% has more than 2 decimals`); continue; }
+    if (bps === null || bps % RATING_STEP_BPS !== 0) { errors.push(`gen-${key}: rating ${percent}% must be a multiple of 0.05%`); continue; }
     if (bps < MIN_SOLVABLE_BPS || bps > MAX_SOLVABLE_BPS) errors.push(`gen-${key}: rating ${percent}% is outside ${bpsToPercent(MIN_SOLVABLE_BPS)}–${bpsToPercent(MAX_SOLVABLE_BPS)}, where the rarity ladder can stay monotone`);
     if (bonusBps !== null && bonusBps > 0) {
       const total = bps + bonusBps;
@@ -102,11 +106,11 @@ export const bonusApplies = (config: RatingConfig, ownedCosmeticNames: readonly 
 
 /** The chance table (bps, rarity order) whose expected return is exactly `rtpBps` (see METHOD). */
 export function solveChances(rtpBps: number): number[] {
-  if (!Number.isInteger(rtpBps)) throw new Error(`rating must be whole basis points of a percent (got ${rtpBps})`);
+  if (!Number.isInteger(rtpBps) || rtpBps % RATING_STEP_BPS !== 0) throw new Error(`rating must be a multiple of 0.05% (got ${rtpBps / 100}%)`);
   if (rtpBps < MIN_SOLVABLE_BPS || rtpBps > MAX_SOLVABLE_BPS) throw new Error(`rating ${bpsToPercent(rtpBps)} is outside ${bpsToPercent(MIN_SOLVABLE_BPS)}–${bpsToPercent(MAX_SOLVABLE_BPS)}`);
-  const d = rtpBps - BASE_RTP_BPS, q = Math.floor(d / 5), rem = d - 5 * q;
+  const q = (rtpBps - BASE_RTP_BPS) / RATING_STEP_BPS;
   const [scuffed, training, match, pro, silver, gold, boot] = BASE_CHANCES;
-  const chances = [scuffed - 3 * q - rem, training, match + q + rem, pro + q, silver + q, gold, boot];
+  const chances = [scuffed - 3 * q, training, match + q, pro + q, silver + q, gold, boot];
   const problems = chanceTableErrors(chances, rtpBps);
   if (problems.length) throw new Error(`solveChances(${rtpBps}): ${problems.join("; ")}`);
   return chances;

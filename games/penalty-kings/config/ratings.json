@@ -3,9 +3,9 @@
     "Each Friend generation has a RATING: the percentage of the ball price that a ball pays back on average (the RTP).",
     "Change a number under 'generations', then run: npm run gen:ratings && npm run verify:odds",
     "gen:ratings regenerates the odds tables (games/penalty-kings/tiers/ratings/*.json); verify:odds proves every table is exact.",
-    "Ratings are percentages with at most 2 decimals (93, 93.5 and 93.25 are fine). Each must be at least 0 and below 100;",
+    "Ratings are percentages in steps of 0.05 (93, 93.5 and 93.25 are fine; 93.01 is not). Each must be at least 0 and below 100;",
     "the odds solver keeps the rarity ladder monotone for ratings from 67.5 to 97.5 and rejects anything outside that.",
-    "The bonus adds 'points' percentage points when the player's Friend owns/equips the named cosmetic. It is OFF unless 'enabled' is true.",
+    "The bonus (also a multiple of 0.05) adds 'points' percentage points when the player's Friend owns/equips the named cosmetic. It is OFF unless 'enabled' is true.",
     "Every rating plus the bonus must stay below 100. See docs/EARLY-ACCESS.md."
   ],
   "generations": {
