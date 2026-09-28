@@ -45,7 +45,7 @@ import { cueLine } from "./gfx/commentary.js";
 import { windLabel, goalTransform, fkBall } from "./gfx/setpieces.js";
 import { SPOT, GOAL, PENALTY_GOAL } from "./gfx/stadium.js";
 import { CELEBRATIONS } from "./gfx/friend.js";
-import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, type SessionSummary } from "./ui.js";
+import { BallCase, OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, Count, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview, type PackPhase } from "./ballui.js";
 import { RotateOverlay } from "./layout.js";
 import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf } from "./share.js"; // C4 social (own file: other lanes edit ui.tsx)
@@ -1122,9 +1122,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         result.title = current.suddenDeath ? "Sudden death over: missed" : `Full time: ${goals} of ${current.kicks.length} scored (3 goals start sudden death)`;
         result.final = `Final score: ${goals} goal${goals === 1 ? "" : "s"} from ${current.kicks.length} kicks, ${formatNumber(current.points)} points.`;
         result.match = {
-          rf: earned.packs > 0 ? `You opened ${earned.packs} pack${earned.packs === 1 ? "" : "s"} (${earned.balls} ball${earned.balls === 1 ? "" : "s"}) this session, worth ${rf(earned.rf)} (${usdForRf(rfNumber(earned.rf), rfPrice, Date.now())})${tag} in total. They stay in your Bag until you cash them in.` : `No packs opened this session${tag}.`,
-          gboot: `$GBOOT dropped by your packs this session: +${formatNumber(earned.gboot)}${simulated ? " (simulated)" : " (estimate, paid weekly)"}.`,
-          race: `Golden Boot Cup race: +${formatNumber(earned.race)} points this session${tag}.`,
+          // B9: the RF / $GBOOT / Cup figures count up on Results (<Count> ends on exactly these texts).
+          rf: earned.packs > 0 ? <>You opened {earned.packs} pack{earned.packs === 1 ? "" : "s"} ({earned.balls} ball{earned.balls === 1 ? "" : "s"}) this session, worth <Count text={formatGameAmount(earned.rf, 18)} /> RF ({usdForRf(rfNumber(earned.rf), rfPrice, Date.now())}){tag} in total. They stay in your Bag until you cash them in.</> : `No packs opened this session${tag}.`,
+          gboot: <>$GBOOT dropped by your packs this session: +<Count text={formatNumber(earned.gboot)} />{simulated ? " (simulated)" : " (estimate, paid weekly)"}.</>,
+          race: <>Golden Boot Cup race: +<Count text={formatNumber(earned.race)} /> points this session{tag}.</>,
           toTop10: raceRank <= 10 ? `You are #${raceRank} in the race${tag}.` : `You need ${formatNumber(gap)} more points to reach the top 10${tag}.`,
         };
         setEarned({ rf: 0n, gboot: 0, race: 0, packs: 0, balls: 0 }); // the next match counts its own packs
@@ -1699,7 +1700,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       </div>}
 
       {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
-      {menu === "results" && summary && <Results summary={summary} next={tourNext}
+      {menu === "results" && summary && <Results summary={summary} next={tourNext} reduced={reducedMotion} onTick={index => playSfx(`rarity-${index}`)}
+        goal={(() => { const goal = nextGoal(progress, LEVELS, today); return { text: goal.text, mode: goal.mode, onGo: () => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); startMode(goal.mode); } }; })()}
         cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => setMenu("book")} onModes={() => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); }}
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
