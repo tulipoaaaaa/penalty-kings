@@ -62,7 +62,9 @@
     "test:overflow:ci": "npm run build:site && node scripts/test-overflow.mjs --viewports 1280x800,949x634,844x390,390x844 --fonts normal,fallback --jobs 2",
     "test:practice": "npm run build:site && node scripts/test-practice.mjs",
     "test:landing": "npm run build:site && node scripts/test-landing.mjs",
-    "shot:c4": "node scripts/shot-c4.mjs"
+    "shot:c4": "node scripts/shot-c4.mjs",
+    "build:test-app": "node scripts/build-test-app.mjs",
+    "test:test-app": "node scripts/test-test-app.mjs"
   },
   "overrides": {
     "@privy-io/js-sdk-core": {

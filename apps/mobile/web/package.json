@@ -1,0 +1,8 @@
+{
+  "name": "@penalty-kings/test-app-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penalty Kings (Test): the owner's simulated onboarding + full game test build (com.penaltykings.test). Not the judged build.",
+  "type": "module",
+  "license": "Apache-2.0"
+}

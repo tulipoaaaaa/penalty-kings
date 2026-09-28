@@ -1,0 +1,103 @@
+/* Penalty Kings (Test) shell: the game's pixel UI kit (games/penalty-kings/style.css palette, fonts, hard borders,
+   2px drop shadows), phone-first, landscape-friendly, safe-area aware, no rubber-band scrolling. */
+@font-face { font-family: PixelifySans; src: url("../../../../games/penalty-kings/assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: PixelifySans; src: url("../../../../games/penalty-kings/assets/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: PixelifySans; src: url("../../../../games/penalty-kings/assets/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0043, U+0063; }
+@font-face { font-family: PixelifySans; src: url("../../../../games/penalty-kings/assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0030-0039, U+002B-002E, U+0025, U+00D7, U+2212; }
+@font-face { font-family: PKHead; src: url("../../../../games/penalty-kings/assets/departure-mono-pk-subset.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
+
+:root {
+  --pk-ink: #0b0d1a; --pk-panel: #151a33; --pk-line: #2a3160; --pk-volt: #ccff00; --pk-gold: #ffd23f; --pk-red: #ff5a6e; --pk-paper: #f7f7f2; --pk-sky: #7fd3ff; --pk-grass: #2e7d32;
+  --pkt-bar: 34px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--pk-ink); color: var(--pk-paper); overflow: hidden; overscroll-behavior: none; }
+body { font: 16px/1.35 PixelifySans, ui-monospace, Menlo, Consolas, monospace; -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+input { -webkit-user-select: text; user-select: text; }
+#root { height: 100%; }
+.pkt-boot { margin: 0; padding: 40px 16px; text-align: center; }
+
+/* Always-visible badge (every simulated screen). */
+.pkt-badge { position: fixed; z-index: 50; top: calc(env(safe-area-inset-top) + 6px); left: calc(env(safe-area-inset-left) + 6px); pointer-events: none;
+  background: var(--pk-gold); color: var(--pk-ink); border: 2px solid var(--pk-ink); box-shadow: 2px 2px 0 #000; padding: 2px 6px; font: 700 11px/1.3 PixelifySans, ui-monospace, monospace; letter-spacing: 0.05em; white-space: nowrap; }
+.pkt-banner { position: fixed; z-index: 49; left: 0; right: 0; bottom: 0; padding: 6px 12px calc(env(safe-area-inset-bottom) + 6px); background: var(--pk-red); color: #fff; font-size: 13px; text-align: center; }
+
+/* Onboarding screens: one pixel panel, scrolls inside itself only. */
+.pkt-screen { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: calc(env(safe-area-inset-top) + 40px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 16px);
+  background: linear-gradient(180deg, #0f3d24 0%, var(--pk-ink) 55%); display: flex; flex-direction: column; align-items: center; }
+.pkt-panel { width: 100%; max-width: 460px; margin: auto 0; background: var(--pk-panel); border: 2px solid var(--pk-paper); box-shadow: 4px 4px 0 #000; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.pkt-panel h1, .pkt-panel h2 { margin: 0; font-family: PKHead, PixelifySans, monospace; letter-spacing: 0.04em; }
+.pkt-panel h1 { font-size: 28px; color: var(--pk-volt); text-shadow: 2px 2px 0 #000; }
+.pkt-panel h2 { font-size: 20px; }
+.pkt-panel p { margin: 0; }
+.pkt-muted { color: #b8bfd9; font-size: 13px; }
+.pkt-tag { display: inline-block; background: var(--pk-gold); color: var(--pk-ink); font-weight: 700; font-size: 11px; padding: 1px 5px; letter-spacing: 0.05em; vertical-align: middle; }
+.pkt-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; width: 100%; padding: 8px 14px; font: 700 17px PixelifySans, ui-monospace, monospace;
+  color: var(--pk-paper); background: #0b0d1ae6; border: 2px solid var(--pk-paper); border-radius: 0; box-shadow: 2px 2px 0 #000; cursor: pointer; }
+.pkt-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.pkt-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+.pkt-btn:focus-visible, .pkt-link:focus-visible, .pkt-input:focus-visible { outline: 3px solid var(--pk-gold); outline-offset: 2px; }
+.pkt-primary { background: var(--pk-volt); color: var(--pk-ink); border-color: var(--pk-volt); }
+.pkt-link { background: none; border: 0; color: var(--pk-sky); text-decoration: underline; font: inherit; font-size: 14px; padding: 12px 4px; cursor: pointer; min-height: 44px; }
+.pkt-row { display: flex; gap: 10px; }
+.pkt-row > * { flex: 1; }
+.pkt-input { width: 100%; min-height: 48px; padding: 8px 10px; font: 18px PixelifySans, ui-monospace, monospace; color: var(--pk-ink); background: var(--pk-paper); border: 2px solid var(--pk-ink); border-radius: 0; box-shadow: inset 2px 2px 0 #0002; }
+.pkt-code { letter-spacing: 0.5em; text-align: center; font-size: 26px; }
+.pkt-address { font: 15px/1.4 PKHead, ui-monospace, monospace; word-break: break-all; background: var(--pk-ink); border: 2px dashed var(--pk-line); padding: 8px; -webkit-user-select: all; user-select: all; }
+.pkt-error { background: #3a0f18; border: 2px solid var(--pk-red); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pkt-error p { color: #ffd0d6; }
+.pkt-ok { background: #13351f; border: 2px solid #3ddc84; padding: 8px 10px; }
+.pkt-spinner { width: 28px; height: 28px; margin: 6px auto; background: var(--pk-volt); animation: pkt-spin 0.9s steps(4) infinite; }
+@keyframes pkt-spin { to { transform: rotate(360deg); } }
+.pkt-progress { height: 14px; border: 2px solid var(--pk-paper); background: var(--pk-ink); }
+.pkt-progress i { display: block; height: 100%; background: var(--pk-volt); transition: width 0.25s steps(5); }
+.pkt-amounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pkt-amount { flex-direction: column; min-height: 72px; gap: 2px; }
+.pkt-amount small { font-weight: 400; font-size: 12px; }
+.pkt-friend { display: flex; gap: 14px; align-items: center; background: var(--pk-ink); border: 2px solid var(--pk-line); padding: 10px; }
+.pkt-friend canvas { width: 72px; height: 72px; image-rendering: pixelated; background: var(--pk-grass); border: 2px solid var(--pk-paper); flex: none; }
+.pkt-steps { display: flex; gap: 4px; }
+.pkt-steps i { flex: 1; height: 4px; background: var(--pk-line); }
+.pkt-steps i[data-on="true"] { background: var(--pk-volt); }
+.pkt-version { background: none; border: 0; color: #7c84a8; font: 12px PKHead, ui-monospace, monospace; padding: 10px; min-height: 44px; cursor: default; }
+
+/* Neutral simulated payment sheet: our own pixel panel, no platform or provider look-alike. */
+.pkt-sheet-back { position: fixed; inset: 0; z-index: 60; background: #000a; display: flex; align-items: flex-end; justify-content: center; }
+.pkt-sheet { width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto; background: var(--pk-panel); border: 2px solid var(--pk-gold); box-shadow: 0 -4px 0 #000;
+  padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px); display: flex; flex-direction: column; gap: 10px; }
+@media (orientation: landscape) and (max-height: 540px) { .pkt-sheet-back { align-items: center; } .pkt-sheet { max-height: 96%; } }
+.pkt-sheet h2 { margin: 0; font-size: 18px; color: var(--pk-gold); }
+.pkt-total { display: flex; justify-content: space-between; font-weight: 700; border-top: 2px dashed var(--pk-line); padding-top: 8px; }
+
+/* Game screen: a 34px shell bar above the SDK frame (host.css reads --pk-host-bar to size the frame). */
+:root:has(.pkt-game) { --pk-host-bar: var(--pkt-bar); }
+.pkt-game { position: absolute; inset: 0; display: flex; flex-direction: column; background: #eee;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.pkt-bar { flex: none; height: var(--pkt-bar); display: flex; align-items: center; gap: 8px; padding: 0 6px; background: var(--pk-ink); border-bottom: 2px solid var(--pk-line); font-size: 13px; }
+.pkt-bar .pkt-badge { position: static; }
+.pkt-bar .pkt-balance { margin-left: auto; white-space: nowrap; }
+.pkt-bar .pkt-balance b { color: var(--pk-volt); }
+.pkt-bar button { min-height: 30px; min-width: 44px; padding: 0 10px; font: 700 13px PixelifySans, monospace; color: var(--pk-paper); background: var(--pk-panel); border: 2px solid var(--pk-paper); box-shadow: 2px 2px 0 #000; }
+.pkt-frame { flex: 1; min-height: 0; overflow: hidden; }
+.pkt-frame > * { max-width: var(--rf-game-max-width, 960px); margin: 0 auto; }
+.pkt-menu { position: fixed; inset: 0; z-index: 70; background: #000b; display: flex; align-items: flex-start; justify-content: flex-end; padding: calc(env(safe-area-inset-top) + 40px) calc(env(safe-area-inset-right) + 8px) 8px 8px; }
+.pkt-menu .pkt-panel { max-width: 340px; margin: 0; max-height: 100%; overflow-y: auto; }
+.pkt-toast { position: fixed; z-index: 80; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 14px); max-width: calc(100% - 24px); }
+.pkt-dev { position: fixed; inset: 0; z-index: 90; background: #000c; overflow-y: auto; padding: calc(env(safe-area-inset-top) + 40px) 12px 20px; }
+.pkt-dev .pkt-panel { margin: 0 auto; border-color: var(--pk-red); }
+.pkt-dev fieldset { border: 2px solid var(--pk-line); padding: 8px; margin: 0; display: grid; gap: 6px; }
+.pkt-dev label { display: flex; gap: 8px; align-items: center; min-height: 32px; font-size: 14px; }
+.pkt-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; }
+.pkt-kv dt { color: #9aa2c7; } .pkt-kv dd { margin: 0; word-break: break-all; }
+
+/* Landscape phones: two columns so the whole step fits without scrolling. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .pkt-screen { padding-top: calc(env(safe-area-inset-top) + 34px); padding-bottom: calc(env(safe-area-inset-bottom) + 8px); }
+  .pkt-panel { max-width: 720px; padding: 12px 14px; gap: 8px; }
+  .pkt-panel h1 { font-size: 24px; }
+  .pkt-btn { min-height: 44px; }
+  .pkt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+}
+@media (prefers-reduced-motion: reduce) { .pkt-spinner { animation: none; } .pkt-progress i { transition: none; } }
