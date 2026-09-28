@@ -34,7 +34,7 @@ import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/ra
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
 import { potBanner, potHudTail, jumbotronSlides, prizeLine, type PrizeSource } from "./game/prizes.js";
 import { useRfPrice, usdForRf } from "./game/price.js";
-import { championsNight, championsNightLine, cupDrawLine, cupEntriesLine, racePointMultiplier, isChampionsNight, SIM_TRICKLE_MS } from "./game/weekly.js";
+import { championsNight, championsNightLine, cupDrawLine, cupEntriesLine, cupWeightsLine, racePointMultiplier, isChampionsNight, SIM_TRICKLE_MS } from "./game/weekly.js";
 import { PotCounter, WinnersTicker, useCountUp, useGlow } from "./potui.js";
 import { swipeToFreeKick, keyShot, keyFreeKick, kickSetup, type KeyAim } from "./game/input.js";
 import { MatchDirector, createGameDirector, applyBeat, playMoment, discovery, decodeSeen, LINE_GAP_MS, type GameDirector, type Beat, type Moment, type Later } from "./game/director.js";
@@ -1638,7 +1638,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "cups" && <>
         <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
         <h3>Golden Boot Cup: this week</h3>
-        <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium (Park ×1, Pro ×100, Champions ×1,000), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
+        <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium ({cupWeightsLine(now)}), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
         {simulated && <><ol className="pk-table">{raceTable.slice(0, 10).map((row, index) => <li key={row.name} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.points)}</b></li>)}</ol>
           {raceRank > 10 && <p>You: #{raceRank} with {formatNumber(race)} pts{tag}.</p>}
           <p>Pot $GBOOT: {formatNumber(cupGboot)}{tag}</p>

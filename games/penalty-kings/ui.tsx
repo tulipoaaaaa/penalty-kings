@@ -306,7 +306,7 @@ export function Results({ summary, onAgain, onModes, next, goal, onBook, cup, re
         {summary.xp > 0 && <Tile value={<>+<Count text={String(summary.xp)} /></>} label="XP earned" tone="sky" />}
       </div>}
     {summary.final && summary.xp > 0 && <p className="pk-note">You earned <Count text={String(summary.xp)} /> XP.</p>}
-    {summary.bestStreak !== undefined && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
+    {Boolean(summary.bestStreak) && <p className="pk-beststreak" data-testid="best-streak" data-new={Boolean(summary.newBest)}>BEST STREAK: <b>{summary.bestStreak}</b> in a row{summary.newBest ? " · NEW RECORD!" : ""}</p>}
     {summary.stamp && <p className="pk-badge" data-icon="book">Scouting Book: <b>{summary.stamp}</b> stamped.</p>}
     {summary.unlocked?.map(item => <p key={item} className="pk-badge" data-icon="key">Unlocked: <b>{item}</b></p>)}
     {summary.scouted && <div className="pk-unlockcard" data-testid="unlock-card">
