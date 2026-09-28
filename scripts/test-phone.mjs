@@ -255,6 +255,26 @@ for (const [width, height] of SIZES) {
       assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "1");
       checked.push(`swipe:${banner}`);
       await fonts("kick banner");
+      // QA-9: the discovery toast is never truncated: it wraps (at most 2 lines, >= 11 px), even for the longest
+      // moment name (measured by swapping the longest label into the shown toast, then restoring it).
+      {
+        const toast = game.getByTestId("discover-toast");
+        await toast.waitFor({ timeout: 5000 });
+        const fit = await toast.evaluate(node => {
+          const measure = () => { const s = getComputedStyle(node), line = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+            return { sw: node.scrollWidth, cw: node.clientWidth, sh: node.scrollHeight, ch: node.clientHeight, lines: Math.round((node.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / line), font: parseFloat(s.fontSize), text: node.textContent }; };
+          const shown = measure(), original = node.textContent;
+          node.textContent = "NEW: Crowd chants your Friend's number!";
+          const longest = measure();
+          node.textContent = original;
+          return { shown, longest };
+        });
+        for (const [name, m] of Object.entries(fit)) {
+          assert.ok(m.sw <= m.cw && m.sh <= m.ch + 1, `${label}: the discovery toast is truncated (${name}) ${JSON.stringify(m)}`);
+          assert.ok(m.lines <= 2 && m.font >= MIN_FONT, `${label}: the discovery toast takes over 2 lines or is under 11px (${name}) ${JSON.stringify(m)}`);
+        }
+        checked.push("discover:unclipped");
+      }
       await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       await waitShootable();
       await fonts("after the kick (discovery toast)");
