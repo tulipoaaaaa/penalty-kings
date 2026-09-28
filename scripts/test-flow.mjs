@@ -111,6 +111,22 @@ await testGame("./games/penalty-kings", {
     assert.match(still.pressed.shadow, /0px 0px 0px/, `reduced motion: the press still shows as the shadow going (${still.pressed.shadow})`);
     assert.notEqual(still.pressed.filter, still.rest.filter, "reduced motion: and a colour change");
     ok("B9 reduced motion: Results final at once (no count-up); NEXT GOAL primary; press by shadow + colour only");
+    // Polish: "Open the Scouting Book" from Results, then closing the Book (× or Escape), comes back to the same Results
+    // (never the finished round left on the pitch), figures final at once.
+    // (The live Cup pot line ticks on its own: the round's title, tiles and figures must be the same.)
+    const resultsValues = async () => [await game.getByTestId("results").locator("h3").innerText(), await game.getByTestId("results").locator(".pk-tiles").innerText(), await figures()];
+    const resultsBefore = await resultsValues();
+    for (const how of ["×", "Escape"]) {
+      await game.getByTestId("open-book").click();
+      await game.getByRole("heading", { name: "Scouting Book", exact: true }).waitFor({ timeout: 3000 });
+      assert.equal(await game.getByTestId("results").count(), 0, "the Book replaces Results while open");
+      if (how === "×") await game.getByRole("button", { name: "Close Scouting Book" }).click(); else await page.keyboard.press("Escape");
+      await game.getByTestId("results").waitFor({ timeout: 3000 });
+      assert.equal(await game.getByTestId("results").getAttribute("data-final"), "true", `${how}: Results figures final at once`);
+      assert.deepEqual(await resultsValues(), resultsBefore, `${how}: the same Results come back`);
+      assert.equal(await game.getByRole("heading", { name: "Results", exact: true }).count(), 1, `${how}: the Results menu is open again`);
+    }
+    ok("Results → Open the Scouting Book → close (× and Escape) → the same Results");
     // QA-8: Escape closes Results onto the Modes screen (never a dead pitch: "kick 3/3", no prompt).
     await page.keyboard.press("Escape");
     await game.locator(".pk-modescreen").waitFor({ timeout: 3000 });
