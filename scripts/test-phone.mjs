@@ -134,6 +134,20 @@ async function bannerClear(game, where) {
   return true;
 }
 
+/** Polish: each tutorial kick's coaching toast is one short line (<= 90 characters, at most 3 lines on screen), and
+ *  a new kick brings a new line (not the old six-line paragraph). Returns the text, or null when no toast is up. */
+async function toastShort(game, where, seen) {
+  const toast = game.locator(".pk-toast");
+  if (!(await toast.isVisible())) return null;
+  const m = await toast.evaluate(node => { const s = getComputedStyle(node), line = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+    return { text: node.textContent, lines: Math.round((node.scrollHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / line) }; });
+  assert.ok(m.text.length <= 90, `${where}: the coaching toast is ${m.text.length} characters (max 90): "${m.text}"`);
+  assert.ok(m.lines <= 3, `${where}: the coaching toast takes ${m.lines} lines (max 3): "${m.text}"`);
+  assert.ok(!seen.includes(m.text), `${where}: the coaching toast repeats an earlier kick's line: "${m.text}"`);
+  seen.push(m.text);
+  return m.text;
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -279,6 +293,8 @@ for (const [width, height] of SIZES) {
       await sceneVisible(BALL, "ball");
       await toastClear();
       if (await toastOffFriend(game, `${label} tutorial kick 1`)) checked.push("toast:friend-1");
+      const coachLines = [];
+      if (await toastShort(game, `${label} tutorial kick 1`, coachLines)) checked.push("toast:short-1");
       await page.screenshot({ path: `artifacts/phone-${label}-tutorial.png` });
       await fonts("tutorial HUD");
       await reachable(game.getByTestId("quick"), "Quick shot");
@@ -321,6 +337,7 @@ for (const [width, height] of SIZES) {
       for (let kick = 2; kick <= 3; kick++) {
         await waitShootable();
         if (await toastOffFriend(game, `${label} tutorial kick ${kick}`)) checked.push(`toast:friend-${kick}`);
+        if (await toastShort(game, `${label} tutorial kick ${kick}`, coachLines)) checked.push(`toast:short-${kick}`);
         await reachable(game.getByTestId("quick"), "Quick shot");
         await press(game.getByTestId("quick"));
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
