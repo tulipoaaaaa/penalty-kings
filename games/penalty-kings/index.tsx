@@ -56,6 +56,8 @@ import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
 import { SHOT_RULES, REPLAY_SECONDS, REPLAY_LABEL, replayReason, longestRun, withBestStreak, clockSeconds, keeperHistory } from "./game/shots.js";
 import { addPulls, syncBag, removeBall, setLucky, recordKick, kickStyle, sampleDiscontinued, type BallRecord } from "./game/bag.js";
 import liveConfig from "./live.json" with { type: "json" };
+/*EA+ import { visibleModes, nextGoalFor, hubMenus, modesScreenMenus, modeOn, openedModes, tutorialTitle, earlyAccessTeaser } from "./game/features.js";
+import { EarlyAccessShop, RatingOddsTable, RatingPanel, playerRating, ratingText } from "./earlyaccess.js"; +EA*/
 import "@rarefriends/friendsdk/frame.css";
 import "./style.css";
 
@@ -81,7 +83,7 @@ type Session = {
 type SkillEntry = { id: number; name: string; score: number; mine: boolean };
 type PackState = { rarities: number[]; revealed: boolean[]; gboot: number; sealed?: { count: number; expectedMs: number }; phase?: PackPhase };
 
-const RULE = "Your kick never changes what you win. Ball rarity is decided by on-chain randomness. Skill is for glory, stars, streaks and the Skill Cup.";
+const RULE = /*EA{ "Your kick never changes what you win. Ball rarity is decided by on-chain randomness. Skill is for glory, streaks and your Scouting Book." }*/"Your kick never changes what you win. Ball rarity is decided by on-chain randomness. Skill is for glory, stars, streaks and the Skill Cup."/*}EA*/;
 const RIVALS = ["Rival Friend A", "Rival Friend B", "Rival Friend C", "Rival Friend D", "Rival Friend E", "Rival Friend F", "Rival Friend G", "Rival Friend H", "Rival Friend I", "Rival Friend J", "Rival Friend K"];
 const SIM_RACE = [2400, 1900, 1500, 1210, 1000, 820, 640, 500, 360, 240, 120];
 const SIM_SKILL = [9350, 7900, 6120, 4600, 3800];
@@ -294,7 +296,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     return () => window.clearInterval(id);
   }, [simulated]);
   // C3b Champions Night (Saturday 19:00-21:00 UTC): the Champions look on every tier; double Cup points in the preview's race.
-  const night = championsNight(now), nightLine = championsNightLine(now, simulated), drawLine = cupDrawLine(now);
+  const night = /*EA{ { ...championsNight(now), active: false } }*/championsNight(now)/*}EA*/, nightLine = championsNightLine(now, simulated), drawLine = cupDrawLine(now);
   const potCounter = (place: "title" | "modes" | "results") => <PotCounter pot={pot} draw={drawLine} night={nightLine} nightActive={night.active} glow={potGlow} place={place} onOpen={place === "results" ? undefined : () => { if (may("open-menu")) setMenu("odds"); }} />;
   // BQ-P1-11: the commentator strip (canvas) drops below the DOM pot banner whenever they would overlap.
   const potRef = useRef<HTMLButtonElement | null>(null);
@@ -697,7 +699,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       // First session: the walkout with the name banner, and the commentator introducing YOUR Friend.
       if (next.mode === "tutorial") scene.walkout("first-walkout");
       else if (opening) playBeat({ ...opening, keeperChanged: false }, next.kind);
-      if (next.mode !== "tutorial" && isChampionsNight(Date.now())) scene.say("champions-night"); // C3b: the special intro line
+      if (next.mode !== "tutorial" && /*EA{ (false as boolean) }*/isChampionsNight(Date.now())/*}EA*/) scene.say("champions-night"); // C3b: the special intro line
     }
     syncDiscovery({ stadium: tier.id });
     if (next.mode === "match") { setPhaseNow("idle"); return; }
@@ -706,6 +708,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
   function startMode(mode: ModeId) {
     if (!may("start-mode")) return;
+    /*EA+ if (!modeOn("early-access", mode)) return; +EA*/
     void unlockAudio(); setError("");
     if (mode === "tour") { setMenu("tour"); return; }
     if (mode === "daily") { setMenu("daily"); return; }
@@ -1081,7 +1084,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     updateProgress(p => {
       const before = levelFromXp(p.xp).level, after = levelFromXp(p.xp + amount).level;
       if (after > before) {
-        const opened = MODES.filter(mode => mode.level > before && mode.level <= after).map(mode => mode.name);
+        const opened = /*EA{ openedModes("early-access", before, after) }*/MODES.filter(mode => mode.level > before && mode.level <= after).map(mode => mode.name)/*}EA*/;
         setMessage(`Level ${after}!${opened.length ? ` Unlocked: ${opened.join(", ")}.` : ""}`); stage.current?.say("level-up");
       }
       return { ...p, xp: p.xp + amount };
@@ -1102,10 +1105,10 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       const rung = nextDifficultyLevel(p.difficulty, p.history); // between rounds only
       if (current.mode !== "match" && current.mode !== "skill") updated = { ...updated, difficulty: rung, matches: p.matches + 1 };
       if (current.mode === "tutorial") {
-        updated.tutorialDone = true; xp += XP.tutorial; result.title = "Tutorial complete! Level 2: Free Kicks, World Tour, Daily and Target Practice unlocked";
+        updated.tutorialDone = true; xp += XP.tutorial; result.title = /*EA{ tutorialTitle("early-access") }*/"Tutorial complete! Level 2: Free Kicks, World Tour, Daily and Target Practice unlocked"/*}EA*/;
         // The first-session keeper-unlock card: it flips into the Scouting Book, plus the Free Kicks teaser.
         const open = levelFromXp(p.xp + XP.tutorial).level >= (MODES.find(mode => mode.id === "freekicks")?.level ?? 2);
-        result.scouted = { keeper: FIRST_UNLOCK.keeper, card: FIRST_UNLOCK.card, teaser: open ? FIRST_UNLOCK.teaserOpen : FIRST_UNLOCK.teaser };
+        result.scouted = { keeper: FIRST_UNLOCK.keeper, card: FIRST_UNLOCK.card, teaser: /*EA{ earlyAccessTeaser(open) }*/open ? FIRST_UNLOCK.teaserOpen : FIRST_UNLOCK.teaser/*}EA*/ };
         updated.keepersSeen = [...new Set([...p.keepersSeen, FIRST_UNLOCK.keeper])];
       }
       // Scouting Book stamp: 3 goals in the round. The tutorial's surprise keeper is a cameo, so it stamps the plan's first keeper.
@@ -1504,7 +1507,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
   // World Tour results (round 6 C16): "Next level" opens the following level's brief, or says what opens its city.
   const after = menu === "results" && s?.mode === "tour" && s.level ? levelAfter(LEVELS, s.level, progress) : null;
   const tourNext = after && "level" in after ? { onNext: () => { setPendingLevel(after.level); setMenu("tour"); } } : after;
-  const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "challenge" ? (s.challenge?.weekly ? "Keeper of the Week" : "Challenge") : s.mode === "tour" && s.level ? s.level.name : MODES.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
+  const modeName = s ? (s.mode === "tutorial" ? "Tutorial" : s.mode === "challenge" ? (s.challenge?.weekly ? "Keeper of the Week" : "Challenge") : s.mode === "tour" && s.level ? s.level.name : /*EA{ visibleModes("early-access") }*/MODES/*}EA*/.find(item => item.id === s.mode)?.name ?? "Skill Cup") : "";
   const kickLabel = s ? (s.kind === "target" && s.target ? `${Math.max(0, Math.ceil(TARGET_SECONDS - (clockNow() - s.target.startedAt) / 1000))} s left · ${s.target.hits} hit${s.target.hits === 1 ? "" : "s"}${s.target.combo >= 2 ? ` · ${s.target.combo} in a row` : ""}` : s.mode === "match" ? `${s.suddenDeath ? "SUDDEN DEATH · " : ""}kick ${s.kicks.length + (phase === "idle" ? 0 : 1)}` : `kick ${Math.min(s.total, s.kicks.length + 1)}/${s.total}`) : "";
 
   return <section className={`pk pk-stadium-${tier.id}${reducedMotion ? " pk-reduce-motion" : ""}`} aria-label={definition.name} aria-busy={busy} data-phase={phase} data-screen={screen} data-night={night.active || undefined}>
@@ -1525,15 +1528,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         onPointerCancel={event => { if (event.pointerId === pointer.current) { swipe.current = null; pointer.current = null; } }}
         onLostPointerCapture={event => { if (event.pointerId === pointer.current) { swipe.current = null; pointer.current = null; } }} />
 
-      {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. */}
-      <button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} data-glow={potGlow || undefined} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
+      {/* Pot banner: small, persistent, true figures from game/prizes.ts. Tap = odds. (Early access: no Cup, no pot.) */}
+      {/*EA{ null }*/}<button type="button" ref={potRef} className="pk-pot" data-testid="pot" data-tag={pot.tag} data-glow={potGlow || undefined} disabled={phase === "shooting"} onClick={() => { if (may("open-menu")) setMenu("odds"); }} title="Tap for the exact odds and the 90% average return">
         <span className="pk-pot-label">GOLDEN BOOT CUP ·</span><span>🏆 {pot.value}</span><span className="pk-pot-usd" data-testid="pot-usd">{pot.usd}</span>{pot.usdAge && <small className="pk-pot-age" data-testid="pot-age"><span className="pk-age-long">{pot.usdAge}</span><span className="pk-age-short">{pot.usdAgeShort}</span></small>}<span className="pk-pot-extra" data-testid="pot-draw">{potHudTail(pot, drawLine).detail}</span>{night.active && <b className="pk-nighttag" data-testid="night-tag" title={nightLine}>{simulated ? "NIGHT ×2" : "CHAMPIONS NIGHT"}</b>}{pot.tag === "SIMULATED" ? <b className="pk-simtag">SIMULATED</b> : <small>{pot.note}</small>}
-      </button>
+      </button>{/*}EA*/}
 
       {screen === "play" && s && <>
         <header className="pk-hud pk-hud-left">
           <span className={`pk-chip ${inMatch ? (simulated ? "pk-sim" : "pk-live") : ""}`} data-testid="mode-chip">{inMatch ? `${tier.name.toUpperCase()} · ${simulated ? "SIMULATED" : "LIVE RF"}` : modeName.toUpperCase()}</span>
-          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Bag <b data-testid="bag-count">{bag.filter(ball => !ball.sample).length}</b> · Unopened <b data-testid="unopened">{balls.toString()}</b></span>
+          {inMatch ? <span className="pk-stat">RF <b data-testid="rf">{formatGameAmount(snapshot.rfBalance, 18)}</b>{tag} · Bag <b data-testid="bag-count">{bag.filter(ball => !ball.sample).length}</b> · Unopened <b data-testid="unopened">{balls.toString()}</b>{/*EA+ <> · Rating <b data-testid="hud-rating">{ratingText(playerRating(definition, simulated))}</b></> +EA*/}</span>
             : <span className="pk-stat">LV <b>{playerLevel}</b> · {into}/{next} XP</span>}
         </header>
         <header className="pk-hud pk-hud-right">
@@ -1578,27 +1581,27 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <h1>PENALTY KINGS</h1>
         <p>Easy to play. Hard to master. Friend #{friendId.toString()} is your striker.</p>
         <StreakBadge login={progress.login} today={today} />
-        {potCounter("title")}
-        <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />
+        {/*EA{ null }*/}{potCounter("title")}
+        <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />{/*}EA*/}
       </div>
       <div className="pk-attract-bottom">
         <button type="button" className="pk-primary" autoFocus onClick={() => { void unlockAudio(); if (progress.tutorialDone) setScreen("modes"); else startMode("penalties"); }} data-testid="play">{progress.tutorialDone ? "Play" : "Kick off"}</button>
         {intro === "cold" && <button type="button" className="pk-skip" onClick={() => setIntro("attract")} data-testid="skip-intro">Skip intro ▸</button>}
         <p className="pk-rule">{RULE}</p>
-        {simulated && <p className="pk-note">Public preview: the economy (RF, balls, rewards, $GBOOT, Cup) is SIMULATED. Wallet and Friend ownership are real.</p>}
+        {simulated && <p className="pk-note">{/*EA{ "Early access preview: the economy (RF, balls, redeem values) is SIMULATED. Wallet and Friend ownership are real." }*/}Public preview: the economy (RF, balls, rewards, $GBOOT, Cup) is SIMULATED. Wallet and Friend ownership are real.{/*}EA*/}</p>}
       </div>
     </div>}
 
     {screen === "modes" && !menu && <div className="pk-title pk-modescreen" role="dialog" aria-label="Choose a mode">
-      {potCounter("modes")}
-      <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />
+      {/*EA{ null }*/}{potCounter("modes")}
+      <WinnersTicker now={now} reduced={reducedMotion} simulated={simulated} />{/*}EA*/}
       <h2>Level {playerLevel} · {into}/{next} XP</h2>
       <StreakBadge login={progress.login} today={today} />
-      {(() => { const goal = nextGoal(progress, LEVELS, today); return <button type="button" className="pk-nextgoal" data-testid="next-goal" data-mode={goal.mode} onClick={() => startMode(goal.mode)}><b>NEXT GOAL</b> {goal.text} ▸</button>; })()}
-      <WeeklyKeeper keeper={keeperOfTheWeek(today)} onPlay={() => startChallenge(null)} />
+      {(() => { const goal = /*EA{ nextGoalFor("early-access", progress, LEVELS, today) }*/nextGoal(progress, LEVELS, today)/*}EA*/; return <button type="button" className="pk-nextgoal" data-testid="next-goal" data-mode={goal.mode} onClick={() => startMode(goal.mode)}><b>NEXT GOAL</b> {goal.text} ▸</button>; })()}
+      {/*EA{ null }*/}<WeeklyKeeper keeper={keeperOfTheWeek(today)} onPlay={() => startChallenge(null)} />{/*}EA*/}
       {checkinNote && <p className="pk-note" role="status" data-testid="checkin">{checkinNote}</p>}
       <ModeSelect progress={progress} onPick={startMode} />
-      <div className="pk-buyrow">
+      {/*EA{ <div className="pk-buyrow" data-testid="modes-menus">{modesScreenMenus("early-access").map(id => <button key={id} type="button" onClick={() => setMenu(id)} data-testid={id === "balls" ? "ball-shop" : id === "bag" ? "my-bag" : `menu-${id}`}>{menuTitle(id)}</button>)}</div> }*/}<div className="pk-buyrow">
         <button type="button" onClick={() => setMenu("book")}>Scouting Book</button>
         <button type="button" onClick={() => setMenu("balls")} data-testid="ball-shop">Ball shop</button>
         <button type="button" onClick={() => setMenu("bag")} data-testid="my-bag">My Bag</button>
@@ -1607,7 +1610,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <button type="button" onClick={() => setMenu("rules")}>Rules</button>
         <button type="button" onClick={() => setMenu("settings")}>Settings</button>
       </div>
-      <ChallengeBox onPlay={startChallenge} />
+      <ChallengeBox onPlay={startChallenge} />{/*}EA*/}
     </div>}
 
     <RotateOverlay onShownChange={setRotating} />
@@ -1615,14 +1618,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
     {menu && <GameMenu title={menuTitle(menu)} onClose={busy ? undefined : closeMenu}>
       {menu === "hub" && <div className="pk-hub">
-        {(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const).map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
+        {/*EA{ hubMenus("early-access") }*/(["balls", "bag", "cups", "book", "shop", "rules", "settings"] as const)/*}EA*/.map(id => <button key={id} type="button" onClick={() => setMenu(id)}>{menuTitle(id)}</button>)}
         <button type="button" onClick={() => { leavePack(); cancelKick(); replayDone.current = null; setMenu(null); setSession(null); setPhaseNow("idle"); setScreen("modes"); }}>Change mode</button>
-        {simulated && <p className="pk-note">Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.</p>}
+        {simulated && <p className="pk-note">{/*EA{ "Economy is SIMULATED in this early access preview: RF, balls and their values reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stamps) is saved on this device when the browser allows it." }*/}Economy is SIMULATED in this preview: RF, balls, rewards, $GBOOT (you start with {SIM_STARTING_GBOOT.toLocaleString("en-US")} simulated), Cup and shop reset on reload. Wallet and Friend ownership are real (SDK gate). Progress (XP, stars, stamps) is saved on this device when the browser allows it.{/*}EA*/}</p>}
       </div>}
 
       {menu === "balls" && <>
-        <Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} now={now} onStadium={openStadium}
-          notice={(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>} />
+        {/*EA{ <EarlyAccessShop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} onStadium={openStadium}
+          notice={(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>} /> }*/}<Shop definition={definition} tier={tier} simulated={simulated} balance={snapshot.rfBalance} busy={busy || paused} full={stadiumFull} onBuy={buyPack} onOdds={() => setMenu("odds")} unopened={balls} onOpen={openPack} firstPurchase={progress.pulled.length === 0 && balls === 0n && !bag.some(ball => !ball.sample)} now={now} onStadium={openStadium}
+          notice={(message || error) && <p className="pk-warn" role={error ? "alert" : "status"}>{error || message}</p>} />{/*}EA*/}
         <StadiumPrices source={prizeSource} now={now} />
         <p className="pk-rule">{RULE}</p>
       </>}
@@ -1633,7 +1637,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "market" && <MarketPreview />}
       {menu === "odds" && <>
         <p>Exact odds at {tier.name} (ball price {rf(definition.price)}{tag}):</p>
-        <OddsTable definition={definition} tier={tier} tag={tag} />
+        {/*EA{ <><RatingOddsTable definition={definition} tag={tag} rating={playerRating(definition, simulated)} /><RatingPanel rating={playerRating(definition, simulated)} /></> }*/}<OddsTable definition={definition} tier={tier} tag={tag} />{/*}EA*/}
         <p className="pk-note">{simulated ? "Preview: prize figures are SIMULATED; USD uses an on-chain RF price snapshot (live stadiums read the price every 60 s)." : "Live: figures are read on-chain; a failed read shows a dash."} No figure here is a promise of winnings.</p>
       </>}
 
@@ -1641,7 +1645,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "tour" && (pendingLevel
         ? <><h3>{pendingLevel.name}</h3><LevelBrief level={pendingLevel} /><div className="pk-buyrow"><button type="button" className="pk-primary" autoFocus onClick={() => startLevel(pendingLevel)}>Kick off</button><button type="button" onClick={() => setPendingLevel(null)}>Back</button></div></>
         : <TourMap levels={LEVELS} progress={progress} onPick={setPendingLevel} />)}
-      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} share={(() => { const round = dailyShareRound(friendId.toString(), progress.daily, scenario); return round && <SharePanel round={round} label="Share result card" comeBack={false} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()} />}
+      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} share={/*EA{ null }*/(() => { const round = dailyShareRound(friendId.toString(), progress.daily, scenario); return round && <SharePanel round={round} label="Share result card" comeBack={false} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()/*}EA*/} />}
 
       {menu === "cups" && <>
         <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
@@ -1698,11 +1702,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
           <li>{SHOT_RULES.perfect}</li>
           <li>{SHOT_RULES.replay}</li>
           <li>{SHOT_RULES.clock} It is shown as a bar, and it is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
-          <li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
+          {/*EA{ <>
+          <li>Free modes (Practice and the Daily Challenge) have no energy or lives. Play as much as you like.</li>
+          <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome), and keep them in your Bag. Your Friend's rating (its payout rate, set by its generation) is the average return: see Odds. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
+          <li>Scouting Book: score 3 goals in a round against a keeper to stamp their page.</li>
+        </> }*/}<li>Free modes (Penalties, Free Kicks, World Tour, Daily, Target Practice) have no energy or lives. Play as much as you like.</li>
           <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome, 90% average return), and keep them in your Bag. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
-          <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>
+          <li>Golden Boot Cup (weekly): the top 10 Friends by Gold and Golden Boot balls. Skill Cup (weekly): best 5 kicks vs THE FINAL WALL, verified by replay.</li>{/*}EA*/}
         </ol>
-        {simulated && <p className="pk-note">Preview: every balance, ball, reward, $GBOOT amount, Cup pot, race table and rival shown here is SIMULATED and resets on reload.</p>}
+        {simulated && <p className="pk-note">{/*EA{ "Preview: every balance, ball and RF value shown here is SIMULATED and resets on reload." }*/}Preview: every balance, ball, reward, $GBOOT amount, Cup pot, race table and rival shown here is SIMULATED and resets on reload.{/*}EA*/}</p>}
       </div>}
 
       {menu === "settings" && <div className="pk-settings">
@@ -1710,7 +1718,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
         <label><input type="checkbox" checked={reducedMotion} disabled={osReduced} onChange={event => setMotionChoice(event.target.checked)} /> Reduce motion (no shake, flashes, slow-mo or big celebrations){osReduced ? ": on, your device's reduce motion setting asks for it" : ""}</label>
         <label><input type="checkbox" checked={haptics} onChange={event => setHaptics(event.target.checked)} /> Vibration (Android)</label>
         <p>Level {playerLevel} · {progress.xp} XP · ★ {Object.values(progress.stars).reduce((a, b) => a + b, 0)} · {progress.stamps.length}/12 keepers stamped</p>
-        <p>Best: penalties {formatNumber(progress.best.penalties)} · free kicks {formatNumber(progress.best.freekicks)} · target {formatNumber(progress.best.target)}</p>
+        {/*EA{ <p>Best: practice {formatNumber(progress.best.penalties)}</p> }*/}<p>Best: penalties {formatNumber(progress.best.penalties)} · free kicks {formatNumber(progress.best.freekicks)} · target {formatNumber(progress.best.target)}</p>{/*}EA*/}
         <div className="pk-save" data-testid="save-code">
           <p>{persistent ? "Your progress is saved on this device. A save code moves it to another browser." : "This preview can't save between visits (the game sandbox has no storage). Copy your save code to keep your XP, stars, stamps and bests:"}</p>
           <textarea readOnly rows={3} value={encodeSaveCode(progress, friendId)} onFocus={event => event.currentTarget.select()} aria-label="Your save code" data-testid="save-code-out" />
@@ -1726,15 +1734,15 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
 
       {menu === "results" && confirmSpend?.kind === "skill" && confirmSpend.menu === "results" && skillConfirm()}
       {menu === "results" && summary && <Results summary={summary} next={tourNext} reduced={reducedMotion || countedSummary.current === summary} onTick={index => playSfx(`rarity-${index}`)}
-        goal={(() => { const goal = nextGoal(progress, LEVELS, today); return { text: goal.text, mode: goal.mode, onGo: () => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); startMode(goal.mode); } }; })()}
-        cup={<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>} onBook={() => { bookFromResults.current = true; countedSummary.current = summary; setMenu("book"); requestAnimationFrame(() => document.querySelector<HTMLElement>(".rf-frame-menu")?.focus({ preventScroll: true })); }} onModes={toModes}
+        goal={(() => { const goal = /*EA{ nextGoalFor("early-access", progress, LEVELS, today) }*/nextGoal(progress, LEVELS, today)/*}EA*/; return { text: goal.text, mode: goal.mode, onGo: () => { leavePack(); setMenu(null); setSession(null); setScreen("modes"); startMode(goal.mode); } }; })()}
+        cup={/*EA{ undefined }*/<div className="pk-resultcup" data-testid="results-cup">{potCounter("results")}{entriesLine && <p className="pk-entries" data-testid="cup-entries">{entriesLine}{simulated ? <> <b className="pk-simtag">SIMULATED</b></> : null}</p>}</div>/*}EA*/} onBook={() => { bookFromResults.current = true; countedSummary.current = summary; setMenu("book"); requestAnimationFrame(() => document.querySelector<HTMLElement>(".rf-frame-menu")?.focus({ preventScroll: true })); }} onModes={toModes}
         onAgain={() => { const last = session;
           if (last?.mode === "skill") { setConfirmSpend({ kind: "skill", menu: "results" }); return; } // another paid entry: confirm first (BQ-P1-7)
           setMenu(null); if (!last) { setScreen("modes"); return; }
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); }
           else if (last.mode === "match") { live.current = { ...live.current, session: null }; const id = last.ball?.recordId; kickWith(id && bagRef.current.some(ball => ball.id === id && !ball.sample) ? id : lastUsedBall()); } // the same ball, in a new match
           else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
-      {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()}
+      {/*EA{ null }*/}{menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()}{/*}EA*/}
     </GameMenu>}
   </section>;
 
