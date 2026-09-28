@@ -39,6 +39,8 @@
     "build:site": "node scripts/build-site.mjs",
     "build:site:ea": "PK_PRESET=early-access node scripts/build-site.mjs",
     "check:full-identical": "node scripts/check-full-identical.mjs",
+    "test:early-access": "node scripts/test-early-access.mjs",
+    "play:ea": "PK_PRESET=early-access node dev/server.mjs",
     "dev": "friendsdk dev ./games/penalty-kings",
     "sync:engine": "rm -rf node_modules/@penalty-kings/engine && npm install ./packages/engine --no-audit --no-fund",
     "check:engine-sync": "diff -r packages/engine/src node_modules/@penalty-kings/engine/src && diff -r packages/game-director/src node_modules/@penalty-kings/game-director/src",

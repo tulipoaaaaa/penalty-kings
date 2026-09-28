@@ -31,7 +31,7 @@ jobs:
         run: npm run test:site-links
       - name: Hand-written selectors match their signatures
         run: npm run check:selectors
-      - name: Odds (sum 10000 bps, EV 90.00% for every tier)
+      - name: Odds (sum 10000 bps, EV 90.00% for every tier; per-Friend ratings exact, monotone, bank reserve)
         run: npm run verify:odds
       - name: Game logic tests (tour, daily, target, progress, ethics, prize data)
         run: npm run test:game-logic

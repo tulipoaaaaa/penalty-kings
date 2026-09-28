@@ -1,0 +1,41 @@
+name: Early access
+# The founder's EARLY ACCESS preview (docs/EARLY-ACCESS.md). Runs ONLY for the early-access branch (and pull requests
+# into it); the judged CI (ci.yml) is unchanged and still runs everywhere.
+on:
+  push:
+    branches: [early-access]
+  pull_request:
+    branches: [early-access]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  early-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: TypeScript (full game) and the early access build's view of it
+        run: npm run typecheck && npm run typecheck:ea
+      - name: Per-Friend ratings (exact RTP per generation and with the bonus, sums, monotone odds, bank reserve; rated definitions current)
+        run: npm run verify:odds
+      - name: Game logic tests (feature flags, ratings, bonus cap, config validation, and everything else)
+        run: npm run test:game-logic
+      - name: Full preset is byte-identical to the judged build (d51e550)
+        run: npm run build:site && npm run check:no-dev && npm run check:full-identical
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Early access build and browser run (only the 4 features, no dead ends, rating + odds, pack bought and redeemed)
+        run: npm run test:early-access
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: site-ea
+          path: site-ea/

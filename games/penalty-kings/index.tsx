@@ -1701,7 +1701,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
           <li>Placement scores: centre ×1 (and usually saved), sides ×2, corners ×3, top bins ×5, in off the post +50%. {SHOT_RULES.streak}</li>
           <li>{SHOT_RULES.perfect}</li>
           <li>{SHOT_RULES.replay}</li>
-          <li>{SHOT_RULES.clock} It is shown as a bar, and it is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>
+          {/*EA{ <li>{SHOT_RULES.clock} It is shown as a bar, and it is off in the tutorial. Aim wobble grows with your streak.</li> }*/}<li>{SHOT_RULES.clock} It is shown as a bar, and it is off in the tutorial and Target Practice. Aim wobble grows with your streak.</li>{/*}EA*/}
           {/*EA{ <>
           <li>Free modes (Practice and the Daily Challenge) have no energy or lives. Play as much as you like.</li>
           <li>Big Match: buy a pack of balls with RF, open it (each ball's rarity is decided by on-chain randomness: the true outcome), and keep them in your Bag. Your Friend's rating (its payout rate, set by its generation) is the average return: see Odds. Choose any ball to kick with: its rarity sets your score multiplier and style. Kicking never uses up a ball or changes its RF value. Redeem any ball for its RF whenever you like.</li>
