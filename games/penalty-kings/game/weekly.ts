@@ -51,9 +51,9 @@ export function championsNightLine(now: number, doubled: boolean) {
 /** "Cup draw in 2d 4h": the weekly Cup closes Monday 00:00 UTC. */
 export const cupDrawLine = (now: number) => `Cup draw in ${shortCountdown(cupEndsAt(now) - now)}`;
 
-/** One line for a stadium card: bigger stadium, more Cup points per ball (weights 1 / 100 / 1,000). */
-export function stadiumRaceLine(tier: Pick<Tier, "raceWeight">, now: number) {
-  const weight = tier.raceWeight * racePointMultiplier(now);
+/** One line for a stadium card: bigger stadium, more Cup points per ball (weights 1 / 100 / 1,000). `doubled` as in championsNightLine: only the preview's simulated race doubles on Champions Night. */
+export function stadiumRaceLine(tier: Pick<Tier, "raceWeight">, now: number, doubled: boolean) {
+  const weight = tier.raceWeight * (doubled ? racePointMultiplier(now) : 1);
   return `Cup points ×${weight.toLocaleString("en-US")} per ball${weight !== tier.raceWeight ? " tonight" : ""}`;
 }
 /** The shop's one-sentence rule. */
@@ -95,7 +95,7 @@ export function countUpValue(from: number, to: number, k: number) {
 export const SIM_TRICKLE_MS = 15_000;
 
 /** The Cups page's stadium weights (QA-10): the same numbers as the shop's stadiumRaceLine, "tonight" on Champions Night. */
-export function cupWeightsLine(now: number) {
-  const multiplier = racePointMultiplier(now);
+export function cupWeightsLine(now: number, doubled: boolean) {
+  const multiplier = doubled ? racePointMultiplier(now) : 1;
   return `${TIERS.map(tier => `${tier.name} ×${(tier.raceWeight * multiplier).toLocaleString("en-US")}`).join(", ")}${multiplier !== 1 ? " tonight" : ""}`;
 }

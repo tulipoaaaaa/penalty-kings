@@ -50,7 +50,7 @@ export function Shop({ definition, tier, simulated, balance, busy, full, onBuy, 
         <strong>{item.name}</strong>
         <span className="pk-tierprice"><b>{item.priceRF.toLocaleString("en-US")} RF</b> per ball</span>
         <small>top prize {(item.priceRF * 10).toLocaleString("en-US")} RF</small>
-        <small className="pk-tierrace" data-testid={`race-${item.id}`}>{stadiumRaceLine(item, now)}</small>
+        <small className="pk-tierrace" data-testid={`race-${item.id}`}>{stadiumRaceLine(item, now, simulated)}</small>
         {item.id === tier.id ? <small className="pk-tierwhere">You are here</small>
           : <button type="button" className="pk-tiergo" data-testid={`go-${item.id}`} onClick={() => onStadium?.(item.id)} disabled={!onStadium}>
             Play at {item.name} ›<small>{item.id === "park" ? "main page" : `/${item.id}/`}{simulated ? " · SIMULATED" : " · LIVE"}</small></button>}

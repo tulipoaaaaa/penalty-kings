@@ -63,10 +63,11 @@ test("stadium cards: bigger stadium, more Cup points per ball (1 / 100 / 1,000),
   const [park, pro, champions] = TIERS;
   assert.deepEqual(TIERS.map(tier => tier.raceWeight), [1, 100, 1000]);
   const day = at(2026, 10, 1, 12), night = at(2026, 10, 3, 20);
-  assert.equal(stadiumRaceLine(park, day), "Cup points ×1 per ball");
-  assert.equal(stadiumRaceLine(pro, day), "Cup points ×100 per ball");
-  assert.equal(stadiumRaceLine(champions, day), "Cup points ×1,000 per ball");
-  assert.equal(stadiumRaceLine(champions, night), "Cup points ×2,000 per ball tonight");
+  assert.equal(stadiumRaceLine(park, day, true), "Cup points ×1 per ball");
+  assert.equal(stadiumRaceLine(pro, day, true), "Cup points ×100 per ball");
+  assert.equal(stadiumRaceLine(champions, day, true), "Cup points ×1,000 per ball");
+  assert.equal(stadiumRaceLine(champions, night, true), "Cup points ×2,000 per ball tonight");
+  assert.equal(stadiumRaceLine(champions, night, false), "Cup points ×1,000 per ball"); // live: no double claim
   assert.match(STADIUM_RACE_RULE, /Park ×1, Pro ×100, Champions ×1,000/);
   assert.match(STADIUM_RACE_RULE, /same Golden Boot Cup/);
   assert.equal(STADIUM_RACE_RULE.split(/[.!?](\s|$)/).filter(part => part && part.trim()).length, 1, "one sentence");

@@ -16,6 +16,8 @@ test("QA-10: Results hide 'BEST STREAK: 0 in a row' (a Daily with no goals); a r
 
 test("QA-10: the Cups weights follow Champions Night, like the Ball shop (×2 'tonight')", () => {
   const night = Date.UTC(2026, 9, 3, 19, 30), day = Date.UTC(2026, 9, 3, 12);
-  assert.equal(cupWeightsLine(day), "Park ×1, Pro ×100, Champions ×1,000");
-  assert.equal(cupWeightsLine(night), "Park ×2, Pro ×200, Champions ×2,000 tonight");
+  assert.equal(cupWeightsLine(day, true), "Park ×1, Pro ×100, Champions ×1,000");
+  assert.equal(cupWeightsLine(night, true), "Park ×2, Pro ×200, Champions ×2,000 tonight");
+  // Live stadiums: the weekly Cup report never doubles, so neither does the copy.
+  assert.equal(cupWeightsLine(night, false), "Park ×1, Pro ×100, Champions ×1,000");
 });

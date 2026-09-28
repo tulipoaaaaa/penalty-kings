@@ -1232,7 +1232,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       if (rarities.length < plays.length) setMessage("Randomness is still on its way for some balls. Choose Open again to resume them.");
       if (!rarities.length) { live.current = { ...live.current, pack: false }; if (!left) setMenu("balls"); return; }
       let drops = 0, race = 0, value = 0n;
-      for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight * racePointMultiplier(Date.now()); value += definition.outcomes[rarity].reward; }
+      for (const rarity of rarities) { const meta = RARITIES[rarity]; drops += Math.round(tier.baseDrop * meta.dropMult * 100) / 100; race += meta.racePoints * tier.raceWeight * (simulated ? racePointMultiplier(Date.now()) : 1); value += definition.outcomes[rarity].reward; }
       setGboot(v => v + drops); setCupRF(v => v + tier.priceRF * CUP_SHARE_OF_PRICE * rarities.length); setRace(v => v + race);
       setEarned(e => ({ rf: e.rf + value, gboot: e.gboot + drops, race: e.race + race, packs: e.packs + 1, balls: e.balls + rarities.length }));
       const best = Math.max(...rarities);
@@ -1638,7 +1638,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "cups" && <>
         <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
         <h3>Golden Boot Cup: this week</h3>
-        <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium ({cupWeightsLine(now)}), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
+        <p>{pot.text}{pot.tag === "SIMULATED" ? " · SIMULATED" : ` · ${pot.note}`}. The top 10 Friends by Gold (1 pt) and Golden Boot (2 pts) balls drawn this week, weighted by stadium ({cupWeightsLine(now, simulated)}), share the pot: {CUP_CURVE.join(" / ")}%. <button type="button" className="pk-link" onClick={() => setMenu("odds")}>See odds</button></p>
         {simulated && <><ol className="pk-table">{raceTable.slice(0, 10).map((row, index) => <li key={row.name} data-mine={row.mine}><span>{index + 1}. {row.name}</span><b>{formatNumber(row.points)}</b></li>)}</ol>
           {raceRank > 10 && <p>You: #{raceRank} with {formatNumber(race)} pts{tag}.</p>}
           <p>Pot $GBOOT: {formatNumber(cupGboot)}{tag}</p>
