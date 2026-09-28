@@ -66,8 +66,9 @@
 .pk-simtag { background: var(--pk-gold); color: var(--pk-ink); padding: 0 0.4em; font-size: max(11px, 0.85em); }
 .pk-pot small { opacity: 0.8; }
 
-.pk-banner { position: absolute; top: 30cqh; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
-.pk-banner strong { display: block; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
+.pk-banner { position: absolute; top: 30cqh; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100cqw - 12px); text-align: center; pointer-events: none; animation: pk-pop 0.35s ease-out; }
+/* Polish: the headline never wraps ("OFF THE / POST!" used to stack across the goal mouth); sizes are set to fit. */
+.pk-banner strong { display: block; white-space: nowrap; font-size: clamp(22px, 7cqw, 68px); letter-spacing: 0.04em; text-shadow: 3px 3px 0 var(--pk-ink), -1px -1px 0 var(--pk-ink); }
 .pk-banner span { display: inline-block; margin-top: 0.4em; font-size: clamp(11px, 1.6cqw, 15px); background: #0b0d1ae6; padding: 0.3em 0.7em; }
 .pk-goal strong { color: var(--pk-volt); }
 .pk-miss strong { color: var(--pk-red); }
@@ -651,7 +652,12 @@
   .pk-art-status { left: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: calc(var(--pk-pl) + 160 * var(--pk-s)); font-size: 11px; }
   /* Discovery toast: top right, under the kick chip, in the right letterbox bar (the coaching toast has the sky). */
   .pk-discover { left: auto; right: 6px; top: calc(var(--pk-pt) + 146 * var(--pk-s)); max-width: max(140px, calc(var(--pk-pl) - 12px)); font-size: 11px; }
-  .pk-banner { top: calc(var(--pk-pt) + 70 * var(--pk-s)); }
+  /* Polish: a one-line headline in the sky right under the commentator strip (logical top --pk-cmt, 22 px + rule),
+     sub line under it, all above the crossbar and clear of the Friend at the payoff. The Stage's CLANG!/fever chip
+     belongs below this band (logical y > ~150) or not under it. */
+  .pk-banner { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s)); max-width: calc(480 * var(--pk-s) - 12px); }
+  .pk-banner strong { font-size: clamp(20px, calc(30 * var(--pk-s)), 40px); line-height: 1.1; }
+  .pk-banner span { max-width: calc(300 * var(--pk-s)); margin-top: 3px; font-size: 11px; line-height: 1.25; padding: 2px 8px; }
   .pk-reveal { bottom: calc(var(--pk-tb) + 4px); width: min(80cqw, 480px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 12px; font-size: 12px; animation-delay: 0.6s; }
   .pk-pack { top: 6px; bottom: auto; width: min(96cqw, 720px); max-height: calc(100cqh - var(--pk-tb) - 12px); padding: 8px 10px; gap: 6px; font-size: 12px; }
   /* B5: the reveal strip runs from the left edge to the actions bar (the right letterbox), under the reveal banner;
@@ -703,8 +709,10 @@
   .pk-art-status, .pk-discover { left: 6px; top: calc(var(--pk-pt) + 28 * var(--pk-s)); max-width: calc(160 * var(--pk-s)); font-size: 11px; }
   /* QA-9: two lines under the commentator strip (logical top --pk-cmt, 22 px + rule), left of the goal. */
   .pk-discover { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s)); max-width: calc(200 * var(--pk-s)); }
-  .pk-banner { top: calc(var(--pk-pt) + 60 * var(--pk-s)); width: max-content; max-width: calc(100cqw - 12px); }
-  .pk-banner strong { font-size: clamp(24px, 9cqw, 44px); }
+  /* Polish: under the discovery toast (two 11 px lines from --pk-cmt + 26), one-line headline, clear of the Friend. */
+  .pk-banner { top: calc(var(--pk-pt) + (var(--pk-cmt, 26) + 26) * var(--pk-s) + 42px); width: max-content; max-width: calc(100cqw - 12px); }
+  .pk-banner strong { font-size: clamp(20px, 7cqw, 44px); line-height: 1.1; }
+  .pk-banner span { margin-top: 3px; font-size: 11px; line-height: 1.25; padding: 2px 8px; }
   .pk-reveal { top: calc(var(--pk-pt) + 20px); bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - var(--pk-pt) - 28px); padding: 10px 12px; font-size: 13px; }
   .pk-pack { top: 60px; bottom: auto; width: calc(100cqw - 12px); max-height: calc(100cqh - var(--pk-tb) - 66px); padding: 10px; gap: 8px; font-size: 13px; }
   /* B5: while the Stage reveals, the strip sits under the pitch and the actions row (the pitch stays whole). */

@@ -97,6 +97,43 @@ async function toastOffFriend(game, where) {
   return true;
 }
 
+/** Polish: the DOM result banner on a phone. The headline is one line that fits the frame, and neither it nor the
+ *  sub line covers the player's Friend (its drawn box, from the Stage). Checked for the banner shown and, by swapping
+ *  the text in and restoring it, for the longest headlines ("Time up — kick lost", "OFF THE POST!") and a long sub. */
+async function bannerClear(game, where) {
+  const banner = game.locator(".pk-banner");
+  if (!(await banner.isVisible())) return false;
+  const fails = await game.locator("body").evaluate(async () => {
+    const node = document.querySelector(".pk-banner"), strong = node?.querySelector("strong"), span = node?.querySelector("span");
+    if (!node || !strong) return [];
+    const canvas = document.querySelector("canvas.pk-canvas"), c = canvas.getBoundingClientRect(), scale = Math.min(c.width / 480, c.height / 320);
+    const ox = c.left + (c.width - 480 * scale) / 2, oy = c.top + (c.height - 320 * scale) / 2;
+    const hit = (a, b) => a.x1 < b.x2 - 0.5 && a.x2 > b.x1 + 0.5 && a.y1 < b.y2 - 0.5 && a.y2 > b.y1 + 0.5;
+    const textBox = el => { const range = document.createRange(); range.selectNodeContents(el); const r = range.getBoundingClientRect(); return { x1: r.left, y1: r.top, x2: r.right, y2: r.bottom, lines: new Set([...range.getClientRects()].map(q => Math.round(q.top))).size }; };
+    const original = [strong.textContent, span?.textContent ?? ""], bad = [];
+    const cases = [original, ["Time up — kick lost", "The shot clock ran out. Next kick in a moment."], ["OFF THE POST!", "No goal this time"], ["GOAL!", "+1,200 points · Golden Hour: double points · TOP BIN · knuckleball · 3 in a row"]];
+    for (const round of [0, 1]) {
+      if (round) await new Promise(resolve => setTimeout(resolve, 350)); // the Friend eases back after the result
+      const f = window.__pkStats().friendRect;
+      if (!f || !document.contains(node)) break;
+      const friend = { x1: ox + f.x1 * scale, y1: oy + f.y1 * scale, x2: ox + f.x2 * scale, y2: oy + f.y2 * scale };
+      for (const [head, sub] of cases) {
+        strong.textContent = head; if (span) span.textContent = sub;
+        const h = textBox(strong), s = span ? textBox(span) : null, label = `"${head}" / "${sub.slice(0, 24)}"`;
+        if (h.lines !== 1) bad.push(`${label}: the headline wraps to ${h.lines} lines`);
+        if (h.x1 < -0.5 || h.x2 > innerWidth + 0.5) bad.push(`${label}: the headline runs off the frame ${JSON.stringify(h)}`);
+        for (const [name, box] of [["headline", h], ["sub line", s]]) if (box && hit(box, friend)) bad.push(`${label}: the ${name} covers the Friend ${JSON.stringify({ box, friend })}`);
+        const discover = document.querySelector(".pk-discover"), d = discover?.checkVisibility() && discover.getBoundingClientRect();
+        if (d) for (const [name, box] of [["headline", h], ["sub line", s]]) if (box && hit(box, { x1: d.left, y1: d.top, x2: d.right, y2: d.bottom })) bad.push(`${label}: the ${name} is under the discovery toast`);
+      }
+      strong.textContent = original[0]; if (span) span.textContent = original[1];
+    }
+    return bad;
+  });
+  assert.deepEqual(fails, [], `${where}: the result banner`);
+  return true;
+}
+
 for (const [width, height] of SIZES) {
   const portrait = height > width, label = `${width}x${height}`, errors = [];
   const checked = [];
@@ -255,6 +292,7 @@ for (const [width, height] of SIZES) {
       assert.equal(await game.getByTestId("round").getAttribute("data-kicks"), "1");
       checked.push(`swipe:${banner}`);
       await fonts("kick banner");
+      if (await bannerClear(game, `${label} tutorial kick 1`)) checked.push("banner:clear-1");
       // QA-9: the discovery toast is never truncated: it wraps (at most 2 lines, >= 11 px), even for the longest
       // moment name (measured by swapping the longest label into the shown toast, then restoring it).
       {
@@ -286,6 +324,7 @@ for (const [width, height] of SIZES) {
         await reachable(game.getByTestId("quick"), "Quick shot");
         await press(game.getByTestId("quick"));
         await game.locator(".pk-banner").waitFor({ timeout: 8000 });
+        if (await bannerClear(game, `${label} tutorial kick ${kick}`)) checked.push(`banner:clear-${kick}`);
         await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 10_000 });
       }
       await game.getByTestId("results").waitFor({ timeout: 10_000 });
