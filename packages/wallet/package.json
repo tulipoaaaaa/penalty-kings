@@ -1,0 +1,10 @@
+{
+  "name": "@penalty-kings/wallet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penalty Kings TEST APP wallet seam: one WalletProvider interface, three providers (DevSimulated, Privy, Injected). Not part of the judged build.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src"]
+}
