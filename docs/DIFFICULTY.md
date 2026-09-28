@@ -121,13 +121,21 @@ Good-swipe bot: crossing point anywhere between x = ±0.25…0.85 and y = 0.45�
 topspin 0.2–0.7, no sidespin, aim noise σ = 0.08; wall always there (pro height); keeper = the
 11 field keepers in turn at NEUTRAL.
 
-| Distance | No keeper, before | No keeper, after | With keeper + wall, before | With keeper + wall, after |
-|---|---|---|---|---|
-| 18–20 m | 50 % | 78 % | 29 % | 45 % |
-| 21–24 m | 72 % | 95 % | 42 % | 41 % |
-| 25–27 m | 89 % | 96 % | 51 % | 42 % |
-| 28–32 m | 88 % | 96 % | 49 % | 36 % |
-| Overall (18–32 m mix) | | | 46 % | 41 % |
+| Distance | No keeper, before | No keeper, C1 | No keeper, now | With keeper + wall, before | With keeper + wall, C1 | With keeper + wall, now |
+|---|---|---|---|---|---|---|
+| 18–20 m | 50 % | 78 % | 69 % | 29 % | 45 % | 38 % |
+| 21–24 m | 72 % | 95 % | 90 % | 42 % | 41 % | 40 % |
+| 25–27 m | 89 % | 96 % | 96 % | 51 % | 42 % | 43 % |
+| 28–32 m | 88 % | 96 % | 96 % | 49 % | 36 % | 38 % |
+| Overall (18–32 m mix) | | | | 46 % | 41 % | 41 % |
+
+"Now" includes BQ-P2-5 (owner decision, 2026-09-28): the wall test uses the whole ball
+(`FK_BALL_RADIUS` 0.11 m) on the wall's ends, over the heads and under a jumped wall, so half a
+ball can no longer pass through a head or boot. Short range lost the most (18–20 m with keeper
+45 → 38 %) because the band of heights that clears the wall and still dips under the bar is
+narrower there: at 18 m and a natural pace it is 0.78–0.94 goal units (was 0.70–0.94), so the
+engine's comfort check (`packages/engine/test/freekick.test.ts`, C1b) now asks for a band of at
+least 0.15 at 18 m (0.2 elsewhere). 41 % overall is unchanged and inside the band.
 
 Long range is now the harder shot against a keeper (he watches it longer), which is what the
 +50 % pays for; short range is no longer a wall lottery.

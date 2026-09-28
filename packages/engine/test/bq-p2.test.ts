@@ -98,6 +98,8 @@ test("BQ-P2-8: the engine flags which woodwork a shot touched (hitPost / hitBar)
     fkPosts++; assert.ok(fk.hitPost || fk.hitBar);
   }
   assert.ok(fkPosts > 0, "free-kick woodwork found");
+});
+
 test("BQ-P2-5: a free kick only gets past the wall when the whole BALL clears it (end, heads, boots), not just its centre", () => {
   const random = prng(0x5a11);
   let passed = 0;
