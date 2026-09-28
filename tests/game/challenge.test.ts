@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 import { KEEPERS, keeperById, keeperPlan, kickSeed, resolveShot, freeKickSetup } from "@penalty-kings/engine";
 import {
   encodeChallenge, decodeChallenge, challengeLink, challengeVerdict, challengeSetup, keeperOfTheWeek, weeklyBonusXp, streakDay, comeBackLine,
-  shareRoundOf, CHALLENGE_KICKS, PUBLIC_URL, CHALLENGE_RULE, type Challenge,
+  shareRoundOf, dailyShareRound, CHALLENGE_KICKS, PUBLIC_URL, CHALLENGE_RULE, type Challenge,
 } from "../../games/penalty-kings/game/challenge.ts";
 import { weekKey } from "../../games/penalty-kings/game/rewards.ts";
+import { dailyScenario } from "../../games/penalty-kings/game/daily.ts";
 import { shareCardLayout, CARD_W, CARD_H, CARD_TAGLINE, GLYPH_EM, HEAD_EM } from "../../games/penalty-kings/gfx/sharecard.ts";
 
 const sample: Challenge = { kind: "penalty", keeper: "sumo", seed: 3_141_592_653, kicks: 5, score: 1420, from: "12345678901234567890" };
@@ -95,6 +96,25 @@ test("share round: challenges from replayable rounds only; none next to money", 
   assert.equal(shareRoundOf({ ...base, mode: "target", kind: "target" })?.replay, null, "Target Practice: a card, no challenge");
   assert.equal(shareRoundOf({ ...base, mode: "freekicks", kind: "freekick" })?.replay?.kicks, 3);
   assert.deepEqual(shareRoundOf({ ...base, mode: "challenge", challenge: { vs: sample } })?.answered, sample);
+});
+
+test("Daily menu share: today's best Daily round as a share round (same card and challenge as Results), none before one", () => {
+  const today = "2026-09-28", scenario = dailyScenario(today);
+  const daily = { date: today, attempts: 2, best: 750, played: [today], bestRound: { goals: 3, kicks: scenario.kicks, bestStreak: 2 } };
+  const round = dailyShareRound("7730", daily, scenario);
+  const fromResults = shareRoundOf({ friendId: "7730", mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, points: 750, kicks: Array.from({ length: scenario.kicks }, (_, i) => ({ result: i < 3 ? "goal" : "save" })), bestStreak: 2 });
+  assert.deepEqual(round?.replay, fromResults?.replay, "the same challenge (today's keeper and seed) as the Daily Results card");
+  assert.deepEqual([round?.score, round?.goals, round?.kicks, round?.bestStreak, round?.friendId], [750, 3, scenario.kicks, 2, "7730"]);
+  assert.equal(round?.subtitle, `Daily ${today} · ${fromResults?.subtitle}`);
+  const code = encodeChallenge({ ...round!.replay!, score: round!.score, from: round!.friendId });
+  assert.deepEqual(decodeChallenge(code), { ok: true, challenge: { ...round!.replay!, score: 750, from: "7730" } }, "its code plays");
+  assert.equal(dailyShareRound("7730", { ...daily, best: 0 }, scenario), null, "nothing scored today: no card");
+  assert.equal(dailyShareRound("7730", { ...daily, date: "2026-09-27" }, scenario), null, "yesterday's best is not today's");
+  const legacy = dailyShareRound("7730", { date: today, best: 500 }, scenario); // a best kept before its round was
+  assert.deepEqual([legacy?.score, legacy?.kicks, legacy?.goals], [500, 0, 0]);
+  assert.ok(!shareCardLayout({ name: "Friend #7730", score: 500, scoreLabel: "pts", goals: 0, kicks: 0, bestStreak: 0, link: PUBLIC_URL }).texts.some(text => text.text.includes("goals")), "no made-up goals line");
+  const pasted = dailyShareRound("7730", { ...daily, bestRound: { goals: 1e9, kicks: 1e12, bestStreak: -4 } }, scenario); // a pasted save code is not trusted
+  assert.deepEqual([pasted?.kicks, pasted?.goals, pasted?.bestStreak], [20, 20, 0]);
 });
 
 test("share card layout: the score, best streak, tagline and public link, all inside the card and readable", () => {

@@ -49,7 +49,7 @@ import { CELEBRATIONS } from "./gfx/friend.js";
 import { OddsTable, StadiumPrices, TokenExplainer, ModeSelect, TourMap, LevelBrief, DailyCard, ScoutingBook, Results, Count, type SessionSummary } from "./ui.js";
 import { Shop, PackOpening, Bag, BallCarousel, MarketPreview, type PackPhase } from "./ballui.js";
 import { RotateOverlay } from "./layout.js";
-import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf } from "./share.js"; // C4 social (own file: other lanes edit ui.tsx)
+import { SharePanel, ChallengeBox, WeeklyKeeper, StreakBadge, shareRoundOf, dailyShareRound } from "./share.js"; // C4 social (own file: other lanes edit ui.tsx)
 import { keeperOfTheWeek, weeklyBonusXp, challengeSetup, challengeVerdict, type Challenge } from "./game/challenge.js";
 import { allowed, canShoot, type FlowState, type FlowAction } from "./game/flow.js";
 import { encodeSaveCode, decodeSaveCode, canPersist } from "./game/savecode.js";
@@ -1124,7 +1124,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       }
       if (current.mode === "daily") {
         const record = dailyState(p.daily, today), first = !record.played.includes(today);
-        updated.daily = { ...record, best: Math.max(record.best, current.points), played: first ? [...record.played, today] : record.played };
+        const better = current.points > record.best || (current.points > 0 && current.points === record.best && !record.bestRound); // the round the Daily menu's share card shows
+        updated.daily = { ...record, best: Math.max(record.best, current.points), played: first ? [...record.played, today] : record.played, ...(better ? { bestRound: { goals, kicks: current.kicks.length, bestStreak: longestRun(current.kicks) } } : {}) };
         if (first) xp += XP.daily;
         result.title = `Daily: ${formatNumber(current.points)} pts`;
       }
@@ -1640,7 +1641,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
       {menu === "tour" && (pendingLevel
         ? <><h3>{pendingLevel.name}</h3><LevelBrief level={pendingLevel} /><div className="pk-buyrow"><button type="button" className="pk-primary" autoFocus onClick={() => startLevel(pendingLevel)}>Kick off</button><button type="button" onClick={() => setPendingLevel(null)}>Back</button></div></>
         : <TourMap levels={LEVELS} progress={progress} onPick={setPendingLevel} />)}
-      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} onShare={() => void shareCard(`Penalty Kings Daily ${today}: ${formatNumber(progress.daily.best)} pts`)} />}
+      {menu === "daily" && <DailyCard scenario={scenario} progress={progress} today={today} practice={!persistent} onPlay={startDaily} share={(() => { const round = dailyShareRound(friendId.toString(), progress.daily, scenario); return round && <SharePanel round={round} label="Share result card" comeBack={false} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()} />}
 
       {menu === "cups" && <>
         <div className="pk-explain"><h3>What is what</h3><TokenExplainer /></div>
@@ -1733,7 +1734,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
           if (last.mode === "tour" && last.level) startLevel(last.level); else if (last.mode === "daily") { setMenu("daily"); }
           else if (last.mode === "match") { live.current = { ...live.current, session: null }; const id = last.ball?.recordId; kickWith(id && bagRef.current.some(ball => ball.id === id && !ball.sample) ? id : lastUsedBall()); } // the same ball, in a new match
           else if (last.mode === "challenge") beginSession(challengeSession(last.challenge?.vs ?? null)); else beginSession(newSession(last.mode === "tutorial" ? "penalties" : last.mode)); }} />}
-      {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={sprites.current ? spriteFrame(sprites.current, "down", false, 0, "right").frame.rows : null} halo={ALL_COSMETICS.find(item => item.id === equipped.kit)?.color} login={progress.login} today={today} />; })()}
+      {menu === "results" && summary && s && (() => { const round = shareRoundOf({ friendId: friendId.toString(), ...s, bestStreak: summary.bestStreak ?? 0 }); return round && <SharePanel round={round} rows={shareRows()} halo={shareHalo()} login={progress.login} today={today} />; })()}
     </GameMenu>}
   </section>;
 
@@ -1748,11 +1749,9 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     setError(""); setMessage(`Opening the ${target.name} stadium page${simulated ? " (simulated preview)" : ""}. If nothing happens, use the ${target.name} link above the game.`);
   }
 
-  async function shareCard(text: string) {
-    const url = typeof location === "undefined" ? "" : location.href;
-    try { if (navigator.share) { await navigator.share({ title: "Penalty Kings", text, url }); return; } } catch { /* fall back to copy */ }
-    try { await navigator.clipboard.writeText(`${text} ${url}`); setMessage("Result copied."); } catch { setMessage(text); }
-  }
+  /** The share card's striker (the player's Friend sprite) and kit halo: the same on every share card. */
+  function shareRows() { return sprites.current ? spriteFrame(sprites.current, "down", false, 0, "right").frame.rows : null; }
+  function shareHalo() { return ALL_COSMETICS.find(item => item.id === equipped.kit)?.color; }
 }
 
 function menuTitle(menu: Exclude<Menu, null>) {

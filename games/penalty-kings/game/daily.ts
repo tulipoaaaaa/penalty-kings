@@ -28,7 +28,7 @@ export function dailyScenario(date: string): DailyScenario {
 }
 
 /** Attempts left today and the rolled-over record when the date changes. */
-export function dailyState(record: { date: string; attempts: number; best: number; played: string[] }, today: string) {
+export function dailyState(record: { date: string; attempts: number; best: number; played: string[]; bestRound?: { goals: number; kicks: number; bestStreak: number } }, today: string): typeof record {
   return record.date === today ? record : { date: today, attempts: 0, best: 0, played: record.played };
 }
 

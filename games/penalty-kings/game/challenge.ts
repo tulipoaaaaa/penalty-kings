@@ -107,6 +107,22 @@ export function shareRoundOf(session: { friendId: string; mode: string; kind: st
   };
 }
 
+/** What the Daily record keeps about today's best round, so the Daily menu can share it later. */
+export type DailyBestRound = { goals: number; kicks: number; bestStreak: number };
+/**
+ * The share data for today's best Daily round (the Daily menu's "Share result card"), or null before a scored round
+ * today. Built through shareRoundOf, so the card, the challenge code (today's keeper and seed) and the no-money rule
+ * match the Results share. A best stored before rounds were kept (no `bestRound`) shares the score alone (kicks 0).
+ */
+export function dailyShareRound(friendId: string, daily: { date: string; best: number; bestRound?: DailyBestRound }, scenario: { date: string; seed: number; mode: "penalty" | "freekick"; keeper: KeeperId }): ShareRound | null {
+  if (daily.date !== scenario.date || !(daily.best > 0)) return null;
+  const count = (value: unknown, max: number) => (typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(max, Math.floor(value))) : 0); // a pasted save code is not trusted
+  const total = count(daily.bestRound?.kicks, 20), goals = count(daily.bestRound?.goals, total);
+  const kicks = Array.from({ length: total }, (_, index) => ({ result: index < goals ? "goal" : "miss" }));
+  const round = shareRoundOf({ friendId, mode: "daily", kind: scenario.mode, keeper: scenario.keeper, seed: scenario.seed, points: daily.best, kicks, bestStreak: count(daily.bestRound?.bestStreak, total) });
+  return round && { ...round, subtitle: `Daily ${scenario.date}${round.subtitle ? ` · ${round.subtitle}` : ""}` };
+}
+
 // ── Keeper of the Week ─────────────────────────────────────────────────────
 export const WEEKLY_XP_MULTIPLIER = 2;
 export const WEEKLY_GOALS = 3;

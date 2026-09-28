@@ -180,7 +180,8 @@ export function LevelBrief({ level }: { level: Level }) {
   return <ol className="pk-brief">{level.objectives.map((objective, index) => <li key={index}>{"★".repeat(index + 1)} {describe(objective, keeper)}</li>)}</ol>;
 }
 
-export function DailyCard({ scenario, progress, today, onPlay, onShare, practice = false }: { scenario: DailyScenario; progress: Progress; today: string; onPlay: () => void; onShare: () => void; practice?: boolean }) {
+/** `share`: the share card panel for today's best round (share.tsx SharePanel, its button reads "Share result card"), or null before one. */
+export function DailyCard({ scenario, progress, today, onPlay, share, practice = false }: { scenario: DailyScenario; progress: Progress; today: string; onPlay: () => void; share?: ReactNode; practice?: boolean }) {
   const attempts = progress.daily.date === today ? progress.daily.attempts : 0, best = progress.daily.date === today ? progress.daily.best : 0;
   const streak = dailyStreak(progress.daily.played, today);
   const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(`${today}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 6 + i); return d.toISOString().slice(0, 10); });
@@ -194,7 +195,7 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
     </div>
     <p className="pk-calendar" aria-label="Last 7 days">{week.map(day => <i key={day} data-played={progress.daily.played.includes(day)} title={day}>{day.slice(8)}</i>)}</p>
     <button type="button" className="pk-primary" disabled={attempts >= DAILY_ATTEMPTS} onClick={onPlay}>{attempts >= DAILY_ATTEMPTS ? "Come back tomorrow" : "Play today's challenge"}</button>
-    {best > 0 && <button type="button" onClick={onShare}>Share result card</button>}
+    {best > 0 && share}
     {practice && <p className="pk-note" data-testid="daily-practice">This preview can't save between visits, so the 3-attempt limit resets when you reload: treat these as practice attempts. Your save code (Settings) keeps your streak and best.</p>}
   </div>;
 }

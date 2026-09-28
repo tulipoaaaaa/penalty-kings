@@ -325,6 +325,10 @@ async function sweepGame([width, height], font) {
         await game.getByText("Attempts left:").waitFor(); await scan("menu: Daily");
         await game.getByRole("button", { name: "Play today's challenge", exact: true }).click();
         await waitShootable(); await playOut(6); await scan("results: Daily");
+        // The Daily menu's "Share result card" opens the share card inside the menu (today's best round).
+        await recover(); await game.getByTestId("mode-daily").click(); await game.getByText("Attempts left:").waitFor();
+        const share = game.locator(".pk-daily").getByRole("button", { name: "Share result card", exact: true });
+        if (await visible(share)) { await share.click(); await game.getByTestId("share-image").waitFor(); await scan("menu: Daily share card"); }
       });
       await step("target", async () => {
         await recover(); await game.getByTestId("mode-target").click();
@@ -378,6 +382,8 @@ async function sweepGame([width, height], font) {
         await openFromModes("Scouting Book"); await scan("menu: Scouting Book (8 stamps, 999 streak)", { stress: false }); await game.getByRole("button", { name: "Close Scouting Book" }).click();
         await openFromModes("Settings"); await scan("menu: Settings (XP 99,999)", { stress: false }); await game.getByRole("button", { name: "Close Settings" }).click();
         await recover(); await game.getByTestId("mode-daily").click(); await game.getByText("Attempts left:").waitFor(); await scan("menu: Daily (no attempts left)", { stress: false });
+        await game.locator(".pk-daily").getByRole("button", { name: "Share result card", exact: true }).click(); await game.getByTestId("share-image").waitFor();
+        await scan("menu: Daily share card (best 99,999)", { stress: false });
       });
       await step("shot clock + time up", async () => {
         await recover(); await game.getByTestId("mode-penalties").click();

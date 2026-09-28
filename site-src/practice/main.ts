@@ -182,6 +182,7 @@ function finish() {
 const shareButton = $<HTMLButtonElement>("pp-share-btn"), shareImage = $<HTMLImageElement>("pp-share-img"), shareNote = $("pp-share-note");
 const shareActions = $("pp-share-actions"), shareNative = $<HTMLButtonElement>("pp-share-native"), shareSave = $<HTMLAnchorElement>("pp-share-save");
 let shareFile: File | null = null;
+const SHARE_NOTE = shareNote.textContent ?? "";
 const longestRun = () => { let best = 0, run = 0; for (const kick of state.kicks) { run = kick.result === "goal" ? run + 1 : 0; best = Math.max(best, run); } return best; };
 function resetShare() {
   shareFile = null; shareImage.hidden = true; shareImage.removeAttribute("src"); shareNote.hidden = true; shareActions.hidden = true;
@@ -189,7 +190,14 @@ function resetShare() {
 }
 shareButton.addEventListener("click", async () => {
   shareButton.disabled = true; shareButton.textContent = "Drawing…";
-  const image = await cardImage({ name: scene.friendName, score: state.goals, scoreLabel: "goals", goals: state.goals, kicks: state.kicks.length, bestStreak: longestRun(), subtitle: "Free practice", link: PUBLIC_URL }, STRIKER_STAND, "#ffffff");
+  let image: Awaited<ReturnType<typeof cardImage>>;
+  try { image = await cardImage({ name: scene.friendName, score: state.goals, scoreLabel: "goals", goals: state.goals, kicks: state.kicks.length, bestStreak: longestRun(), subtitle: "Free practice", link: PUBLIC_URL }, STRIKER_STAND, "#ffffff"); }
+  catch { // never a silent, stuck button: say so, and the link below still works
+    shareButton.disabled = false; shareButton.textContent = "Make my share card";
+    shareNote.textContent = "The card could not be drawn here. Tap the link below to select it, then copy."; shareNote.hidden = false;
+    return;
+  }
+  shareNote.textContent = SHARE_NOTE;
   shareFile = image.file;
   shareImage.src = image.url; shareImage.alt = `Share card: ${state.goals} of ${state.kicks.length} goals, best streak ${longestRun()}. ${CARD_TAGLINE}.`; shareImage.hidden = false;
   shareImage.dataset.bytes = String(image.bytes);
