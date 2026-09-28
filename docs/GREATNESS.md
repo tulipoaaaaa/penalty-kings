@@ -65,7 +65,7 @@ The goal is to close the gap between "good" and "great" where a judge's first 30
 | 12 | B12 Celebrations with follow-through | 3 | Rigid transforms; the knee-slide reads as "fell over" | Anticipation → overshoot → follow-through on reaction/celebration beats (Jonasson & Purho, R1) | 3 | 4 | low | `gfx/friend.ts` |
 
 **Deferred unless time remains:**
-- darker crowd band behind the goal, and a floodlight pool and vignette (4–5 h, performance risk);
+- ~~darker crowd band behind the goal, and a floodlight pool and vignette (4–5 h, performance risk)~~ — done: `gfx/atmosphere.ts` (pre-rendered, Bayer-dithered, static; `tests/game/atmosphere.test.ts`, `docs/screenshots/greatness/atmos-*.png`);
 - weather polish;
 - keeper arm shapes and a Final Wall boss presence;
 - skippable replay of screamers;

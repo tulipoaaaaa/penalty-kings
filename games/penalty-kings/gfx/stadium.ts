@@ -3,6 +3,7 @@
  * Static layers are painted once into cached canvases; animated details are drawn per frame.
  */
 import { W, H, hash01, pixelStar, type Particles } from "./core.js";
+import { vignetteParams, renderLayer, paintPixels } from "./atmosphere.js";
 
 export type StadiumId = "park" | "pro" | "champions";
 export type Weather = "sun" | "rain" | "snow" | "fog" | "sunset";
@@ -568,21 +569,20 @@ export function drawPitch(c: CanvasRenderingContext2D, stadium: StadiumId, weath
   }), 0, 0);
 }
 
-/** Per-stadium camera grade (cached): a colour wash plus a vignette, applied over the world layer. */
-const GRADES: Readonly<Record<StadiumId, { wash: string; mode: GlobalCompositeOperation; vignette: string; strength: number }>> = {
-  park: { wash: "#fff4dc", mode: "multiply", vignette: "40,30,10", strength: 0.12 },
-  pro: { wash: "#d8e4ff", mode: "multiply", vignette: "0,4,20", strength: 0.38 },
-  champions: { wash: "#ffe9bf", mode: "multiply", vignette: "26,10,0", strength: 0.34 },
+/** Per-stadium camera grade (cached): a colour wash plus a stepped, ordered-dithered vignette (gfx/atmosphere.ts), applied over the world layer. */
+const GRADES: Readonly<Record<StadiumId, { wash: string; mode: GlobalCompositeOperation; vignette: readonly [number, number, number]; strength: number }>> = {
+  park: { wash: "#fff4dc", mode: "multiply", vignette: [40, 30, 10], strength: 0.14 },
+  pro: { wash: "#d8e4ff", mode: "multiply", vignette: [0, 4, 20], strength: 0.38 },
+  champions: { wash: "#ffe9bf", mode: "multiply", vignette: [26, 10, 0], strength: 0.34 },
 };
 const gradeLayer = (stadium: StadiumId) => layer(`grade-${stadium}`, g => {
-  const grade = GRADES[stadium], v = g.createRadialGradient(W / 2, H * 0.46, H * 0.35, W / 2, H * 0.46, W * 0.62);
-  v.addColorStop(0, `rgba(${grade.vignette},0)`); v.addColorStop(1, `rgba(${grade.vignette},${grade.strength})`);
-  g.fillStyle = v; g.fillRect(0, 0, W, H);
-}, W, H);
+  const grade = GRADES[stadium], v = vignetteParams(grade.vignette, grade.strength);
+  paintPixels(g, v.w, renderLayer(v));
+}, W + 40, H + 40);
 export function drawCameraGrade(c: CanvasRenderingContext2D, stadium: StadiumId) {
   const grade = GRADES[stadium];
   c.save(); c.globalCompositeOperation = grade.mode; c.fillStyle = grade.wash; c.fillRect(-60, -60, W + 120, H + 120); c.restore();
-  c.drawImage(gradeLayer(stadium), -20, -20, W + 40, H + 40);
+  c.drawImage(gradeLayer(stadium), -20, -20);
 }
 
 /** Heat shimmer (streak ×2+) and weather overlays, then the stadium's camera grade. */

@@ -40,7 +40,7 @@ const MINIMUMS = { uniqueLines: 25, contexts: 12, keepers: 5, celebrations: 2, w
   // Owner's first-90-s targets (Match Director): distinct moments played, unique lines said after Kick off.
   moments: 8, playLines: 15 };
 /** 0 repeated commentary lines within 60 s (the whole 90 s, cold open included). */
-const MAXIMUMS = { repeatsWithin60s: 0 };
+const MAXIMUMS = { repeatsWithin60s: 0, frameP95: 25 };
 let report, repeatList = [];
 
 await testGame("./games/penalty-kings", {
@@ -68,6 +68,8 @@ await testGame("./games/penalty-kings", {
     await page.waitForTimeout(12_000); // the showreel plays behind the title
     await page.locator(".rf-game-frame").screenshot({ path: `artifacts/qa-showreel-${width}.png` });
     const kickoffAt = await game.locator("body").evaluate(() => performance.now() / 1000);
+    // Soak frame intervals (rAF) over the whole 90 s of play: the owner's budget is p95 < 25 ms.
+    await game.locator("body").evaluate(() => { const soak = window.__pkSoak = { samples: [], on: true }; let last = performance.now(); const tick = now => { soak.samples.push(now - last); last = now; if (soak.on) requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
     await button("Kick off").click(); // first session: straight into the coached tutorial
     for (let i = 0; i < 3; i++) await kick(aims[i]);
     await game.getByTestId("results").waitFor(); await button("Modes").click();
@@ -79,6 +81,7 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("results").waitFor(); await button("Modes").click();
     await game.getByTestId("mode-target").click();
     for (let i = 0; elapsed() < 88; i++) await kick(aims[i % aims.length] * 0.8);
+    const soak = await game.locator("body").evaluate(() => { const s = window.__pkSoak; s.on = false; const v = s.samples.slice(1).sort((a, b) => a - b); return { n: v.length, median: v[Math.floor(v.length / 2)], p95: v[Math.floor(v.length * 0.95)] }; });
     const stats = await game.locator("body").evaluate(() => window.__pkStats());
     const director = await game.locator("body").evaluate(() => window.__pkDirector());
     // Every line on screen with its time (Stage stats.lineLog): none may come back within 60 s.
@@ -92,6 +95,7 @@ await testGame("./games/penalty-kings", {
       moments: moments.length, playLines: new Set(inPlay.map(entry => entry.text)).size, repeatsWithin60s: repeats.length, linesShown: log.length,
       keepersFaced: faced.length, walkOns: stats.walkOns, replays: stats.replays,
       momentList: director.played.map(m => `${m.id}@${Math.round(m.at - kickoffAt)}s`).join(", "), facedList: faced.join(", "), discovery: director.discovery,
+      frameP95: Number(soak.p95.toFixed(1)), frameMedian: Number(soak.median.toFixed(1)), frames: soak.n,
       seconds: Math.round(elapsed()), shots: stats.shots, goals: stats.goals, saves: stats.saves, woodwork: stats.woodwork,
       uniqueLines: stats.lines.length, contexts: stats.contexts.length, keepers: stats.keepers.length, celebrations: stats.celebrations.length,
       waves: stats.waves, taunts: stats.taunts, walkouts: stats.walkouts, sfx: stats.sfx, reveals: stats.reveals,
