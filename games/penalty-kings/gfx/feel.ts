@@ -10,7 +10,7 @@
  * during it) and every FX has a still, non-flashing equivalent.
  */
 import { keeperFrame, keeperTouch, BALL_RADIUS, GOAL_ASPECT, type KeeperId, type ShotOutcome } from "@penalty-kings/engine";
-import { W, ease, clamp01, pixelStar } from "./core.js";
+import { W, ease, clamp01, pixelStar, headFont } from "./core.js";
 
 // ── Hit-stop (Nijman "sleep"; research R1 #1) ────────────────────────────────
 export type HitStopEvent = "strike" | "net" | "post" | "fingertip" | "save";
@@ -162,20 +162,21 @@ export class FeelFx {
     const b = this.banner;
     if (!b) return;
     const pop = reduced ? 1 : ease.outBack(clamp01(b.t / 0.22)), fade = 1 - clamp01((b.t - FX_LIFE.banner + 0.3) / 0.3);
-    const width = Math.max(96, 20 + b.text.length * 11), y = top + 40;
-    c.save(); c.globalAlpha = fade; c.translate(W / 2, y); c.scale(pop, pop);
+    // The heading face (PKHead) has one weight: a second pass 1 px right gives the chip its weight.
+    c.save(); c.font = headFont(16); c.textAlign = "center"; c.textBaseline = "middle";
+    const width = Math.max(96, Math.round(c.measureText(b.text).width) + 25), y = top + 40;
+    c.globalAlpha = fade; c.translate(W / 2, y); c.scale(pop, pop);
     const jitter = b.hot && !reduced ? Math.round(Math.sin(time * 70)) : 0;
     c.fillStyle = b.hot ? "#ff3b1f" : "#ffd23f"; c.fillRect(-width / 2 - 2 + jitter, -13, width + 4, 26);
     c.fillStyle = "#0b0d1a"; c.fillRect(-width / 2 + jitter, -11, width, 22);
-    c.font = "bold 16px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillStyle = "#0b0d1a"; c.fillText(b.text, 1 + jitter, 1);
-    c.fillStyle = b.hot ? "#ff8c00" : "#ffd23f"; c.fillText(b.text, jitter, 0);
+    c.fillStyle = "#0b0d1a"; c.fillText(b.text, 1 + jitter, 1); c.fillText(b.text, jitter, 1);
+    c.fillStyle = b.hot ? "#ff8c00" : "#ffd23f"; c.fillText(b.text, jitter, 0); c.fillText(b.text, jitter - 1, 0);
     c.restore();
     if (b.sub && b.t > 0.3) {
       const slide = reduced ? 1 : ease.outCubic(clamp01((b.t - 0.3) / 0.25));
       c.save(); c.globalAlpha = fade * slide;
-      c.font = "bold 10px PixelifySans, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
-      const sw = 14 + b.sub.length * 6;
+      c.font = headFont(11); c.textAlign = "center"; c.textBaseline = "middle";
+      const sw = Math.round(c.measureText(b.sub).width) + 14;
       c.fillStyle = "#0b0d1ae6"; c.fillRect(Math.round(W / 2 - sw / 2), y + 14, sw, 14);
       c.fillStyle = "#f7f7f2"; c.fillText(b.sub, W / 2, y + 21 + Math.round((1 - slide) * 6));
       c.restore();
@@ -189,7 +190,7 @@ export class FeelFx {
     const words = "OLE! OLE! OLE! ", step = 6, offset = reduced ? 0 : Math.floor(time * 40) % (words.length * step);
     c.save(); c.globalAlpha = 0.85 * fade;
     c.fillStyle = "#0b0d1acc"; c.fillRect(0, y - 6, W, 12);
-    c.font = "bold 8px PixelifySans, monospace"; c.textBaseline = "middle"; c.textAlign = "left"; c.fillStyle = colour;
+    c.font = headFont(8); c.textBaseline = "middle"; c.textAlign = "left"; c.fillStyle = colour;
     const beat = reduced ? 0 : Math.floor(time * 4) % 2;
     for (let x = -offset; x < W; x += words.length * step) c.fillText(words.repeat(1), x, y + beat * -1);
     c.restore();
