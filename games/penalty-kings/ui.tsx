@@ -1,8 +1,8 @@
 /** Screens and widgets for the game shell (all state lives in index.tsx). */
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { formatGameAmount } from "@rarefriends/friendsdk/ui";
 import type { ChanceGameDefinition as GameDefinition } from "@rarefriends/friendsdk/game";
-import { KEEPERS, keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
+import { keeperById, DIFFICULTY_LADDER, ZONE_MULT, POST_IN_BONUS, streakMultiplier, type KeeperId } from "@penalty-kings/engine";
 import { RARITIES, TIERS, TOKEN_LINES, formatNumber, type Tier } from "./economy.js";
 import { drawBallSprite, drawBallShadow, ballReducedMotion, BALL_FRAMES, BALL_IDENTITY } from "./gfx/ball.js";
 import { drawKeeper } from "./gfx/keepers.js";
@@ -57,16 +57,29 @@ export function ballGlow(rarity: number, season: "S0" | "S1" = "S1"): string {
   return `radial-gradient(circle at 50% 38%, ${color}${rarity >= 4 ? "66" : "40"} 0, ${color}00 62%)`;
 }
 
-/** Kit bag display case: each ball on a pedestal with its name, odds and RF value. */
-export function BallCase({ definition, tag }: { definition: GameDefinition; tag: string }) {
-  return <div className="pk-case" role="list">
-    {definition.outcomes.map((outcome, index) => <div className="pk-pedestal" role="listitem" key={outcome.name} data-rarity={index}
-      style={{ backgroundImage: `${ballGlow(index)}, linear-gradient(transparent 55%, #8883 56%)`, borderColor: index >= 5 ? "#ff8c00" : index === 4 ? "#d7dde5" : undefined }}>
-      <BallSpin rarity={index} size={48} pedestal />
-      <strong>{RARITY_NAMES[index]}</strong>
-      <small>{outcome.chanceBps / 100}% · {formatGameAmount(outcome.reward, 18)} RF{tag}</small>
-    </div>)}
-  </div>;
+/** One legible ink per rarity (chips, card rims, the display case's labels), taken from each ball's own palette. */
+export const RARITY_INK: readonly string[] = ["#b3a68c", "#f08a24", "#7fb2ff", "#3ddc84", "#d7dde5", "#f2c230", "#ff8c00"];
+
+/**
+ * The Ball shop's display case (owner decision b): every ball a pack can pull, big, spinning on its pedestal in its
+ * rarity colours, each with its exact chance and RF value. Leads the shop; the Buy bar sits right under it.
+ */
+export function BallCase({ definition, tag, simulated, stadium }: { definition: GameDefinition; tag: string; simulated: boolean; stadium: string }) {
+  return <section className="pk-vitrine" data-testid="display-case" aria-label="Display case: every ball a pack can pull">
+    <header className="pk-vitrine-head">
+      <h3>Display case <small>{stadium} · what a pack can pull</small></h3>
+      <span className="pk-livechip" data-live={!simulated}>{simulated ? "SIMULATED" : "LIVE"}</span>
+    </header>
+    <ol className="pk-vitrine-shelf">
+      {definition.outcomes.map((outcome, index) => <li className="pk-vball" key={outcome.name} data-rarity={index}
+        style={{ "--pk-rc": RARITY_INK[index] ?? "#f7f7f2", backgroundImage: ballGlow(index) } as CSSProperties}>
+        <BallSpin rarity={index} size={48} pedestal />
+        <strong>{RARITY_NAMES[index].replace(" Ball", "")}</strong>
+        <span className="pk-vodds"><RarityChip rarity={index} />{outcome.chanceBps / 100}%</span>
+        <small>{formatGameAmount(outcome.reward, 18)} RF{tag}</small>
+      </li>)}
+    </ol>
+  </section>;
 }
 
 /** A tiny pixel ball in a rarity's own colours (odds table, Bag counts): 8 × 8 rects, crisp at any size. */
@@ -186,11 +199,33 @@ export function DailyCard({ scenario, progress, today, onPlay, onShare, practice
   </div>;
 }
 
+/**
+ * The Scouting Book (owner decision c) as a sticker album: the stamp count and 12 progress pips lead, then one card
+ * per keeper in ladder order (number, portrait from the keeper art, name, stamp state, tell, read and multiplier).
+ * Stamped cards carry an ink stamp; scouted ones are lit; locked ones show the keeper's silhouette. Then the Ball
+ * Collection and the scoring notes kept off the pitch.
+ */
 export function ScoutingBook({ progress, discovery }: { progress: Progress; discovery?: { label: string } }) {
   const streaks = [3, 5, 10].map(n => `${n} in a row ×${streakMultiplier(n)}`).join(" · ");
+  const stamped = LADDER.filter(id => progress.stamps.includes(id)).length;
+  const scouted = LADDER.filter(id => !progress.stamps.includes(id) && progress.keepersSeen.includes(id)).length;
+  const pulled = new Set(progress.pulled).size;
   return <div className="pk-book">
-    {/* Discovery meter: Match Director moments seen, keepers met or scouted, stadiums played. */}
-    {discovery && <p className="pk-discovery" data-testid="discovery">{discovery.label}</p>}
+    <header className="pk-bookcover">
+      <div className="pk-bookstamps">
+        <strong data-testid="stamp-count">Stamps {stamped}/{LADDER.length}</strong>
+        <ol className="pk-pips" data-testid="stamp-pips" aria-hidden="true">{LADDER.map(id => <li key={id} data-on={progress.stamps.includes(id)} />)}</ol>
+      </div>
+      <p className="pk-bookhow">Score 3 goals in a round against a keeper to stamp their page.</p>
+      {/* Discovery meter: Match Director moments seen, keepers met or scouted, stadiums played. */}
+      {discovery && <p className="pk-discovery" data-testid="discovery">{discovery.label}</p>}
+    </header>
+    <h3>Keepers <small>{stamped} stamped · {scouted} scouted · {LADDER.length - stamped - scouted} locked</small></h3>
+    <ol className="pk-book-grid">{LADDER.map((id, index) => <KeeperCard key={id} number={index + 1} id={id} stamped={progress.stamps.includes(id)} seen={progress.keepersSeen.includes(id)} />)}</ol>
+    <h3>Ball Collection <small>{pulled}/7 pulled</small></h3>
+    <div className="pk-case">{RARITY_NAMES.slice(0, 7).map((name, index) => <div className="pk-pedestal" key={name} data-pulled={progress.pulled.includes(index)}>
+      <BallSpin rarity={index} size={36} spinning={progress.pulled.includes(index)} />
+      <strong>{progress.pulled.includes(index) ? name : "???"}</strong><small>{progress.pulled.includes(index) ? "pulled" : "not pulled yet"}</small></div>)}</div>
     {/* The numbers kept off the pitch (round 6 C15): difficulty, multipliers, keeper reads. */}
     <h3>How scoring works</h3>
     <ul className="pk-scoring" data-testid="scoring">
@@ -202,38 +237,35 @@ export function ScoutingBook({ progress, discovery }: { progress: Progress; disc
       <li><b>Big Match:</b> the ball you kick with multiplies your points by its rarity (Scuffed ×1 up to Golden Boot ×15), and sudden death doubles them. None of this changes what a ball is worth in RF.</li>
       <li><b>Target Practice:</b> rings are worth 100, 200 or 500; hits in a row multiply them (up to ×5); the crossbar adds 250.</li>
     </ul>
-    <h3>Keepers ({progress.stamps.length}/{KEEPERS.length} stamped)</h3>
-    <div className="pk-book-grid">{LADDER.map(id => <KeeperCard key={id} id={id} stamped={progress.stamps.includes(id)} seen={progress.keepersSeen.includes(id)} />)}</div>
-    <h3>Ball Collection ({new Set(progress.pulled).size}/7 pulled)</h3>
-    <div className="pk-case">{RARITY_NAMES.slice(0, 7).map((name, index) => <div className="pk-pedestal" key={name} data-pulled={progress.pulled.includes(index)}>
-      <BallSpin rarity={index} size={36} spinning={progress.pulled.includes(index)} />
-      <strong>{progress.pulled.includes(index) ? name : "???"}</strong><small>{progress.pulled.includes(index) ? "pulled" : "not pulled yet"}</small></div>)}</div>
   </div>;
 }
 
-function KeeperCard({ id, stamped, seen = false }: { id: KeeperId; stamped: boolean; seen?: boolean }) {
-  return <div className="pk-keepercard" data-stamped={stamped} data-seen={seen || stamped}>
-    <KeeperPortrait id={id} lit={stamped || seen} />
-    <strong>{keeperById(id).name}{stamped ? " ✓" : seen ? " · scouted" : ""}</strong>
-    <KeeperFacts id={id} />
-  </div>;
+/** One album card: stamped (ink stamp), scouted (lit) or locked (silhouette; the tell and figures still shown). */
+function KeeperCard({ number, id, stamped, seen = false }: { number: number; id: KeeperId; stamped: boolean; seen?: boolean }) {
+  const state = stamped ? "stamped" : seen ? "scouted" : "locked", profile = keeperById(id);
+  return <li className="pk-keepercard" data-state={state} data-stamped={stamped} data-seen={seen || stamped} data-testid={`keeper-${id}`}>
+    <div className="pk-kwindow">
+      <span className="pk-knum">#{String(number).padStart(2, "0")}</span>
+      <KeeperPortrait id={id} lit size={96} />
+    </div>
+    <strong className="pk-kname">{profile.name}</strong>
+    <span className="pk-kstate" data-testid="stamp-state">{stamped ? "STAMPED ✓" : seen ? "SCOUTED" : "LOCKED"}</span>
+    <small className="pk-ktell"><b>Tell:</b> {profile.tell}</small>
+    <small className="pk-kstats">Dives the right way {Math.round(profile.read * 100)}% · points ×{profile.mult}</small>
+    <small className="pk-kbio">{state === "locked" ? "Face this keeper to scout the page." : profile.bio}</small>
+  </li>;
 }
-function KeeperPortrait({ id, lit }: { id: KeeperId; lit: boolean }) {
+/** The keeper's own art (gfx/keepers.ts), idle, on a square canvas of `size` px (drawn at that size: no CSS scaling). */
+function KeeperPortrait({ id, lit, size = 64 }: { id: KeeperId; lit: boolean; size?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const context = ref.current?.getContext("2d");
     if (!context) return;
-    context.imageSmoothingEnabled = false; context.clearRect(0, 0, 64, 64);
-    drawKeeper(context, id, { x: 32, y: 60, rotate: 0, stretch: 1, armL: -0.5, armR: -0.5, alpha: lit ? 1 : 0.35, scaleMul: 0.8, mood: "idle" }, 0);
-  }, [id, lit]);
-  return <canvas ref={ref} width={64} height={64} aria-hidden="true" />;
-}
-function KeeperFacts({ id }: { id: KeeperId }) {
-  const profile = keeperById(id);
-  return <>
-    <small>{profile.bio}</small>
-    <small><b>Tell:</b> {profile.tell} · dives the right way {Math.round(profile.read * 100)}% of the time · points ×{profile.mult}</small>
-  </>;
+    const k = size / 64;
+    context.imageSmoothingEnabled = false; context.clearRect(0, 0, size, size);
+    drawKeeper(context, id, { x: size / 2, y: size - 4 * k, rotate: 0, stretch: 1, armL: -0.5, armR: -0.5, alpha: lit ? 1 : 0.35, scaleMul: 0.8 * k, mood: "idle" }, 0);
+  }, [id, lit, size]);
+  return <canvas ref={ref} width={size} height={size} aria-hidden="true" />;
 }
 
 /** B9: the Results count-up clock (0 → 1). Outside Results it is 1, so a Count there shows its final text. */
