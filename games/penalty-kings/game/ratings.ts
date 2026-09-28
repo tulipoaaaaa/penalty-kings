@@ -142,6 +142,9 @@ export function ratingOfTable(config: RatingConfig, chances: readonly number[]) 
   return { rtpBps: rtp, generations, bonus: !generations.length && GENERATIONS.some(generation => payoutBps(config, generation, true) === rtp) };
 }
 
+/** EARLY ACCESS pack label: the chances printed on every pack are the player's own rating. */
+export const oddsLabel = (chances: readonly number[]) => `Odds per ball (your rating ${bpsToPercent(expectedReturnBps(chances))}):`;
+
 export type ChanceGameJson = { name: string; consumable: string; price: string; outcomes: { name: string; chanceBps: number; reward: string }[] };
 
 /** The reviewable ChanceGame JSON for one rating: the base stadium definition with generated chances. */

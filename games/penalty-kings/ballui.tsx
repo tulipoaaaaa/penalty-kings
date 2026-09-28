@@ -10,6 +10,7 @@ import { TIERS, formatNumber, type Tier, type TierId } from "./economy.js";
 import { STADIUM_RACE_RULE, stadiumRaceLine } from "./game/weekly.js";
 import { RARITY_NAMES } from "./gfx/stage.js";
 import { BallCase, BallSpin, ballGlow, TokenExplainer, RarityChip, Tile } from "./ui.js";
+import { oddsLabel } from "./game/ratings.js";
 import { SEASONS, BALL_PROMISE, CHOICE_RULE, editionLabel, isDiscontinued, packSummary, sortBag, type BallRecord, type SortKey } from "./game/bag.js";
 
 const rf = (value: bigint) => `${formatGameAmount(value, 18)} RF`;
@@ -19,7 +20,7 @@ export const SCUFFED_LINE = "0 RF, but still drops $GBOOT and counts for your co
 
 /** The odds printed on every pack (D21): each rarity and its exact chance, straight from the game definition. */
 export function OddsLine({ definition, onFull }: { definition: ChanceGameDefinition; onFull?: () => void }) {
-  return <p className="pk-oddsline" data-testid="odds-line"><b>Odds per ball:</b> {definition.outcomes.map((item, index) =>
+  return <p className="pk-oddsline" data-testid="odds-line">{globalThis.PK_EARLY_ACCESS ? <b>{oddsLabel(definition.outcomes.map(item => item.chanceBps))}</b> : <b>Odds per ball:</b>} {definition.outcomes.map((item, index) =>
     <span key={item.name}><RarityChip rarity={index} /><span className="pk-oname">{RARITY_NAMES[index].replace(" Ball", "")} </span>{item.chanceBps / 100}%</span>)}
     {onFull && <button type="button" className="pk-link pk-fullodds" onClick={onFull} data-testid="full-odds">Full odds ›</button>}</p>;
 }
@@ -118,8 +119,8 @@ export function PackOpening({ rarities, revealed, definition, simulated, gboot, 
       <h3>Pack summary</h3>
       <p>Spent <b>{rf(summary.spent)}</b>{tag} on {summary.count} ball{summary.count === 1 ? "" : "s"}. Together they are worth <b>{rf(summary.pulled)}</b>{tag}{summary.pulled > 0n ? ": they are yours, and you can cash any of them back into RF from your Bag at any time." : "."}</p>
       <p>Difference: <b className={summary.net < 0n ? "pk-loss" : "pk-gain"}>{summary.net < 0n ? "−" : "+"}{rf(summary.net < 0n ? -summary.net : summary.net)}</b>{tag}. {summary.net < 0n ? "Most packs return less than they cost; a few return much more." : summary.net > 0n ? "This pack is worth more than it cost; most packs return less." : "This pack is worth exactly what it cost."}</p>
-      <p>$GBOOT dropped: +{formatNumber(gboot)}{simulated ? " (simulated)" : " (paid weekly)"}. Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p>
-      {scuffed > 0 && <p data-testid="scuffed-note"><b>{scuffed} {RARITY_NAMES[0]}{scuffed === 1 ? "" : "s"}:</b> {SCUFFED_LINE}.</p>}
+      {globalThis.PK_EARLY_ACCESS ? <p>Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p> : <p>$GBOOT dropped: +{formatNumber(gboot)}{simulated ? " (simulated)" : " (paid weekly)"}. Best ball: {summary.best >= 0 ? RARITY_NAMES[summary.best] : "none"}.</p>}
+      {scuffed > 0 && <p data-testid="scuffed-note"><b>{scuffed} {RARITY_NAMES[0]}{scuffed === 1 ? "" : "s"}:</b> {globalThis.PK_EARLY_ACCESS ? "0 RF, but it counts for your collection" : SCUFFED_LINE}.</p>}
       <button type="button" className="pk-primary" onClick={onDone} autoFocus data-testid="to-bag">Go to my Bag</button>
     </div>}
     </div>
@@ -141,7 +142,7 @@ export function Bag({ records, definition, simulated, busy, selected, onShoot, o
     <div className="pk-buyrow">
       <button type="button" aria-pressed={view === "bag"} onClick={() => setView("bag")}>Bag ({real.length})</button>
       <button type="button" aria-pressed={view === "collection"} onClick={() => setView("collection")}>Collection</button>
-      <button type="button" onClick={onMarket}>Market (coming soon)</button>
+      {globalThis.PK_EARLY_ACCESS ? null : <button type="button" onClick={onMarket}>Market (coming soon)</button>}
       {view === "bag" && <label>Sort <select value={sort} onChange={event => setSort(event.target.value as SortKey)}><option value="rarity">rarity</option><option value="value">value</option><option value="newest">newest</option></select></label>}
     </div>
     <p className="pk-note">{BALL_PROMISE}</p>
