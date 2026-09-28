@@ -121,13 +121,31 @@ await testGame("./games/penalty-kings", {
     await game.getByTestId("menu").click();
     await button("Change mode").click();
 
-    // Target Practice: a few kicks against moving targets (the 60 s clock keeps running).
+    // Target Practice: "60 seconds" is a real minute. The clock runs through each flight and result banner (it used to
+    // run only while aiming, so a round of continuous kicks took minutes): kicking non-stop, Results is up within 75 s.
+    const targetStarted = Date.now();
     await game.getByTestId("mode-target").click();
     await page.waitForTimeout(500);
     await frame.screenshot({ path: `${out}/target-${width}.png` });
-    for (let i = 1; i <= 2; i++) await kick(`target ${i}`, { dx: i === 1 ? 0.3 : -0.3 });
-    await game.getByTestId("menu").click();
-    await button("Change mode").click();
+    const targetResults = game.getByTestId("results");
+    let targetKicks = 0;
+    while (Date.now() - targetStarted < 120_000) {
+      const next = await game.locator("body").evaluate(() => new Promise(resolve => {
+        const start = Date.now();
+        const poll = () => (document.querySelector("[data-testid=results]") ? resolve("results") : window.__pkFlow?.().shootable ? resolve("shoot") : Date.now() - start > 15000 ? resolve("stuck") : setTimeout(poll, 50));
+        poll();
+      }));
+      if (next !== "shoot") break;
+      await swipe({ dx: targetKicks % 2 ? -0.3 : 0.3 }); targetKicks++;
+      await game.locator(".pk-banner").waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await game.locator(".pk-banner").waitFor({ state: "detached", timeout: 12_000 }).catch(() => undefined);
+    }
+    const targetSeconds = (Date.now() - targetStarted) / 1000;
+    await targetResults.waitFor({ timeout: 5_000 }).catch(() => undefined);
+    assert.ok(await targetResults.isVisible(), `a Target Practice round ends on its own (${targetKicks} kicks, ${targetSeconds.toFixed(1)} s)`);
+    assert.ok(targetSeconds <= 75, `the 60 s Target round took ${targetSeconds.toFixed(1)} s of real time (${targetKicks} kicks)`);
+    console.log(`target: ${targetKicks} kicks, round over in ${targetSeconds.toFixed(1)} s of real time`);
+    await button("Modes").click();
 
     // World Tour: Park level 1.
     await game.getByTestId("mode-tour").click();

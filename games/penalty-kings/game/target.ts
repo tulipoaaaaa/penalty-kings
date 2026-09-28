@@ -6,6 +6,20 @@
 import { prng, shotTarget, type ShotInput } from "@penalty-kings/engine";
 
 export const TARGET_SECONDS = 60, MAX_COMBO = 5, CROSSBAR_BONUS = 250;
+/**
+ * What the shared game clock sees this frame. `frozen`: paused, the rotate card (BQ-P1-4) or a hidden tab;
+ * `overlay`: a pack reveal or the ball carousel; `moment`: a protected Stage moment (walkout, replay, walk-on).
+ */
+export type ClockGate = { kind: string; frozen: boolean; menu: boolean; overlay: boolean; moment: boolean; inFlight: boolean };
+/**
+ * Does the game clock (shot clock, Target Practice countdown) advance this frame? Target Practice's "60 seconds"
+ * is a real minute: it keeps running through the flight, the result banner and Stage moments, and stops only for
+ * menus, overlays, pause, the rotate card and a hidden tab. Other modes also stop for protected Stage moments.
+ */
+export function gameClockRunning(gate: ClockGate) {
+  if (gate.frozen || gate.menu || gate.overlay) return false;
+  return gate.kind === "target" || !gate.moment;
+}
 export type Target = { id: number; x: number; y: number; r: number; speed: number; phase: number; value: 1 | 2 | 5 };
 
 export function spawnTargets(seed: number, round: number): Target[] {

@@ -28,7 +28,7 @@ import { starsFor, type Level, type KickRecord } from "./game/objectives.js";
 import { levelAfter } from "./game/tour.js";
 import levelsData from "./game/levels.json" with { type: "json" };
 import { dailyScenario, dailyState, utcDate, dateSeed, DAILY_ATTEMPTS, type DailyScenario } from "./game/daily.js";
-import { spawnTargets, targetAt, resolveTargetShot, TARGET_SECONDS, type Target } from "./game/target.js";
+import { spawnTargets, targetAt, resolveTargetShot, gameClockRunning, TARGET_SECONDS, type Target } from "./game/target.js";
 import { revealPlan } from "./game/reveal.js";
 import { simulatedBeacon, instantBeacon, type RandomnessSource } from "./game/randomness.js";
 import { rollKeeper, usesBeacon, isAbort, packCommitment, packRevealSequence, REVEAL_LANDED_MS } from "./game/suspense.js";
@@ -232,7 +232,7 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
    * Target Practice motion (round 6 C8): seconds of target movement. It runs during the shot (the
    * targets keep moving on screen while the ball flies; during the shot it follows the Stage's own
    * kick clock, so the drawn positions at the crossing are exactly the judged ones) and stops in menus.
-   * The 60 s countdown (clockNow) is frozen during the shot animation instead.
+   * The 60 s countdown (clockNow) runs too: only menus, overlays, pause and a hidden tab stop it.
    */
   const targetMotion = useRef<{ t: number; release: number | null }>({ t: 0, release: null });
   /** The target hit by the kick in flight (judged at release, shown when the ball arrives). */
@@ -407,8 +407,8 @@ export default function PenaltyKings({ friendId, client, paused }: GameComponent
     let frame = 0, last = performance.now();
     const loop = (time: number) => {
       const current = live.current, frozen = current.paused || document.hidden;
-      // Target Practice: the 60 s clock also stops while a shot plays (round 6 C8).
-      if (current.session && (frozen || current.menu || current.pack || current.carousel || scene.moment || (current.session.kind === "target" && inFlight.current > 0))) frozenMs.current += time - last;
+      // Target Practice's 60 s is a real minute: it runs through the flight and the result banner (gameClockRunning).
+      if (current.session && !gameClockRunning({ kind: current.session.kind, frozen, menu: Boolean(current.menu), overlay: current.pack || current.carousel, moment: scene.moment, inFlight: inFlight.current > 0 })) frozenMs.current += time - last;
       // Clamped at 0: the first rAF timestamp can be earlier than the performance.now() above, and a negative dt
       // made Stage.time negative (keeper sway phase −1 → missing sprite frame → the render loop threw and stopped).
       const dt = frozen ? 0 : Math.max(0, Math.min(0.05, (time - last) / 1000)); last = time;
