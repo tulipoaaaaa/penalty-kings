@@ -44,6 +44,11 @@
 .pk-hud-right { right: 1.2cqw; align-items: flex-end; top: 11cqh; }
 .pk-stat, .pk-chip { background: #0b0d1ad9; border: 2px solid #ffffff2e; padding: 0.3em 0.6em; white-space: nowrap; }
 .pk-stat b { color: var(--pk-volt); }
+/* The HUD stats wrap at every frame size, not only on phones: in the 26cqw column a nowrap stat was truncated
+   ("Unopened 0" in Big Match) or ran past the frame edge ("kick 3/3 · ← 2.0 m/s", "SUDDEN DEATH · kick 17 · 12 in a row")
+   in the fallback font. */
+.pk-hud .pk-stat { white-space: normal; overflow-wrap: anywhere; }
+.pk-hud-right .pk-stat { text-align: right; }
 .pk-chip { font-weight: 700; letter-spacing: 0.06em; }
 /* Shot clock bar (round 6 C14): drains from full to empty; red in the last 1.5 s. Its height follows the label (a fixed
    1.3em at the 11 px HUD font cut "Shot clock" to 10 of its 13 px on landscape phones). */
