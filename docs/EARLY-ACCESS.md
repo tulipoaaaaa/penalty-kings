@@ -154,7 +154,15 @@ or no generation at all, the Buy button is off and the shop says why. Nothing is
 None of this is in the game, on purpose: the game runs sandboxed and never sees a wallet, a card or a login.
 It plugs into the **WalletProvider seam** on the `app/test-shell` branch (documented in `docs/WALLETS.md` there):
 
-WALLETS_SECTION
+| Need | Where it plugs in (branch `app/test-shell`) |
+|---|---|
+| **Apple Pay / Google Pay** (buy RF with money) | `WalletProvider.buyRF(amountUsd)` in `packages/wallet/src/types.ts`. Today every provider calls the simulated `SimEconomy.buyRF` through `packages/wallet/src/base.ts` (`async buyRF(amountUsd) { return this.economy.buyRF(…) }`, marked "SDK v0.2.1 INTEGRATION POINT"). A real provider replaces that one method with the store or on-ramp purchase and returns `{ rf, tx }`. |
+| **Google sign-in** | `WalletProvider.login("google")`. `packages/wallet/src/privy.ts` already does it with Privy (`client.auth.oauth.generateURL("google", redirectUri)`, then `loginWithCode(code, state, "google")` on return); the native app returns through `com.penaltykings.test://auth` (`apps/mobile/web/src/deeplink.ts`). Needs the owner's `PRIVY_APP_ID` (a public id, never committed). |
+| **The founders' SDK v0.2.1** | Implement `WalletProvider` in a new `packages/wallet/src/<name>.ts`, add it as a choice in `packages/wallet/src/config.ts`, and keep `packages/wallet/test/contract.test.ts` green. |
+| **Mounting the game** | `apps/mobile/web/src/game-screen.tsx`: it hosts the game with the SDK's `ConnectedGameHost` and passes one `definition` (today `games/penalty-kings/game.json`). **Per-Friend odds plug in here too:** pick `games/penalty-kings/tiers/ratings/park-gen-<n>.json` for the Friend's generation (the SDK's `readGenerationEligibility` returns it) and pass that definition, together with that rating's deployed contract. |
+
+In the test app every payment, login and transaction is SIMULATED unless the owner builds it with Privy, and even then
+transactions are blocked (`docs/WALLETS.md` on that branch).
 
 ## What is simulated and what is real
 
